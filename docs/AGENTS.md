@@ -1,6 +1,6 @@
 # Claude Code Multi-Agent Setup
 
-This document describes the orchestration model used by the `svc`, `web`, `svc-java`, `svc-go`, `svc-ts`, `shared` and `system` plugins, and by the noun plugins `component`, `api`, `resource`, `instance`, `issue` and `platform`, whose commands carry no agents. Read this first when adding or modifying agents.
+This document describes the orchestration model used by the `svc`, `web`, `svc-java`, `svc-go`, `svc-ts`, `svc-dotnet`, `shared` and `system` plugins, and by the noun plugins `component`, `api`, `resource`, `instance`, `issue` and `platform`, whose commands carry no agents. Read this first when adding or modifying agents.
 
 ---
 
@@ -12,7 +12,7 @@ If a recipe is missing, **add it to `devbox.json` and commit** — never run an 
 
 ### SessionStart hooks
 
-The `svc`, `web`, `svc-java`, `svc-go`, `svc-ts` and `shared` plugins ship a `hooks/hooks.json` with a `SessionStart` hook that:
+The `svc`, `web`, `svc-java`, `svc-go`, `svc-ts`, `svc-dotnet` and `shared` plugins ship a `hooks/hooks.json` with a `SessionStart` hook that:
 
 - **Warns if `devbox` is missing from `PATH`** and prints the install command: `curl -fsSL https://get.jetify.com/devbox/install.sh | bash`. The hook exits 0 — it never blocks the session.
 - **Runs `devbox install` (idempotent)** if a `devbox.json` is present in the working directory, so the dev environment is ready before any agent touches it. The `svc` hook additionally runs `uv sync --all-extras` for Python repos (when `pyproject.toml` exists); `web` runs `devbox run install` when `node_modules/` is missing.
@@ -79,7 +79,7 @@ The flow only works when the architect's plan is machine-readable. `docs/specs/<
 ```yaml
 ---
 spec_id: <NNN>-<slug>
-shape: <shape-id>      # service-python | web-nextjs | service-java | service-go | service-typescript | …
+shape: <shape-id>      # service-python | web-nextjs | service-java | service-go | service-typescript | service-dotnet | …
 spec_hash: <from cplat spec hash>   # the plan is invalid once the criteria change
 tasks:
   - id: t1
@@ -235,6 +235,16 @@ The spec formats (`spec.md`, `design.md`, `plan.md`, `verification.md`, test tag
 | `deployment` | sonnet | distroless Node image (production dependencies only) |
 | `observability` | sonnet | prom-client, OpenTelemetry Node SDK, pino trace ids |
 | `release` | sonnet | `package.json` version, CHANGELOG, release PR |
+
+### `svc-dotnet` plugin (`service-dotnet`)
+
+| Agent | Model | Job |
+|---|---|---|
+| `coder` | sonnet | ASP.NET Core minimal APIs, C# with nullable on, `[LoggerMessage]` logging, EF Core migrations |
+| `tester` | sonnet | xUnit v3 through `WebApplicationFactory`, Testcontainers PostgreSQL, smoke tests of category `smoke` |
+| `deployment` | sonnet | chiseled ASP.NET Core image, numeric non-root user |
+| `observability` | sonnet | prometheus-net, OpenTelemetry .NET SDK, trace ids in the JSON log lines |
+| `release` | sonnet | CHANGELOG + PR; the image tag is the version |
 
 ### Noun plugins (`component`, `api`, `resource`, `instance`, `issue`, `platform`)
 

@@ -17,7 +17,7 @@ This repo is **the source of truth** for Claude Code agents, slash commands, and
 | `plugins/<name>/hooks/hooks.json` | Plugin-scoped hooks (e.g. the SessionStart hook that checks devbox and runs `devbox install`). |
 | `plugins/<name>/settings.json` | Plugin-scoped permission allowlists. |
 | `shapes.yml` | The shape registry: one entry per template/plugin pair, validated by `scripts/shapes.py check`. The `platform` entry has no template: this repo declares `shape: platform` in the committed `.platform-settings.yml` (ADR-056). |
-| `templates/<shape>/` | Copier templates: `service-python`, `library-python`, `service-java`, `service-go`, `service-typescript` and `library-typescript` (agents in `svc-ts`), `web-nextjs`, `gitops-app`. Only `*.jinja` files are rendered in the newer templates (see each `copier.yml`). |
+| `templates/<shape>/` | Copier templates: `service-python`, `library-python`, `service-java`, `service-go`, `service-typescript` and `library-typescript` (agents in `svc-ts`), `service-dotnet` (agents in `svc-dotnet`), `web-nextjs`, `gitops-app`. Only `*.jinja` files are rendered in the newer templates (see each `copier.yml`). |
 | `scripts/cplat/` | The tested CLI behind the commands (`system`, `component`, `api`, `resource`, `instance`, `issue`, `platform`, `feedback`). |
 | `scripts/*.py`, `scripts/ci-local.sh` | Repository checks: shape registry, pinned Actions, Markdown links, local CI. |
 | `tests/cplat/`, `tests/e2e/` | pytest suite for the CLI and renderer; the full-stack cluster test. |

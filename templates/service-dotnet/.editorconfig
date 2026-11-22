@@ -1,0 +1,49 @@
+# Platform-owned code style: `devbox run lint` (dotnet format) and the build (EnforceCodeStyleInBuild) check it.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{cs,csx}]
+indent_style = space
+indent_size = 4
+max_line_length = 140
+csharp_style_namespace_declarations = file_scoped:warning
+csharp_prefer_braces = true:warning
+csharp_using_directive_placement = outside_namespace:warning
+dotnet_sort_system_directives_first = true
+dotnet_style_qualification_for_field = false:warning
+dotnet_style_qualification_for_property = false:warning
+dotnet_style_qualification_for_method = false:warning
+dotnet_style_predefined_type_for_locals_parameters_members = true:warning
+dotnet_naming_rule.static_readonly_fields_are_pascal.symbols = static_readonly_fields
+dotnet_naming_rule.static_readonly_fields_are_pascal.style = pascal
+dotnet_naming_rule.static_readonly_fields_are_pascal.severity = warning
+dotnet_naming_symbols.static_readonly_fields.applicable_kinds = field
+dotnet_naming_symbols.static_readonly_fields.required_modifiers = static, readonly
+dotnet_naming_style.pascal.capitalization = pascal_case
+dotnet_naming_rule.private_fields_are_underscored.symbols = private_fields
+dotnet_naming_rule.private_fields_are_underscored.style = underscored
+dotnet_naming_rule.private_fields_are_underscored.severity = warning
+dotnet_naming_symbols.private_fields.applicable_kinds = field
+dotnet_naming_symbols.private_fields.applicable_accessibilities = private
+dotnet_naming_symbols.private_fields.required_modifiers =
+dotnet_naming_style.underscored.capitalization = camel_case
+dotnet_naming_style.underscored.required_prefix = _
+# IDE0005 (unnecessary using) needs the XML documentation file, which Directory.Build.props generates.
+dotnet_diagnostic.IDE0005.severity = warning
+
+[tests/**.cs]
+# Test names read as sentences: Health_answers_ok.
+dotnet_diagnostic.CA1707.severity = none
+
+[**/Migrations/*.cs]
+# Written by `dotnet ef migrations add`: generated code, never hand-edited, so the style rules do not apply.
+generated_code = true
+
+[*.{json,yml,yaml,props,csproj,slnx,xml}]
+indent_style = space
+indent_size = 2

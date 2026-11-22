@@ -19,7 +19,7 @@ mk() { local d="$tmp/$1"; mkdir -p "$d"; echo "$d"; }
 
 # (a) copier answers — local path form (what /component:new produces) and gh: form
 shapes=$(bash "$here/uv-script.sh" "$here/shapes.py" ids 2>/dev/null || python3 - <<'PY'
-print("service-python library-python web-nextjs gitops-app service-java service-go service-typescript library-typescript cluster-gitops")
+print("service-python library-python web-nextjs gitops-app service-java service-go service-typescript library-typescript service-dotnet cluster-gitops")
 PY
 )
 for s in $(echo "$shapes"); do
@@ -39,6 +39,9 @@ d=$(mk sniff-next-fastify); echo '{"dependencies":{"next":"16.0.0","fastify":"^5
 d=$(mk sniff-pom);      touch "$d/pom.xml"; expect "sniff pom.xml" service-java "$d"
 d=$(mk sniff-gradle);   touch "$d/build.gradle.kts"; expect "sniff build.gradle.kts" service-java "$d"
 d=$(mk sniff-go);       touch "$d/go.mod"; expect "sniff go.mod" service-go "$d"
+d=$(mk sniff-slnx);     mkdir -p "$d/src/Orders"; touch "$d/Orders.slnx" "$d/src/Orders/Orders.csproj" "$d/Dockerfile"; expect "sniff .slnx + Dockerfile" service-dotnet "$d"
+d=$(mk sniff-csproj);   mkdir -p "$d/Orders"; touch "$d/Orders/Orders.csproj" "$d/Dockerfile"; expect "sniff csproj one level below + Dockerfile" service-dotnet "$d"
+d=$(mk sniff-dotnet-lib); touch "$d/Orders.csproj"; expect "a .NET project without a Dockerfile -> no shape" "" "$d"
 d=$(mk sniff-pysvc);    touch "$d/pyproject.toml" "$d/Dockerfile"; expect "sniff python service" service-python "$d"
 d=$(mk sniff-pylib);    touch "$d/pyproject.toml"; expect "sniff python library" library-python "$d"
 d=$(mk sniff-tslib);    echo '{"name":"@acme/types","devDependencies":{"typescript":"~5.9.3"}}' > "$d/package.json"; expect "sniff package.json library" library-typescript "$d"

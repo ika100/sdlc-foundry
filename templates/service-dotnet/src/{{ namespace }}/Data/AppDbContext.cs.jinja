@@ -1,0 +1,10 @@
+using Microsoft.EntityFrameworkCore;
+
+namespace {{ namespace }}.Data;
+
+/// <summary>
+/// The database schema in C# (EF Core). After a change, <c>devbox run migrate-new &lt;Name&gt;</c> writes the migration to
+/// Data/Migrations/; commit it with the change. The service applies pending migrations at startup.
+/// Example: <c>public DbSet&lt;Item&gt; Items =&gt; Set&lt;Item&gt;();</c> with <c>public sealed record Item(int Id, string Name);</c>
+/// </summary>
+public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options);

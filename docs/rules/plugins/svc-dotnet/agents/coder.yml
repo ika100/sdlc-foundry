@@ -1,0 +1,43 @@
+rules:
+- id: R1
+  text: '**Read before writing**: never modify code you haven''t seen, because an edit made blind breaks what it cannot see.'
+  class: practice
+- id: R2
+  text: '**C# strict**: nullable reference types are on and warnings are errors (`Directory.Build.props`); never suppress an analyzer without a justification on the same line, because a silenced warning hides the next real one; `async` all the way, passing the request''s `CancellationToken` on.'
+  class: practice
+- id: R3
+  text: '**Logging**: inject `ILogger<T>` and log through `[LoggerMessage]` methods with named fields (`"order {OrderId} created"`); never log secrets or whole request bodies, because logs are widely copied.'
+  class: practice
+- id: R4
+  text: '**Keep changes minimal**: change only what the task requires and do not refactor, rename or "improve" surrounding code, so that the diff stays reviewable.'
+  class: practice
+- id: R5
+  text: never hardcode secrets, because a leaked secret cannot be recalled.
+  class: hard
+  hard: no-secrets-in-git
+- id: R6
+  text: 'With a database: change `AppDbContext` and generate the migration with `devbox run migrate-new <Name>`; never edit a committed migration, because deployed databases already ran it.'
+  class: practice
+- id: R7
+  text: Never edit, skip or weaken them, because a bent test stops proving the spec (formatting through `devbox run lint-fix` is fine, and so is an analyzer false positive suppressed on its own line with a pragma naming the rule and a reason, such as `#pragma warning disable CA2007 // awaited by the caller`, never a file-wide or rule-less one (spec 160); `cplat spec test-diff` checks both); if one contradicts the spec or the contract, stop and report it.
+  class: hard
+  hard: acceptance-tests-fixed
+  source: spec 160
+- id: R8
+  text: Write files with Write and Edit, never through the shell (`cat >`, heredocs, `tee`, `echo >`), because headless runs refuse those commands.
+  class: practice
+- id: R9
+  text: '**Shell rule:** run every tool through `devbox run <script>`, never `dotnet` or `dotnet ef` directly, so that versions and flags match CI; add a missing recipe to `devbox.json` first.'
+  class: practice
+- id: R10
+  text: Read the summary first and open the full log when the summary is not enough, never rerun with full output, because a rerun pays for the failure twice.
+  class: practice
+  source: spec 108
+- id: R12
+  text: Read `cplat`'s output whole, never through `grep`, `head` or `tail`, because its last lines carry the decisions and fixes; use `--json` where offered.
+  class: practice
+  source: '#476'
+- id: R13
+  text: never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033).
+  class: hard
+  hard: issue-filing-needs-consent

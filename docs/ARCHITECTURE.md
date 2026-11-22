@@ -22,7 +22,7 @@ These two channels run at different speeds — agents evolve frequently, project
 
 ## Shapes
 
-The platform is multi-shape: `service-python`, `library-python`, `web-nextjs`, `gitops-app`, `service-java`, `service-go`, `service-typescript`, `library-typescript`. `shapes.yml` is the registry (id → plugin, template, deployable?, detection). Commands detect a repo's shape from `.copier-answers.yml` (fallback: file sniffing, `scripts/detect-shape.sh`) and route each role to `<plugin>:<role>`; the `/svc:*` orchestrators, product-manager and architect stay shape-agnostic. Adding a shape is a documented checklist (`docs/templates.md`) enforced by `scripts/shapes.py check` in CI. Decisions: ADR-008 (detection), ADR-013 (plugin enablement), ADR-015 (registry).
+The platform is multi-shape: `service-python`, `library-python`, `web-nextjs`, `gitops-app`, `service-java`, `service-go`, `service-typescript`, `library-typescript`, `service-dotnet`. `shapes.yml` is the registry (id → plugin, template, deployable?, detection). Commands detect a repo's shape from `.copier-answers.yml` (fallback: file sniffing, `scripts/detect-shape.sh`) and route each role to `<plugin>:<role>`; the `/svc:*` orchestrators, product-manager and architect stay shape-agnostic. Adding a shape is a documented checklist (`docs/templates.md`) enforced by `scripts/shapes.py check` in CI. Decisions: ADR-008 (detection), ADR-013 (plugin enablement), ADR-015 (registry).
 
 **GitOps owns the manifests (v2).** Services ship an image; the system's `gitops-app` repo describes how each one runs in `system.yaml` and generates Deployment/Service/HTTPRoute with `render.py`. Argo reads only that repo, wiring between components is system configuration, and promotion pins an image tag (ADR-017).
 
