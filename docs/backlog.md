@@ -16,7 +16,6 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 |---|---|---|---|---|
 | [107-open-source-tools-are-adopted-on](specs/107-open-source-tools-are-adopted-on/spec.md) — Open-source tools are adopted on measured value | P1 | approved | 11 | #164 |
 | [211-unit-sessions-start-with-their](specs/211-unit-sessions-start-with-their/spec.md) — Unit sessions start with their instructions, less bookkeeping | P1 | approved | 10 | #869 |
-| [218-a-net-service-shape](specs/218-a-net-service-shape/spec.md) — A .NET service shape | P1 | approved | 11 | #719 |
 | [001-create-a-repo-of-any-shape-with-one](specs/001-create-a-repo-of-any-shape-with-one/spec.md) — Create a repo of any shape with one command | P0 | done | 9 |  |
 | [002-generated-repos-enable-their-plugins](specs/002-generated-repos-enable-their-plugins/spec.md) — Generated repos enable their plugins automatically | P0 | done | 2 |  |
 | [003-pull-template-updates-into-an-existing](specs/003-pull-template-updates-into-an-existing/spec.md) — Pull template updates into an existing repo safely | P0 | done | 5 |  |
@@ -199,6 +198,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [213-library-releases-publish-their-package](specs/213-library-releases-publish-their-package/spec.md) — Library releases publish their package | P1 | done | 8 |  |
 | [214-a-typescript-service-shape](specs/214-a-typescript-service-shape/spec.md) — A TypeScript service shape | P1 | done | 11 | #716 |
 | [215-a-typescript-library-shape](specs/215-a-typescript-library-shape/spec.md) — A TypeScript library shape | P1 | done | 11 | #717 |
+| [218-a-net-service-shape](specs/218-a-net-service-shape/spec.md) — A .NET service shape | P1 | done | 11 | #719 |
 | [219-website-specs-get-a-ux-design-step](specs/219-website-specs-get-a-ux-design-step/spec.md) — Website specs get a UX design step | P1 | done | 11 | #715 |
 | [005-report-a-platform-problem-without](specs/005-report-a-platform-problem-without/spec.md) — Report a platform problem without leaking secrets | P2 | done | 3 |  |
 | [026-guard-rails-before-merge-and-in-the](specs/026-guard-rails-before-merge-and-in-the/spec.md) — Guard rails before merge and in the cluster | P2 | done | 2 |  |

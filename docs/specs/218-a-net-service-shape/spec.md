@@ -1,7 +1,7 @@
 ---
 spec_id: 218-a-net-service-shape
 title: A .NET service shape
-status: approved
+status: done
 priority: P1
 shape: platform
 tracks: [719]
@@ -123,3 +123,5 @@ none
 
 - 2026-11-22 created
 - 2026-11-22 approved
+- 2026-11-22 building
+- 2026-11-22 done
