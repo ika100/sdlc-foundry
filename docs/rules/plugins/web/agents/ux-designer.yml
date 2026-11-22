@@ -8,6 +8,6 @@ rules:
     class: practice
     source: ADR-026
   - id: R3
-    text: "Name only active criterion ids, since `cplat spec check` rejects any other id."
+    text: "Name only active criterion ids, since the orchestrator's spec check rejects any other id."
     class: practice
     source: spec 219

@@ -40,7 +40,7 @@ Per screen empty, loading, error and success, with the text a user reads.
 
 Keyboard order, focus after each action, labels for controls, colour-independent messages, headings.
 
-Name only active criterion ids, since `cplat spec check` rejects any other id.
+Name only active criterion ids, since the orchestrator's spec check rejects any other id.
 
 ## Reply to the orchestrator
 

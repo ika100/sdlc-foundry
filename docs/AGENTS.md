@@ -199,6 +199,7 @@ The spec formats (`spec.md`, `design.md`, `plan.md`, `verification.md`, test tag
 
 | Agent | Model | Job |
 |---|---|---|
+| `ux-designer` | opus | `ux.md` (flows, screens, states, accessibility) before the architect, for specs that change what a user sees; a decision every later agent reads |
 | `coder` | sonnet | App Router + strict TypeScript; sonnet is enough for pattern-driven UI/route work |
 | `tester` | sonnet | Vitest + Testing Library, Playwright when enabled |
 | `deployment` | sonnet | Standalone-output Dockerfile and CI (image only) |
