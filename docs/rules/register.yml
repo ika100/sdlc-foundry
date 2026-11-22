@@ -3,8 +3,8 @@
 # `cplat platform rules check` validates all of it.
 schema: 1
 baseline:
-  commit: "ade6e0b9bd3854e35385165b4cc7a1c46f3cafa8"
-  prompt_bytes: 387135
+  commit: "4c20eaa1792de263d577d1621afc3b24d9ad4de7"
+  prompt_bytes: 390314
   history:                       # newest last; written only by `cplat platform rules rebaseline`
     - date: "2026-11-12"
       old: 345859
@@ -66,6 +66,11 @@ baseline:
       new: 387135
       reason: "the svc-ts plugin's five agents for the service-typescript shape (spec 214)"
       benchmark_runs: [20261121T080831Z-491cc83d, 20261121T080947Z-4f1777bb]
+    - date: "2026-11-22"
+      old: 387135
+      new: 390314
+      reason: "spec 219 adds the web ux-designer agent (one opus call per UI-changing website spec) and the UX step clauses of plan, build and the reviewer; quick-task and build benchmarks pass"
+      benchmark_runs: [20261122T100303Z-90dacb83, 20261122T100451Z-856bca81]
 hard:
   acceptance-tests-fixed:
     enforced_by: cplat spec test-diff
