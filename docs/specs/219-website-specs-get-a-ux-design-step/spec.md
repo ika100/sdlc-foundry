@@ -1,7 +1,7 @@
 ---
 spec_id: 219-website-specs-get-a-ux-design-step
 title: Website specs get a UX design step
-status: approved
+status: done
 priority: P1
 shape: platform
 tracks: [715]
@@ -103,3 +103,5 @@ the features that change what a user sees, and only for those, so that service a
 
 - 2026-11-22 created
 - 2026-11-22 approved
+- 2026-11-22 building
+- 2026-11-22 done
