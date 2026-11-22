@@ -209,3 +209,18 @@ def test_a_release_over_a_hold_whose_process_was_killed_drops_it_and_goes_on_ac_
     assert f"release hold of {SLUG} dropped: process {OTHER_PID} is gone" in r.text
     assert SET in r.text and read_hold()["version"] == "5.5.0" and read_hold()["pid"] == os.getpid()
     assert hold_path().exists()
+
+
+@pytest.mark.parametrize("argv", [(), ("--confirm", "merge")], ids=["at-the-check", "at-the-merge"])
+def test_red_ci_on_the_release_pr_keeps_the_hold_as_a_stop_855(rw, argv):  # #855
+    """A red check (a flake to rerun) is a stop the release resumes from: main stays held until the stop's expiry, so no other
+    merge moves main and the resumed release needs no restart."""
+    from platrelease_world import E2E, chk
+    rw.in_state("pr-open")
+    rw.check_seq = [[chk("quality", "fail", 42), chk(E2E, "pass", 43)]]
+    r = rw.run(*argv)
+    assert r.rc == 1 and f"CI is red on {rw.pr_url}: not merged" in r.err, r.text
+    hold = read_hold()
+    assert hold["state"] == "stopped" and hold["confirm"] == "ci" and hold["expires"] == "2026-11-16T12:20:00"
+    assert STOP_LINE.strip() in r.err and "release hold cleared" not in r.text
+    assert rw.merges == []
