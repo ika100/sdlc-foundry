@@ -2432,6 +2432,13 @@ def main(argv: list[str]) -> int:
             # spec 155: the system ship reads this run (`cplat system ship repo result`) and archives it then
             print(f"ship run of {st['spec']} belongs to the system ship in {st['product'].get('dir')}: it records and archives it")
             return 0
+        if st and st["phase"] != "done" and not st.get("escalated") and (os.environ.get("CPLAT_UNIT") or os.environ.get("CPLAT_HEADLESS")):
+            # #827: an unattended session never ends a run that has not merged its PR; the next unit goes on from this phase
+            print(f"ERROR: ship run of {st['spec']} is in phase {st['phase']}, not done: an unattended session does not finish it",
+                  file=sys.stderr)
+            print("  fix: end the session; the next unit goes on from this phase (or escalate with `cplat component ship escalate`)",
+                  file=sys.stderr)
+            return 1
         print(f"ship run ended; state archived to {finish(repo)}")
         return 0
     return 2
