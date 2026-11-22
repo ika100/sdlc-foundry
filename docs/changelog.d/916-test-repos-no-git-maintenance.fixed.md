@@ -1,0 +1,1 @@
+**The cplat tests no longer fail when git's background maintenance runs while a fixture copies a repo (#916).** A detached `git maintenance` could remove `.git/objects/maintenance.lock` while `shutil.copytree` copied the repo; the test suite now turns git's auto-maintenance and auto-gc off for every git it runs.
