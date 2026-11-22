@@ -164,11 +164,12 @@ def inputs(sessions: list[str], start: float, end: float) -> int:
     return n
 
 
-def merged_at(repos: list[str]) -> list[float]:
-    """The merge times of every merged PR of the repos (epoch seconds)."""
+def merged_prs(repos: list[str]) -> list[dict]:
+    """Every merged PR of the repos: {url, created, merged} (epoch seconds; url and created may be None)."""
     out = []
     for repo in repos:
-        done = core.run(["gh", "pr", "list", "-R", repo, "--state", "merged", "--limit", "500", "--json", "mergedAt"], check=False)
+        done = core.run(["gh", "pr", "list", "-R", repo, "--state", "merged", "--limit", "500", "--json", "mergedAt,createdAt,url"],
+                        check=False)
         try:
             data = json.loads(done.stdout or "[]") if done.returncode == 0 else []
         except ValueError:
@@ -176,8 +177,15 @@ def merged_at(repos: list[str]) -> list[float]:
         for p in data if isinstance(data, list) else []:
             when = journey_sources.parse_ts(p.get("mergedAt")) if isinstance(p, dict) else None
             if when:
-                out.append(_epoch(when))
+                created = journey_sources.parse_ts(p.get("createdAt"))
+                out.append({"url": p.get("url") if isinstance(p.get("url"), str) else None,
+                            "created": _epoch(created) if created else None, "merged": _epoch(when)})
     return out
+
+
+def merged_at(repos: list[str]) -> list[float]:
+    """The merge times of every merged PR of the repos (epoch seconds)."""
+    return [p["merged"] for p in merged_prs(repos)]
 
 
 def github(repos: list[str], runs_found: list[dict], start: datetime.datetime, end: datetime.datetime,
@@ -322,6 +330,8 @@ def main(argv: list[str]) -> int:
             paths["repo_subagents"].append(p)
             n_sub += 1
     kinds = [(_epoch(a), _epoch(b), k) for a, b, k in journey_sources.record_evidence(records, tree, ns.repos, start_dt, end_dt)]
+    prs = merged_prs(ns.repos)
+    kinds += journey_timeline.land_evidence(threads, {p["url"]: (p["created"], p["merged"]) for p in prs if p["url"]})
     runs_found, action_spans = journey_sources.actions(ns.repos, start_dt, end_dt)
     evidence = journey_timeline.Evidence(no_transcript=no_tr, kinds=kinds, actions=[(_epoch(a), _epoch(b)) for a, b in action_spans])
 
@@ -329,7 +339,7 @@ def main(argv: list[str]) -> int:
         print(line, file=sys.stderr)
 
     wall = journey_timeline.split(threads, evidence, start, end)
-    merges = merged_at(ns.repos)
+    merges = [p["merged"] for p in prs]
     result: dict = {
         "window": {"started_at": _iso(start), "ended_at": _iso(end)},
         "wall": {**wall, "subagents": n_sub, "repo_sessions": len(repo_sess), "inputs": inputs(sessions, start, end)},
