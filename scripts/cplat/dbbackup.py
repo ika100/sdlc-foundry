@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse
 import datetime
 import json
+import sys
 import time
 from pathlib import Path
 
@@ -21,6 +22,8 @@ POLL_S = 10.0
 TIMEOUT_S = 30 * 60.0
 ARCHIVE_WAIT_S = 2 * 60.0
 BACKUP_KIND = "backups.postgresql.cnpg.io"
+OVERLAP_S = 10 * 60.0                      # #927: how long an on-demand backup waits for one already running
+RUNNING_SINCE = datetime.timedelta(minutes=30)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -80,6 +83,7 @@ def main(argv: list[str]) -> int:
     except backupstate.ReadError as e:
         raise PlatformError(f"cannot read the cluster: {e}") from e
 
+    _wait_for_running(kns, active, f"{db}/{env}", ns.context)
     stamp = datetime.datetime.fromtimestamp(time.time(), datetime.UTC).strftime("%Y%m%d%H%M%S")
     name = f"{active}-manual-{stamp}"
     try:
@@ -110,7 +114,7 @@ def main(argv: list[str]) -> int:
     else:
         result = "failed"
         if phase == "failed":
-            reason = (status.get("error") or phase) + _archiving_hint(kns, active, ns.context)
+            reason = (status.get("error") or phase) + _overlap_hint(kns, active, name, ns.context) + _archiving_hint(kns, active, ns.context)
         else:
             reason = f"not finished after 30 minutes (Backup {name} is {phase})"
         text = f"backup failed: {db}/{env}: {reason}"
@@ -119,6 +123,41 @@ def main(argv: list[str]) -> int:
     else:
         print(text)
     return 0 if result == "completed" else 1
+
+
+def _running(kns: str, cluster: str, context: str | None, but: str | None = None) -> list[str]:
+    """#927: the Backups of `cluster` still running (neither completed nor failed, created in the last RUNNING_SINCE), except `but`."""
+    try:
+        items = backupstate.get_items([BACKUP_KIND, "-n", kns], context)
+    except backupstate.ReadError:
+        return []
+    now, out = backupstate.now(), []
+    for b in items:
+        name = (b.get("metadata") or {}).get("name")
+        made = backupstate.parse_time((b.get("metadata") or {}).get("creationTimestamp"))
+        if name != but and backupstate._of(b, cluster) and backupstate._phase(b) not in ("completed", "failed") \
+                and made is not None and now - made <= RUNNING_SINCE:
+            out.append(str(name))
+    return out
+
+
+def _wait_for_running(kns: str, cluster: str, what: str, context: str | None) -> None:
+    """#927: CloudNativePG takes one backup of a cluster at a time, and the ScheduledBackup takes its first one as soon as it is
+    created, so an on-demand backup started then failed. Wait (up to OVERLAP_S) for a running one before creating ours."""
+    busy = _running(kns, cluster, context)
+    if not busy:
+        return
+    print(f"a backup of {what} is running ({', '.join(busy)}, for example the schedule's): waiting for it first", file=sys.stderr, flush=True)
+    deadline = time.monotonic() + OVERLAP_S
+    while busy and time.monotonic() < deadline:
+        time.sleep(POLL_S)
+        busy = _running(kns, cluster, context)
+
+
+def _overlap_hint(kns: str, cluster: str, mine: str, context: str | None) -> str:
+    busy = _running(kns, cluster, context, but=mine)
+    return (f" (another backup of this cluster was running at the same time: {', '.join(busy)}; CloudNativePG takes one at a time, "
+            "so run this again when it is done)") if busy else ""
 
 
 def _archiving_hint(kns: str, cluster: str, context: str | None) -> str:

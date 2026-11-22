@@ -1,0 +1,1 @@
+- `resource backup` (on demand) waits up to 10 minutes for a backup of the same cluster that is still running, such as the schedule's first one, before it starts its own. A failure while another backup runs names that backup (#927).
