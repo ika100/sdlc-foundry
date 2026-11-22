@@ -435,7 +435,10 @@ OPERATORS = {
     # Spec 117: the Barman Cloud plugin (and its hard requirement cert-manager) for database backups, Velero for environment backups.
     "plugin-barman-cloud": {"repo_url": "https://cloudnative-pg.github.io/charts", "chart": "plugin-barman-cloud", "chart_version": "0.8.1",
                             "operator_version": "0.15.1", "namespace": "cnpg-system", "release": "barman-cloud",
-                            "crd": "objectstores.barmancloud.cnpg.io", "crds": _CRDS_PLUGIN_BARMAN_CLOUD, "retry": True},
+                            "crd": "objectstores.barmancloud.cnpg.io", "crds": _CRDS_PLUGIN_BARMAN_CLOUD, "retry": True,
+                            # the chart's fixed Service (values.yaml `service.name`/`port`, "DO NOT CHANGE": its TLS certificate
+                            # names it), not the release name: the plugin wait job dials it (#885)
+                            "service": "barman-cloud", "port": 9090},
     "cert-manager": {"repo_url": "https://charts.jetstack.io", "chart": "cert-manager", "chart_version": "v1.21.3",
                      "operator_version": "1.21.3", "namespace": "cert-manager", "release": "cert-manager",
                      "crd": "certificates.cert-manager.io", "crds": _CRDS_CERT_MANAGER, "values": {"crds": {"enabled": True}}},
@@ -2451,11 +2454,11 @@ if __name__ == "__main__":
 
 
 def plugin_wait_job(base: str, labels: dict) -> dict:
-    """The PreSync hook of a backed-up database (#864): it waits until the Barman Cloud plugin answers (its Service, named after the
-    operator's release, port 9090), so the Cluster that archives through the plugin is applied only once the plugin runs."""
+    """The PreSync hook of a backed-up database (#864): it waits until the Barman Cloud plugin answers (the chart's fixed Service and
+    port, #885), so the Cluster that archives through the plugin is applied only once the plugin runs."""
     op = OPERATORS["plugin-barman-cloud"]
-    env = [{"name": "PYTHONDONTWRITEBYTECODE", "value": "1"}, {"name": "PLUGIN_HOST", "value": f"{op['release']}.{op['namespace']}.svc"},
-           {"name": "PLUGIN_PORT", "value": "9090"}, {"name": "PLUGIN_WAIT_SECONDS", "value": str(PLUGIN_WAIT_SECONDS)}]
+    env = [{"name": "PYTHONDONTWRITEBYTECODE", "value": "1"}, {"name": "PLUGIN_HOST", "value": f"{op['service']}.{op['namespace']}.svc"},
+           {"name": "PLUGIN_PORT", "value": str(op["port"])}, {"name": "PLUGIN_WAIT_SECONDS", "value": str(PLUGIN_WAIT_SECONDS)}]
     return wait_job(base, "plugin-wait", PLUGIN_WAIT_SCRIPT, env, labels, {"argocd.argoproj.io/hook": "PreSync"})
 
 

@@ -1,0 +1,1 @@
+- The backup plugin wait job dials the Barman Cloud chart's fixed Service (`barman-cloud`, port 9090), not a name derived from the operator's release, so a differently named release (such as the local cluster's `plugin-barman-cloud`) no longer makes every sync of a backed-up database wait out its timeout (#885).
