@@ -1,0 +1,1 @@
+**The quiet-window test no longer fails on a busy machine (#939).** `test_no_session_starts_inside_the_quiet_window` recorded every guard poll as a quiet-window wait when the fake session took longer than a second to exit; the test now lets guard polls pass and checks only the quiet-window wait.

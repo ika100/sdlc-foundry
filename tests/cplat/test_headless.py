@@ -3,6 +3,7 @@ import datetime as dt
 import json
 import stat
 import subprocess
+import time
 
 import pytest
 
@@ -136,6 +137,13 @@ def test_no_session_starts_inside_the_quiet_window(repo, tmp_path, monkeypatch, 
     assert headless.main(["/svc:ship 7", "--repo", str(repo), "--quiet", "23:30-07:00", "--no-wait"]) == 3
     assert runs(repo) == 0
     waited = []
-    monkeypatch.setattr(headless, "sleep", lambda s: (waited.append(s), t.__setitem__("now", t["now"] + dt.timedelta(seconds=s))))
+
+    def sleep(s):
+        if s == headless.GUARD_POLL:      # #939: the guard polls while the fake session is still exiting (slow under load)
+            time.sleep(0.05)
+            return
+        waited.append(s)
+        t["now"] += dt.timedelta(seconds=s)
+    monkeypatch.setattr(headless, "sleep", sleep)
     assert headless.main(["/svc:ship 7", "--repo", str(repo), "--quiet", "23:30-07:00"]) == 0
     assert waited == [7 * 3600 + 15 * 60] and runs(repo) == 1
