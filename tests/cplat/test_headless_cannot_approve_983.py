@@ -16,11 +16,7 @@ def test_an_unattended_session_cannot_approve_a_test_change_983(tmp_path, capsys
         monkeypatch.setenv(k, v)
     assert spec.main(["--repo", str(tmp_path), "test-diff", "HEAD", "--approve", "tests/test_x.py",
                       "--reason", "system ship answer: yes, approve"]) == 1
-<<<<<<< Updated upstream
-    assert "only the user approves" in capsys.readouterr().err
-=======
     assert "an unattended session cannot approve a test change" in capsys.readouterr().err
->>>>>>> Stashed changes
     assert spec.main(["--repo", str(tmp_path), "test-diff", "HEAD"]) == 1, "nothing was recorded"
 
 
