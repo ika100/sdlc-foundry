@@ -818,13 +818,30 @@ def _approvals(root: Path, base: str) -> dict:
     return found if isinstance(found, dict) else {}
 
 
+def _approved_text(root: Path, base: str, f: str, rec: dict | None) -> str | None:
+    """#987: the newest committed version of `f` since `base` whose content is the recorded approval (or tightening), else None."""
+    import subprocess
+    digest = (rec or {}).get("sha256")
+    if not digest:
+        return None
+    log = subprocess.run(["git", "-C", str(root), "log", "--format=%H", f"{base}..HEAD", "--", f], capture_output=True, text=True)
+    for sha in log.stdout.split():
+        blob = subprocess.run(["git", "-C", str(root), "show", f"{sha}:{f}"], capture_output=True)
+        if blob.returncode == 0 and hashlib.sha256(blob.stdout).hexdigest() == digest:
+            return blob.stdout.decode("utf-8", "replace")
+    return None
+
+
 def tighten_test_change(root: Path, base: str, files: list[str], reason: str | None) -> dict[str, tuple[bool, str]]:
     """Spec 165 (AC-165.1): record each file that passes `tightening` against the red commit `base` as tightened by an
     agent; a refused file is not recorded. {file: (accepted, why)}."""
     import subprocess
     out: dict[str, tuple[bool, str]] = {}
+    approved = _approvals(root, base)
     for f in files:
         old = subprocess.run(["git", "-C", str(root), "show", f"{base}:{f}"], capture_output=True, text=True)
+        if old.returncode == 0 and (text := _approved_text(root, base, f, approved.get(f))) is not None:
+            old = subprocess.CompletedProcess(old.args, 0, text, "")   # #987: judged against what was approved, not the red tests
         if old.returncode != 0 and (root / f).is_file():       # spec 200 (AC-200.7): a new helper defines no test, names no id
             new = (root / f).read_text()
             if not _test_names(new) and not AC_ANY.findall(new):
