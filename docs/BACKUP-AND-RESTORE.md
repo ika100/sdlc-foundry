@@ -50,7 +50,7 @@ The platform installs what backups need (the Barman Cloud plugin, cert-manager, 
 /resource:backup orders-db --env prod
 ```
 
-Waits until the base backup finishes (up to 30 minutes). Scheduled backups need no command.
+Waits until the base backup finishes (up to 30 minutes). Scheduled backups need no command. A cluster takes one backup at a time: when a backup of the database is still running (the schedule takes its first one as soon as it is set), the command says so, waits for it and reports it as the result; a backup that completed less than a minute ago is the result without a new one. When a backup fails, the output gives its own error and names a backup it overlapped.
 
 ## Restore a database
 
