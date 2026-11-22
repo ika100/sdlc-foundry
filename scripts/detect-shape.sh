@@ -26,6 +26,7 @@ if [ -f "$answers" ]; then
     */templates/service-java|templates/service-java)     echo service-java; exit 0 ;;
     */templates/service-go|templates/service-go)         echo service-go; exit 0 ;;
     */templates/service-typescript|templates/service-typescript) echo service-typescript; exit 0 ;;
+    */templates/library-typescript|templates/library-typescript) echo library-typescript; exit 0 ;;
   esac
 fi
 
@@ -52,5 +53,9 @@ if [ -f pyproject.toml ]; then
   if [ -f Dockerfile ]; then echo service-python; else echo library-python; fi
   exit 0
 fi
+
+# a TypeScript library: a package.json and no other manifest (a next app and a fastify service were caught above, and a
+# Java, Go or Python repo with a package.json for its tooling keeps its shape)
+if [ -f package.json ]; then echo library-typescript; exit 0; fi
 
 exit 1
