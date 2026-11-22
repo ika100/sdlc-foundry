@@ -420,3 +420,12 @@ def test_another_comparison_error_is_still_red_at_once_506(w):  # #506
                      "addon-postgres-dev": app(w.head)}]
     rc, out, _, _ = w.wait("--env", "dev")
     assert rc == 1 and w.t["slept"] == 0 and "kustomize build failed" in block(out, "RED:")[0]
+
+
+def test_the_timeout_names_the_failure_argo_retries_849(w):  # #849
+    op = {"phase": "Running", "message": "ImagePullBackOff: network down", "retryCount": 3, "syncResult": {"revision": w.head}}
+    w.argo.polls = [{"todo-api-dev": app(w.head, sync="OutOfSync", images=[w.image], op=op), "addon-postgres-dev": app(w.head)}]
+    rc, out, _, _ = w.wait("--env", "dev", "--timeout", "60")
+    assert rc == 2
+    line = next(ln for ln in block(out, "TIMEOUT:") if "todo-api-dev" in ln)
+    assert "ImagePullBackOff: network down" in line and "attempt 3" in line

@@ -52,6 +52,10 @@ UPDATERS: dict[str, dict] = {
         "files": ["package.json"],
         "commands": [["npx", "--yes", "npm-check-updates", "-u", "--target", "minor"]],
     },
+    "library-typescript": {
+        "files": ["package.json"],
+        "commands": [["npx", "--yes", "npm-check-updates", "-u", "--target", "minor"]],
+    },
     "service-go": {
         "files": ["go.mod", "go.sum"],
         "atomic": True,           # go.mod and go.sum belong together: apply both or neither

@@ -1,0 +1,23 @@
+# {{ project_name }}
+
+{{ description }}
+
+TypeScript library (ESM, Node {{ node_major }}) generated from the `library-typescript` template of [`ika100/sdlc-foundry`](https://github.com/ika100/sdlc-foundry), published as `@{{ github_org | lower }}/{{ project_name }}` to GitHub Packages on every release tag.
+
+## Install
+
+```bash
+# .npmrc: @{{ github_org | lower }}:registry=https://npm.pkg.github.com and a read:packages token (see CLAUDE.md, Releasing the package)
+pnpm add @{{ github_org | lower }}/{{ project_name }}
+```
+
+## Develop
+
+```bash
+devbox shell
+devbox run quality    # eslint + tsc
+devbox run test       # vitest with coverage
+devbox run build      # dist/ with type declarations
+```
+
+See `CLAUDE.md` for conventions and the full recipe list. Skeleton updates: `/platform:update`.
