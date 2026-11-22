@@ -257,7 +257,18 @@ def _release_lines(out: _Lines, item: dict, head_shown: bool = False) -> None:
 def _unavailable_lines(out: _Lines, state: dict) -> None:
     for u in state.get("unavailable") or []:
         name, hint = _SOURCES.get(u.get("source"), (u.get("source"), None))
-        out.add(f"Could not read {name}; it may be missing {hint}." if hint else f"Could not read {name}.")
+        why = _short(str(u.get("error") or ""))     # #859: which call failed and why (a timeout is no missing login)
+        line = f"Could not read {name}; it may be missing {hint}." if hint else f"Could not read {name}."
+        if why.startswith("no answer within"):
+            line += f" It gave {why}: the machine or the network may only have been slow."
+        elif why:
+            line += f" Error: {why}"
+        out.add(line)
+
+
+def _short(text: str, limit: int = 100) -> str:
+    text = " ".join(text.split())
+    return text if len(text) <= limit else text[:limit - 1] + "…"
 
 
 def _tail_lines(out: _Lines, state: dict, also: dict[str, int], later: int, waiting: bool) -> None:
