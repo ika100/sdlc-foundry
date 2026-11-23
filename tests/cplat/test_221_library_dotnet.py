@@ -146,10 +146,11 @@ def test_the_build_settings_match_the_service_ac_221_3(default):  # AC-221.3
     assert p["RestorePackagesWithLockFile"] == "true" and p["TargetFramework"] == "net10.0"
     assert "InvariantGlobalization" not in p   # a library leaves globalization to its consumer
     assert (default / "global.json").read_text() == (SERVICE / "global.json.jinja").read_text().replace("{{ dotnet_major }}", "10")
+    answers = [yaml.safe_load((t / "copier.yml").read_text()) for t in (TEMPLATE, SERVICE)]
+    for key in ("dotnet_major", "dotnet_sdk_version"):   # one pinned SDK for every .NET template
+        assert answers[0][key]["default"] == answers[1][key]["default"], key
     devbox = json.loads((default / "devbox.json").read_text())
-    svc = (SERVICE / "devbox.json.jinja").read_text()
-    sdk = next(p for p in devbox["packages"] if p.startswith("dotnet-sdk_"))
-    assert sdk.split("@")[1] in svc
+    assert f"dotnet-sdk_10@{answers[1]['dotnet_sdk_version']['default']}" in devbox["packages"]
 
 
 # ---------------- AC-221.4: the package ----------------
@@ -201,10 +202,10 @@ elif args[0] == "pack":
     (out / ("%s.%s.nupkg" % (prop(text, "PackageId"), version))).write_text("%s %s\n" % (prop(text, "PackageId"), version))
 elif args[:2] == ["nuget", "push"]:
     assert "--skip-duplicate" in args and args[args.index("--source") + 1] == "github", args
-    config = pathlib.Path("nuget.config").read_text()
+    config = pathlib.Path(args[args.index("--configfile") + 1]).read_text()
     token = os.environ["GH_TOKEN"]
     assert 'key="github"' in config and token in config and "https://nuget.pkg.github.com/acme/index.json" in config, config
-    assert args[args.index("--api-key") + 1] == token
+    assert os.environ.get("NUGET_API_KEY") == token and "--api-key" not in args and token not in " ".join(args), args
     with open(os.environ["TOOL_LOG"], "a") as log:
         log.write("token=%s\n" % token)
     pkg = pathlib.Path(args[2])
@@ -446,7 +447,7 @@ def test_the_platform_ci_smoke_tests_the_template_ac_221_10():  # AC-221.10
     job = wf["jobs"]["smoke-test-library-dotnet"]
     assert job["if"] == "needs.changes.outputs.dotnetlib == 'true'"
     steps = " ".join(str(s.get("run", "")) for s in job["steps"])
-    for needle in ("detect-shape.sh", 'template-lint.py" library-dotnet', "devbox run ci", "publish.sh v1.2.3 --dry-run",
+    for needle in ("detect-shape.sh", 'template-lint.py" library-dotnet', '.shell.scripts["test"]', "publish.sh v1.2.3 --dry-run",
                    "git update-ref refs/tags/v1.2.3 HEAD", "but the tag is v1.2.3 (1.2.3)"):
         assert needle in steps, needle
     assert "smoke-test-library-dotnet" in wf["jobs"]["ci-success"]["needs"]

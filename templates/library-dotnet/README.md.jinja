@@ -1,0 +1,14 @@
+# {{ project_name }}
+
+{{ description }}
+
+.NET library (NuGet package `{{ namespace }}` for .NET {{ dotnet_major }}) generated from the `library-dotnet` template of [`ika100/sdlc-foundry`](https://github.com/ika100/sdlc-foundry).
+
+```bash
+devbox shell
+devbox run install    # restore the locked packages
+devbox run quality    # dotnet format + build with the analyzers
+devbox run test       # xUnit with coverage
+```
+
+A release tag `vX.Y.Z` publishes the package to GitHub Packages. See `CLAUDE.md` for conventions, the release and how another repo uses the package. Skeleton updates: `/platform:update`.
