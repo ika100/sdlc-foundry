@@ -1,6 +1,6 @@
 name: Bug report
 description: A template, script, command or agent of the platform misbehaved
-labels: [feedback, bug]
+labels: [triage, feedback, bug]
 body:
   - type: markdown
     attributes:
