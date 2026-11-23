@@ -1,0 +1,24 @@
+# ADR-000: Bootstrap
+
+## Status
+
+Accepted on bootstrap.
+
+## Context
+
+`{{ project_name }}` was created from the `library-java` Copier template at `ika100/sdlc-foundry`. The template encodes the platform's Java library conventions (platform ADR-009 for the tooling, ADR-125 for publishing):
+
+- JDK {{ java_version }} LTS and Maven via devbox; a plain Java library, no Spring Boot
+- Spotless (google-java-format) + a minimal Checkstyle config as the quality gate; trivy or OWASP Dependency-Check and detect-secrets for security
+- JUnit 5, JaCoCo with an 80% line gate
+- The Maven artifact `{{ group_id }}:{{ project_name }}` (jar + sources jar), deployed to GitHub Packages by the `publish` CI job of a `v*` tag; the tag is the version
+- No server, no container image, no Kubernetes
+- Claude Code agents from the `sdlc-foundry` marketplace (`svc-java` + `svc` + `shared`)
+
+## Decision
+
+We adopt the platform conventions verbatim. Any deviation must be justified in a new ADR.
+
+## Consequences
+
+Skeleton updates (CI, devbox recipes, the publish script, JDK bump) arrive through `copier update`; `pom.xml`, `src/`, `config/` and `docs/adr/` are project-owned and never overwritten.

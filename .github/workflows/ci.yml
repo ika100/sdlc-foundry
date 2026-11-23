@@ -32,6 +32,7 @@ jobs:
       dotnetlib: ${{ steps.diff.outputs.dotnetlib }}
       tslib: ${{ steps.diff.outputs.tslib }}
       java: ${{ steps.diff.outputs.java }}
+      javalib: ${{ steps.diff.outputs.javalib }}
       site: ${{ steps.diff.outputs.site }}
       cluster: ${{ steps.diff.outputs.cluster }}
     steps:
@@ -71,6 +72,7 @@ jobs:
             echo "dotnet=$(t '^templates/service-dotnet/')"
             echo "dotnetlib=$(t '^templates/(library|service)-dotnet/')"   # library-dotnet syncs deps.sh and .editorconfig from the service
             echo "java=$(t '^templates/service-java/')"
+            echo "javalib=$(t '^templates/library-java/|^templates/service-java/scripts/(deps\.sh|PomDeps\.java)$')"
             echo "site=$(has '^(site/|docs/|plugins/|shapes\.yml$|scripts/cplat/|templates/gitops-app/scripts/(render\.py|local-cluster\.sh)$|[A-Z_]+\.md$|\.github/workflows/(ci|pages)\.yml$)')"
           } | tee -a "$GITHUB_OUTPUT"
 
@@ -139,7 +141,7 @@ jobs:
       - name: workflows (platform + every generated repo) pass actionlint
         run: |
           uv tool install copier
-          for t in service-python library-python service-java service-go service-typescript library-typescript service-dotnet library-dotnet web-nextjs gitops-app cluster-gitops; do
+          for t in service-python library-python service-java library-java service-go service-typescript library-typescript service-dotnet library-dotnet web-nextjs gitops-app cluster-gitops; do
             copier copy ./templates/$t /tmp/lint-$t --defaults --trust --skip-tasks --data project_name=lint-test
           done
           uv tool run --from actionlint-py actionlint .github/workflows/*.yml scripts/cplat/assets/workflows/*.yml /tmp/lint-*/.github/workflows/*.yml
@@ -1062,6 +1064,77 @@ jobs:
 
   # Spec 204, AC-204.6: a repo built from the last Spring Boot 3 template survives the template update: its own build files stay,
   # the runtime image moves to debian13 and still builds, starts and passes the smoke test.
+  smoke-test-library-java:
+    name: smoke-test library-java template
+    needs: changes
+    if: needs.changes.outputs.javalib == 'true'
+    runs-on: ubuntu-latest
+    env:
+      MAVEN_OPTS: -Daether.connector.http.retryHandler.count=3   # spec 084: a dropped download is retried, not a red job
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
+        with:
+          distribution: temurin
+          java-version: '21'   # = templates/library-java/copier.yml java_version
+      - name: Install copier
+        run: uv tool install copier
+      - name: Generate test project
+        run: |
+          copier copy ./templates/library-java /tmp/test-javalib --defaults --trust --skip-tasks \
+            --data project_name=test-javalib --data description="Smoke test"
+      - name: Confirm key files exist
+        run: |
+          for f in devbox.json pom.xml config/checkstyle.xml .claude/settings.json .github/workflows/ci.yml \
+                   src/main/java/io/github/ika100/testjavalib/Greetings.java src/test/java/io/github/ika100/testjavalib/GreetingsTest.java; do
+            test -f /tmp/test-javalib/$f || { echo "missing $f"; exit 1; }
+          done
+          test -x /tmp/test-javalib/scripts/publish.sh || { echo "the publish script is missing or not executable"; exit 1; }
+          test ! -e /tmp/test-javalib/Dockerfile || { echo "a library ships no image"; exit 1; }
+      - name: Shape is detected as library-java
+        run: test "$(bash scripts/detect-shape.sh /tmp/test-javalib)" = "library-java"
+      - name: spotless + checkstyle (lint)
+        working-directory: /tmp/test-javalib
+        run: python3 "$GITHUB_WORKSPACE/scripts/template-lint.py" library-java .   # spec 184: file, line and rule of a violation
+      - name: verify (tests + JaCoCo 80% gate)
+        working-directory: /tmp/test-javalib
+        run: sh -c "$(jq -r '.shell.scripts["test"]' devbox.json)"   # spec 130: gate.sh around mvn -B verify
+      # Spec 217: the publish recipe builds the tag's version, and refuses a tag on another commit
+      - name: Publish dry run builds the tagged version
+        working-directory: /tmp/test-javalib
+        env:
+          GIT_AUTHOR_NAME: ci
+          GIT_AUTHOR_EMAIL: ci@example.invalid
+          GIT_COMMITTER_NAME: ci
+          GIT_COMMITTER_EMAIL: ci@example.invalid
+        run: |
+          cp -r . /tmp/publish-javalib
+          cd /tmp/publish-javalib
+          git init -q && git add -A && git commit -qm init
+          git update-ref refs/tags/v1.2.3 HEAD   # a lightweight tag: the platform CI creates no tag objects (AC-121.24)
+          bash scripts/publish.sh v1.2.3 --dry-run | tee /tmp/publish.out
+          grep -F "as io.github.ika100:test-javalib:1.2.3 to https://maven.pkg.github.com/ika100/test-javalib" /tmp/publish.out
+          test -f target/test-javalib-1.2.3.jar && test -f target/test-javalib-1.2.3-sources.jar
+          git diff --exit-code pom.xml   # the tag's version is in the build only
+          echo next >> README.md && git commit -qam next
+          if bash scripts/publish.sh v1.2.3 --dry-run 2>/tmp/publish.err; then
+            echo "publish: a tag on another commit was published"; exit 1
+          fi
+          grep -F "the built version is 0.0.0-SNAPSHOT but the tag is v1.2.3 (1.2.3)" /tmp/publish.err
+      # Spec 130: a render without tests fails test-fast with the line, through the real Maven
+      - name: Recipe fails when no test ran
+        working-directory: /tmp/test-javalib
+        run: |
+          cp -r . /tmp/empty-javalib
+          cd /tmp/empty-javalib
+          rm -rf src/test target   # compiled test classes in target/ would still run
+          if sh -c "$(jq -r '.shell.scripts["test-fast"]' devbox.json)" 2>/tmp/neg.err; then
+            echo "test-fast: the recipe passed with no tests"; exit 1
+          fi
+          cat /tmp/neg.err
+          grep -Fx "test-fast: checked nothing: 0 tests ran - add at least one test" /tmp/neg.err
+
   smoke-test-service-java-update:
     name: smoke-test service-java update from v5.23.3
     needs: changes
@@ -1191,7 +1264,7 @@ jobs:
   ci-success:
     name: ci-success
     if: always()
-    needs: [changes, validate-manifests, validate-shapes, release-check, platform-tests, platform-tests-cover, smoke-test-templates, smoke-test-gitops-app, smoke-test-cluster-gitops, smoke-test-web-nextjs, smoke-test-service-go, smoke-test-service-typescript, smoke-test-library-typescript, smoke-test-service-dotnet, smoke-test-library-dotnet, smoke-test-service-java, smoke-test-service-java-update, site, dco, spec-required, pr-title]
+    needs: [changes, validate-manifests, validate-shapes, release-check, platform-tests, platform-tests-cover, smoke-test-templates, smoke-test-gitops-app, smoke-test-cluster-gitops, smoke-test-web-nextjs, smoke-test-service-go, smoke-test-service-typescript, smoke-test-library-typescript, smoke-test-service-dotnet, smoke-test-library-dotnet, smoke-test-service-java, smoke-test-library-java, smoke-test-service-java-update, site, dco, spec-required, pr-title]
     runs-on: ubuntu-latest
     steps:
       - name: every needed job passed or was skipped
