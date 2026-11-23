@@ -1,7 +1,7 @@
 ---
 spec_id: 186-the-journey-waits-less
 shape: platform
-spec_hash: "22129676bd6d"
+spec_hash: "682b9f95db22"
 summary: Escalated repos answered while others build, cplat plan merge for a task that cannot pass alone, the image built alongside the gates and tagged after them, a 30 s local Argo CD poll and a refresh after restore, and a release that reuses the commit's green CI
 tasks:
   - id: t1
@@ -108,6 +108,13 @@ tasks:
     covers: [AC-186.2, AC-186.5, AC-186.10]
     parallel_safe: true
     depends_on: [t11, t12, t13, t14]
+    done: true
+  - id: t16
+    title: An attended system ship asks a held repo's question at once
+    files: [scripts/cplat/appship_sched.py, scripts/cplat/appship.py, plugins/system/commands/ship.md, docs/rules/plugins/system/commands/ship.yml, docs/changelog.d/986-attended-held-decision.changed.md, .claude-plugin/marketplace.json, plugins/system/.claude-plugin/plugin.json]
+    covers: [AC-186.12]
+    parallel_safe: true
+    depends_on: [t15]
     done: true
 ---
 
@@ -396,3 +403,17 @@ other repos keep building.
 
 **Done when:** `scripts/check-links.py`, `scripts/check-docs.py`, `devbox run validate`, `cplat platform rules check`
 and `cplat platform pr-check` (fragment, versions) pass.
+
+## t16 — An attended system ship asks a held repo's question at once
+
+**Files:** scripts/cplat/appship_sched.py, scripts/cplat/appship.py, plugins/system/commands/ship.md, docs/rules/plugins/system/commands/ship.yml, docs/changelog.d/986-attended-held-decision.changed.md, .claude-plugin/marketplace.json, plugins/system/.claude-plugin/plugin.json
+**Covers:** AC-186.12
+**Goal:** with the person at hand, a repo's decision is asked while the other repos run, not an hour later (#986).
+
+**Implementation notes:**
+- `appship_sched.attended()` and `settle(cause, questions)`; the answer object carries `do`, the text form `  do: <do>`.
+- The system ship prompt acts on `do`: `resume`, `ask` (AskUserQuestion, then resume or hold), `hold`. Keep the
+  file's bytes (rule 6).
+- A patch bump of the system plugin.
+
+**Done when:** `tests/cplat/test_186_attended_ask.py` and `cplat platform rules check` pass.

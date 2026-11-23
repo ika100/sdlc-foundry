@@ -355,7 +355,7 @@ def show_next(action: dict, as_json: bool) -> None:
     if ans:
         answer_lines = [f"answer {ans['id']} (cause {ans['cause']}): {ans['reason']}"] + [
             f"  question: {q['text']}" + (f" (suggested: {q['suggested']})" if q.get("suggested") else "")
-            for q in ans["questions"]]
+            for q in ans["questions"]] + [f"  do: {ans['do']}"]
     say([f"action: {action['action']}"] + answer_lines + [f"start {s['id']} ({s['shape']}) in {s['clone']}" for s in action["start"]]
         + [f"running {i}" for i in action["running"]] + [f"blocked {b['id']} (waits for {', '.join(b['waits_for'])})"
                                                            for b in action["blocked"]]
