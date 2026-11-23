@@ -23,6 +23,12 @@
   with those answers. Every other escalation is held (`repo hold`). A held repo stays `escalated`, so the existing
   `stopped` rule keeps every new repo from starting. When nothing runs, `next` returns `escalate` as today (A3,
   AC-186.3). A run resumed with `/system:ship` clears `held` and `questions` along with the escalation.
+- **An attended run asks at once** (#986, AC-186.12). `next` computes `answer.do` (`appship_sched.settle`): `resume`
+  for a `decision` whose every question is suggested, `ask` when the caller's environment has neither `CPLAT_HEADLESS`
+  (set by `cplat headless`) nor `CPLAT_UNIT` (set by the supervisor), else `hold`. The signal is the environment of the
+  coordinator's own `cplat` call, so nothing is stored and a run that changes from unattended to attended asks from its
+  next `next` on. On `ask` the coordinator asks with AskUserQuestion; the repo sessions run on in their own processes
+  meanwhile. The reply resumes the repo (`repo resume`), a `hold` reply holds it (A3 applies then).
 - **`cplat plan merge` folds tN into tM and commits only plan.md** (A4). It is the only command that removes a task.
   Unit mode therefore reads a task that is gone from the committed plan as merged: its `task:`/`batch:` unit
   checkpoints, and the work goes on in tM's unit. That way the session that merged does not stall on a unit it can no
@@ -80,16 +86,17 @@ The object as today, plus `held: [<id>…]` (always present) and, only when `act
  "action": "answer",
  "answer": {"id": "api", "cause": "decision", "reason": "<the repo's reason, verbatim>",
             "questions": [{"text": "<question, verbatim, without the suggestion>", "suggested": "<answer>" }],
+            "do": "ask",
             "resume": "cplat system ship repo resume api --answer '<text>'",
             "hold": "cplat system ship repo hold api"}}
 ```
 
-- `questions[].suggested` is `null` when the question has none. `questions` is `[]` when the escalation has none.
+- `do` is `resume`, `ask` or `hold` (AC-186.12). `questions[].suggested` is `null` when the question has none. `questions` is `[]` when the escalation has none.
 - Order of the actions: `done`, then `answer` (some repo `escalated`, not `held`, and `st.escalated` empty), then
   `wait`, `start`, `land`/`complete`, `escalate`, all as today. With no unanswered escalated repo, the object equals
   today's plus `"held": []`.
 - Text form (`next` without `--json`): `action: answer`, then `answer <id> (cause <cause>): <reason>`, then one
-  `  question: <text>` line per question, with ` (suggested: <s>)` appended when it has one, then the usual
+  `  question: <text>` line per question, with ` (suggested: <s>)` appended when it has one, then `  do: <do>`, then the usual
   `running`/`blocked`/`escalated` lines, then `held <id>` for each held repo.
 - `next --wait` returns `answer` at the first poll after the escalated repo's result is recorded (exit 0, `REACHED`).
 

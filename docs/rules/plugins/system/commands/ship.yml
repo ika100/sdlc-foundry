@@ -10,7 +10,7 @@ rules:
     text: "Stop earlier only after `cplat system ship escalate` or when the run is done, because the hook counts any other stop against the run."
     class: practice
   - id: R4
-    text: "Never ask the user, because the spec's approval was the decision."
+    text: "Ask the user only `do: ask`, because the spec's approval was the decision."
     class: practice
   - id: R5
     text: "Never merge by hand or promote beyond dev, because `cplat` merges on green checks."

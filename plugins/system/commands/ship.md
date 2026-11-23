@@ -12,13 +12,13 @@ A rule marked **Hard rule:** is never departed from. Any other rule is a practic
 
 `cplat` is on the Bash PATH; one call per Bash invocation, output read whole (never piped into `grep`, `head` or `tail`, because its last lines carry the decisions and fixes; use `--json` where offered). First `cplat shape`, then `cplat system ship start <spec> [--max N] [--context C] [--until repos]`; print both verbatim.
 
-When `system ship start` refuses (a component repo → `/component:ship`, an unapproved spec, no kube context, another unfinished run), show its hint and stop. A re-run **resumes**.
+When `system ship start` refuses, show its hint and stop. A re-run **resumes**.
 
 **Until the run is finished, the Stop hook holds only the session that started or resumed it** (`cplat system ship gate`): two stops without a new commit or phase change escalate the run, so that you commit each finished task. Stop earlier only after `cplat system ship escalate` or when the run is done, because the hook counts any other stop against the run.
 
 ## Rules
 
-- Never ask the user, because the spec's approval was the decision. Never merge by hand or promote beyond dev, because `cplat` merges on green checks. **Hard rule:** push only through `cplat`, never to a default branch or forced, because a shell push reaches GitHub before any check runs.
+- Ask the user only `do: ask`, because the spec's approval was the decision. Never merge by hand or promote beyond dev, because `cplat` merges on green checks. **Hard rule:** push only through `cplat`, never to a default branch or forced, because a shell push reaches GitHub before any check runs.
 - Run every shell command through `devbox run <script>`, so that versions and flags match CI; git, gh and `cplat` run directly.
 - Never answer a repo spec's questions, because `repo start` writes the spec from the plan and none arise.
 - Component repos ship in their own sessions (spec 155); a subagent you start (the planner, the entry) runs in the foreground. Never wait with a shell loop on a file, git HEAD or an image, because `cplat system ship next --wait` blocks until a repo finishes.
@@ -39,9 +39,9 @@ Loop on `cplat system ship next --json`, one call per action, never a shell loop
   - The **gitops entry** (`entry: true`) is built by you in the printed worktree: read `${CLAUDE_PLUGIN_ROOT}/references/ship-entry.md` and follow it. No repo that depends on it starts before it is merged (in a joint run: before its checks passed).
   - Every other repo ships **in its own session** (spec 155): `repo start` writes and approves the repo spec from the plan and starts `cplat headless "/component:ship <repo spec>"` in the clone. You start no subagent for a component repo and never work in its clone, because its own session owns it. Go on (usually `wait`).
 - `action: wait`: `cplat system ship next --wait` (spec 143) blocks, records each finished repo (`repo result`) and prints the next action. On exit 0 (`WAIT:`) or exit 2 (`TIMEOUT:`) run the same wait again; escalate only after three `TIMEOUT:` in a row (a `WAIT:` resets the count): `cplat system ship escalate '<the TIMEOUT line>' --cause environment`, stop, because a stuck repo means runner or cluster. One clone: `cplat component ship wait --repo <clone> [--phase P]`. Never write a polling loop on `cplat component ship status`, `kubectl` or `gh`, because the wait ends at the first state change.
-- `action: answer`: the user's answer or cause `decision` with every question suggested → `cplat system ship repo resume <id> --answer '<it>'`; otherwise `cplat system ship repo hold <id>`. Then `next`, because one repo's decision need not wait for another's build, and only the user approves answers (suggested ones in the spec).
+- `action: answer`, by `do`: `resume` → `cplat system ship repo resume <id> --answer '<suggestions>'`; `ask` → AskUserQuestion now (suggestion Recommended, option `hold`), then resume with the reply or hold, so that the person present answers while others run; `hold` → `cplat system ship repo hold <id>`. Then `next`, because one repo's decision need not wait for another's build, and only the user approves answers (suggested ones in the spec).
 - `action: escalate`: no repo can start (running ones finish, nothing new starts). `cplat system ship escalate '<the repo's reason>'`, print the table, stop. `/system:ship <spec>` resumes there.
-- `action: land` (a joint run, spec 144): `cplat system ship land` (foreground; ends in 9 min) merges the dev PR on green CI, awaits Argo CD, smokes dev and, with staging `promote: after-dev-smoke`, promotes and smokes staging. Exit 0 → `complete`. 1 → escalated: print, stop. 3 (`WAIT:`) → `land` again. 2 (`TIMEOUT:`) → again, at most twice, then `cplat system ship escalate '<the TIMEOUT line>' --cause environment`, stop. An escalated component leaves the dev PR open. `cplat` posts milestone comments on linked issues itself, without asking.
+- `action: land` (a joint run, spec 144): `cplat system ship land` (ends in 9 min) merges the dev PR on green CI, awaits Argo CD, smokes dev and, with staging `promote: after-dev-smoke`, promotes and smokes staging. Exit 0 → `complete`. 1 → escalated: print, stop. 3 (`WAIT:`) → `land` again. 2 (`TIMEOUT:`) → again, at most twice, then `cplat system ship escalate '<the TIMEOUT line>' --cause environment`, stop. An escalated component leaves the dev PR open. `cplat` posts milestone comments itself, without asking.
 - `action: complete`: `cplat system ship phase complete`.
 
 ## Phase `complete`

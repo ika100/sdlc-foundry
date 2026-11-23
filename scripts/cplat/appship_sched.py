@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import os
 import re
 from pathlib import Path
 
@@ -90,10 +91,25 @@ def questions_of(reason: str, stored: list | None) -> list[dict]:
     return []
 
 
+def attended() -> bool:
+    """#986: the person is at hand. An unattended run's sessions carry CPLAT_HEADLESS (`cplat headless`) or CPLAT_UNIT
+    (the supervisor), as `ship_handoff.in_headless` reads them; the person's own session carries neither."""
+    return not (os.environ.get("CPLAT_HEADLESS") or os.environ.get("CPLAT_UNIT"))
+
+
+def settle(cause: str | None, questions: list[dict]) -> str:
+    """What the coordinator does with an escalated repo: `resume` with the suggested answers (A2: a `decision` whose every
+    question has one), `ask` the person now while the other repos run (attended, AC-186.12), else `hold` (A3)."""
+    if cause == "decision" and questions and all(q.get("suggested") for q in questions):
+        return "resume"
+    return "ask" if attended() else "hold"
+
+
 def _answer_object(entry: dict, repo_id: str) -> dict:
     reason = entry.get("reason") or ""
-    return {"id": repo_id, "cause": entry.get("cause"), "reason": reason,
-            "questions": questions_of(reason, entry.get("questions")),
+    questions = questions_of(reason, entry.get("questions"))
+    return {"id": repo_id, "cause": entry.get("cause"), "reason": reason, "questions": questions,
+            "do": settle(entry.get("cause"), questions),
             "resume": f"cplat system ship repo resume {repo_id} --answer '<text>'",
             "hold": f"cplat system ship repo hold {repo_id}"}
 
