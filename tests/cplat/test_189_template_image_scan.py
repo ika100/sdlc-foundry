@@ -14,7 +14,7 @@ SCRIPT = ROOT / "scripts" / "template-image-scan.py"
 WORKFLOW = ROOT / ".github" / "workflows" / "template-image-scan.yml"
 ACCEPTED = ROOT / ".github" / "image-scan-accepted.yml"
 DEPENDABOT = ROOT / ".github" / "dependabot.yml"
-ALL = ["service-python", "service-java", "service-go", "web-nextjs"]
+ALL = ["service-python", "service-java", "service-go", "service-typescript", "web-nextjs"]
 TODAY = "2026-11-13"
 
 

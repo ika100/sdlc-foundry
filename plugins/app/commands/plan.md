@@ -2,6 +2,7 @@
 description: "Moved in 5.0: /app:plan is /system:plan. Runs nothing."
 moved-to: "/system:plan"
 allowed-tools: Read, Glob
+disable-model-invocation: true
 ---
 
 `/app:plan` was renamed in sdlc-foundry 5.0. Run no script, start no agent, change no file.

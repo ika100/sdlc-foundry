@@ -1,6 +1,6 @@
 """`cplat spec mutate <id>`: how many small faults in the changed code the spec's acceptance tests catch (spec 152).
 
-  cplat spec mutate <id> [--base REF] [--max N] [--write] [--json]
+  cplat spec mutate <id> [--base REF] [--max N] [--budget SECONDS] [--write] [--json]
 
 Report only, Python repos (service-python, library-python): every changed line of `src/**/*.py` since REF (default
 origin/main) is a site for one mutation at a time (a comparison or boolean operator flipped, `not` dropped, a True/False or
@@ -8,6 +8,12 @@ number changed, a returned value replaced by None). For each mutant the tests th
 (`devbox run test-fast -- <files> -x`); a failing run kills the mutant. The score and the surviving mutants are printed;
 `--write` puts them under `## Mutation check (report only)` in the spec's verification.md. The exit code is 0 whatever
 the score; only a broken setup (unknown spec, tests red before any mutation) exits 1. Files are always restored.
+
+The whole check keeps to a wall-clock budget (default 90 s, `--budget`, #868): the baseline run and every mutant run count, a
+run never outlasts what is left, and when the budget runs out the check stops and reports a partial score over the mutants it
+tested ("5 of 20 mutants tested in 90 s (time budget)"). Mutants run one after another, not in parallel copies of the tree: a
+copy needs its own devbox environment and venv (the devbox init hook runs `uv sync`), and suites backed by a shared service
+(a local Postgres) would see each other's data, so parallel runs could kill or spare mutants by accident.
 """
 from __future__ import annotations
 
@@ -17,6 +23,7 @@ import copy
 import json
 import re
 import subprocess
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -26,6 +33,8 @@ from core import PlatformError, repo_env
 SHAPES = ("service-python", "library-python")
 MAX_MUTANTS = 20
 TIMEOUT = 120
+BUDGET = 90                          # seconds of wall clock for the whole check (#868)
+MIN_RUN = 5                          # do not start a run with less time than this left
 HEADING = "## Mutation check (report only)"
 _SWAP = {ast.Eq: ast.NotEq, ast.NotEq: ast.Eq, ast.Lt: ast.GtE, ast.GtE: ast.Lt, ast.Gt: ast.LtE, ast.LtE: ast.Gt,
          ast.Is: ast.IsNot, ast.IsNot: ast.Is, ast.In: ast.NotIn, ast.NotIn: ast.In}
@@ -110,17 +119,20 @@ def _splice(source: str, start: tuple[int, int], end: tuple[int, int], text: str
     return (raw[:a] + text.encode() + raw[b:]).decode()
 
 
-def run_tests(root: Path, files: list[str]) -> bool:   # tests replace this
-    """True when the tests pass."""
+def run_tests(root: Path, files: list[str], timeout: float = TIMEOUT) -> bool | None:   # tests replace this
+    """True when the tests pass, False when they fail, None when they ran out of `timeout`."""
     try:
         p = subprocess.run(["devbox", "run", "test-fast", "--", *files, "-x", "-q", "-p", "no:cacheprovider"], cwd=root,
-                           capture_output=True, text=True, timeout=TIMEOUT, check=False, env=repo_env())
+                           capture_output=True, text=True, timeout=timeout, check=False, env=repo_env())
     except subprocess.TimeoutExpired:
-        return False                     # a mutant that hangs the tests is caught
+        return None
     return p.returncode == 0
 
 
-def mutate(root: Path, spec_id: str, base: str = "origin/main", limit: int = MAX_MUTANTS) -> dict:
+clock = time.monotonic                   # tests replace this
+
+
+def mutate(root: Path, spec_id: str, base: str = "origin/main", limit: int = MAX_MUTANTS, budget: float = BUDGET) -> dict:
     spec = specmod.find(root, spec_id)
     shape = specmod.spec_shape(spec, specmod.repo_shape(root))
     if shape not in SHAPES:
@@ -132,27 +144,47 @@ def mutate(root: Path, spec_id: str, base: str = "origin/main", limit: int = MAX
     found = mutants(root, lines, limit)
     if not found:
         return {"spec": spec.id, "status": "skipped", "reason": "no changed source line to mutate"}
-    if not run_tests(root, tests):
+    start = clock()
+    deadline = start + budget
+    baseline = run_tests(root, tests, timeout=max(min(TIMEOUT, budget), MIN_RUN))
+    if baseline is False or (baseline is None and budget >= TIMEOUT):
         raise PlatformError(f"the acceptance tests of {spec.id} fail before any mutation", hint="make `devbox run test-fast` green first")
-    for m in found:
+    for m in found if baseline else []:
+        left = deadline - clock()
+        if left < MIN_RUN:
+            break
         path = root / m.file
         original = path.read_text()
         try:
             path.write_text(_splice(original, m.start, m.end, m.text))
-            m.killed = not run_tests(root, tests)
+            timeout = min(TIMEOUT, left)
+            passed = run_tests(root, tests, timeout=timeout)
         finally:
             path.write_text(original)
-    killed = sum(1 for m in found if m.killed)
-    return {"spec": spec.id, "status": "done", "tests": tests, "mutants": len(found), "killed": killed,
-            "score": round(killed / len(found), 2),
-            "survivors": [f"{m.file}:{m.line} {m.what}" for m in found if not m.killed]}
+        if passed is None and timeout < TIMEOUT:
+            break                        # cut off by the budget, not hung: not tested
+        m.killed = passed is not True    # a mutant that hangs the tests for the full TIMEOUT is caught
+    tested = [m for m in found if m.killed is not None]
+    killed = sum(1 for m in tested if m.killed)
+    return {"spec": spec.id, "status": "done", "tests": tests, "mutants": len(found), "tested": len(tested), "killed": killed,
+            "score": round(killed / len(tested), 2) if tested else None, "seconds": round(clock() - start),
+            "budget": round(budget), "budget_hit": len(tested) < len(found),
+            "survivors": [f"{m.file}:{m.line} {m.what}" for m in tested if not m.killed]}
 
 
 def render(result: dict) -> str:
     if result["status"] != "done":
         return f"{HEADING}\n\nSkipped: {result['reason']}.\n"
-    lines = [HEADING, "", f"{result['killed']} of {result['mutants']} mutants of the changed code were caught by the acceptance "
-             f"tests ({int(result['score'] * 100)} %; spec 152, report only)."]
+    tested = result.get("tested", result["mutants"])
+    lines = [HEADING, ""]
+    if result.get("budget_hit"):
+        lines += [f"{tested} of {result['mutants']} mutants tested in {result['seconds']} s (time budget of {result['budget']} s, "
+                  "`--budget`); the score covers the tested ones.", ""]
+    if tested:
+        lines.append(f"{result['killed']} of {tested} mutants of the changed code were caught by the acceptance "
+                     f"tests ({int(result['score'] * 100)} %; spec 152, report only).")
+    else:
+        lines.append("No mutant was tested: the acceptance tests alone used the time budget (spec 152, report only).")
     if result["survivors"]:
         lines += ["", "Survived (a test that names the criterion would fail if it checked this):"]
         lines += [f"- `{s}`" for s in result["survivors"]]
@@ -173,12 +205,14 @@ def add_parser(sub) -> None:
     p.add_argument("id")
     p.add_argument("--base", default="origin/main")
     p.add_argument("--max", type=int, default=MAX_MUTANTS)
+    p.add_argument("--budget", type=float, default=BUDGET, metavar="SECONDS",
+                   help=f"wall-clock budget for the whole check; stops early with a partial score (default {BUDGET})")
     p.add_argument("--write", action="store_true", help="put the result into the spec's verification.md")
     p.add_argument("--json", action="store_true")
 
 
 def main(ns: argparse.Namespace, root: Path) -> int:
-    result = mutate(root, ns.id, ns.base, ns.max)
+    result = mutate(root, ns.id, ns.base, ns.max, ns.budget)
     text = render(result)
     if ns.write:
         write(root, ns.id, text)

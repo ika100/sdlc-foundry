@@ -1,0 +1,41 @@
+# syntax=docker/dockerfile:1.7
+
+FROM node:{{ node_major }}-slim AS deps
+WORKDIR /app
+RUN corepack enable
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml* ./
+RUN pnpm install --frozen-lockfile
+
+
+FROM deps AS builder
+COPY . .
+RUN pnpm build && pnpm prune --prod --ignore-scripts
+
+
+FROM gcr.io/distroless/nodejs{{ node_major }}-debian13 AS runtime
+# Links the GHCR package to this repository, so CI's GITHUB_TOKEN can push to it (no manual "Manage Actions access" step).
+LABEL org.opencontainers.image.source="https://github.com/{{ github_org }}/{{ project_name }}" \
+      org.opencontainers.image.description="{{ description | replace('"', '') | replace('\\', '') }}"
+WORKDIR /app
+
+ENV NODE_ENV=production \
+    PORT={{ port }}
+
+# Production dependencies and the compiled service only; root-owned and read-only for the runtime user.
+COPY --from=builder /app/package.json ./
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/dist ./dist
+{%- if needs_database %}
+COPY --from=builder /app/drizzle ./drizzle
+{%- endif %}
+
+# Numeric UID: Kubernetes cannot verify runAsNonRoot for a named user. 65532 is the distroless "nonroot" user.
+USER 65532:65532
+
+EXPOSE {{ port }}
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD ["/nodejs/bin/node", "-e", "fetch('http://localhost:{{ port }}/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+
+# The distroless entrypoint is node.{% if needs_observability %} telemetry.js loads OpenTelemetry before the app.{% endif %}
+CMD [{% if needs_observability %}"--import", "./dist/telemetry.js", {% endif %}"dist/server.js"]

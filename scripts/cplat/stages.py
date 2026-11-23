@@ -15,7 +15,7 @@ DECISION = frozenset({"Spec", "Build", "Prod"})
 
 _RELEASE_BAR = ("Issue", "Spec", "Build", "Release")
 _SERVICE_BAR = ("Issue", "Spec", "Build", "Dev", "Staging", "Prod")
-_SERVICE_SHAPES = frozenset({"service-python", "service-java", "service-go", "web-nextjs", "gitops-app"})
+_SERVICE_SHAPES = frozenset({"service-python", "service-java", "service-go", "service-typescript", "web-nextjs", "gitops-app"})
 _BAR_FOLD = {"Plan": "Build", "Land": "Build"}
 
 # key -> (title, text): plain terms the terminal screen and the console glossary show with one text.
@@ -60,7 +60,7 @@ _EXPLAIN: dict[str, dict] = {
     },
     "Plan": {
         "what": "The architect splits the approved spec into tasks (and repo slices for a system spec), with the files and order of each.",
-        "agents": ["svc:architect"],
+        "agents": ["web:ux-designer (website specs that change what a user sees)", "svc:architect"],
         "commands": ["/component:plan", "/system:plan"],
         "decision": None,
     },

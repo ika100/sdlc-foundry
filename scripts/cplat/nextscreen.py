@@ -38,9 +38,9 @@ _ALSO = {"escalation": ("stopped run", "stopped runs"), "stuck": ("stuck run", "
          "answer": ("spec with questions", "specs with questions"), "approve": ("spec to approve", "specs to approve"),
          "triage": ("new issue", "new issues"), "release": ("release ready", "release ready"),
          "promote": ("release to promote", "releases to promote"), "review": ("fix to review", "fixes to review"),
-         "build": ("build ready", "build ready")}
+         "build": ("build ready", "build ready"), "ship": ("spec to build", "specs to build")}
 _KIND_STAGE = {"answer": "Spec", "approve": "Spec", "triage": "Issue", "release": "Release", "promote": "Prod", "review": "Build",
-               "build": "Build"}
+               "build": "Build", "ship": "Build"}
 _CHANNEL_WORDS = {"desktop": "on the desktop", "github": "on GitHub", "slack": "in Slack", "email": "by e-mail"}
 _KEEP = (*_CHANNEL_WORDS.values(), "look here again")     # phrases wrap() never breaks
 _ASCII = {"…": "...", "–": "-", "—": "-", "‘": "'", "’": "'", "“": '"', "”": '"', "✓": "x", "●": ">"}
@@ -198,6 +198,11 @@ def _group_lines(out: _Lines, group: str, shown: list[dict], judgement: dict | N
         out.more(shown)
     elif group == "build":
         out.lines(bs.setup_lines(build, given) if build.get("setup") is not None else bs.build_lines(build, given))
+    elif group == "ship":
+        out.add(f"{_n(len(shown), 'approved spec waits', 'approved specs wait')} to be built.")
+        for item in shown[:LIMIT]:
+            out.add(f"  {item.get('what')}: {item.get('reason')}", 4)
+        out.more(shown)
     elif group == "specs":
         questions = sum(1 for i in shown if i.get("kind") == "answer")
         out.add(f"{_n(len(shown), 'spec is written and waits', 'specs are written and wait')} for your approval."
@@ -252,7 +257,17 @@ def _release_lines(out: _Lines, item: dict, head_shown: bool = False) -> None:
 def _unavailable_lines(out: _Lines, state: dict) -> None:
     for u in state.get("unavailable") or []:
         name, hint = _SOURCES.get(u.get("source"), (u.get("source"), None))
-        out.add(f"Could not read {name}; it may be missing {hint}." if hint else f"Could not read {name}.")
+        error, why = str(u.get("error") or ""), ""
+        if error.startswith("no answer within"):      # #859: a slow source is named as slow, not only as missing a login
+            name = f"{name} {error.removeprefix('no answer ')}"
+        elif error:
+            why = f" Error: {_short(error)}"           # #859: any other failure says what failed
+        out.add((f"Could not read {name}; it may be missing {hint}." if hint else f"Could not read {name}.") + why)
+
+
+def _short(text: str, limit: int = 100) -> str:
+    text = " ".join(text.split())
+    return text if len(text) <= limit else text[:limit - 1] + "…"
 
 
 def _tail_lines(out: _Lines, state: dict, also: dict[str, int], later: int, waiting: bool) -> None:
@@ -359,6 +374,10 @@ def _your_part(state: dict, group: str | None, shown: list[dict]) -> str:
     build = state.get("build") or {}
     if group == "build":
         return bs.your_part("setup" if build.get("setup") is not None else "build")
+    if group == "ship":
+        if shown and str(shown[0].get("command") or "").startswith("/system:plan"):
+            return "Your part: plan the spec (split it across the repos), or put it off."
+        return "Your part: ship the spec (plan, build and land it), or put it off."
     if group == "stopped":
         return "Your part: decide how the stopped run goes on."
     if group == "specs":

@@ -68,7 +68,7 @@ QUEUED = {"QUEUED", "PENDING", "WAITING", "REQUESTED"}   # `gh pr checks` states
 # spec 079: log lines of a red job that mean the network or a registry failed, not the change; such a job is rerun once
 TRANSIENT = re.compile(r"Failed to read artifact descriptor|Could not resolve (dependencies|host)|Could not transfer artifact|"
                        r"\b50[234] (Bad Gateway|Service Unavailable|Gateway Time-?out)\b|HTTP (status )?50[234]\b|"
-                       r"invalid response status 429|connection reset|Connection reset by peer|TLS handshake timeout|i/o timeout|ETIMEDOUT|ECONNRESET",
+                       r"invalid response status 429|failed to load cache key|connection reset|Connection reset by peer|TLS handshake timeout|i/o timeout|ETIMEDOUT|ECONNRESET",
                        re.I)
 
 
@@ -197,6 +197,7 @@ def describe(st: dict, repo: Path | None = None, next: bool = True) -> str:  # n
     if st.get("answers"):
         lines.append(f"  answer from the {st['answers'][-1].get('from') or 'system ship'}: {st['answers'][-1]['text']}")
     if repo is not None:
+        lines += resume_lines(repo, st)
         lines += units.describe_lines(repo)
     if next:
         lines.append(f"next: {next_step(st)}")
@@ -251,6 +252,7 @@ def start(repo: Path, ref: str, merge: bool | None, take_over: bool = False, pro
         say(f"resuming the escalated run of {sp.id} (phase {st['phase']}) from its archived state")
     if st and st["spec"] == sp.id:
         if st.get("escalated"):                # spec 087: a resumed escalated run is a new run
+            st["resumed_from"] = {"reason": st["escalated"], "cause": st.get("cause")}   # #856: re-check it, never repeat it
             old = st.get("run_id")
             st["run_id"] = runs.start("ship", repo=runs.repo_slug(repo), spec=st["spec"], resumes=old,
                                       parent=link["run_id"] if link else None)
@@ -397,6 +399,8 @@ def set_phase(repo: Path, phase: str) -> dict:
     if phase not in PHASES:
         raise PlatformError(f"unknown phase '{phase}'", hint="one of " + ", ".join(PHASES))
     st = require_state(repo)
+    if st.get("phase") != phase:
+        st.pop("resumed_from", None)           # #856: the run moved on from where the escalation stopped it
     st["phase"] = phase
     save_state(repo, st)
     if phase == "build":
@@ -453,6 +457,13 @@ def escalate(repo: Path, reason: str, cause: str | None = None, *, command: str 
              questions: list[str] | None = None) -> dict:
     st = require_state(repo)
     report = report if report is not None else []
+    if (prev := st.get("resumed_from")) and reason.strip() == str(prev.get("reason") or "").strip() and \
+            (stale := verification_stale(repo, st["spec"])):
+        raise PlatformError(f"the run was resumed after this escalation, and verification.md is {stale} commit(s) older than HEAD: "
+                            "it was not checked again",
+                            hint=f"re-run the reviewer (/component:verify {st['spec']}), commit verification.md, and read the current "
+                                 "checks (cplat pr wait <pr>); escalate again only if they still fail")
+    st.pop("resumed_from", None)
     cause, message = _coerce_cause(cause)
     if message:
         report.append(message)
@@ -503,6 +514,39 @@ def revive_escalated(repo: Path, spec_id: str) -> dict | None:
     if old_units.is_file() and not uf.is_file():
         old_units.rename(uf)
     return st
+
+
+def verification_stale(repo: Path, spec_id: str) -> int:
+    """#856: how many commits HEAD is ahead of the last commit of the spec's verification.md (0: current, or none)."""
+    rel = f"docs/specs/{spec_id}/verification.md"
+    last = run(["git", "log", "-1", "--format=%H", "--", rel], cwd=repo, check=False).stdout.strip()
+    if not last:
+        return 0
+    count = run(["git", "rev-list", "--count", f"{last}..HEAD"], cwd=repo, check=False).stdout.strip()
+    return int(count) if count.isdigit() else 0
+
+
+def resume_lines(repo: Path, st: dict) -> list[str]:
+    """#856: after a resume, the escalation it resolved and what to check again before judging the run (current evidence only)."""
+    prev = st.get("resumed_from")
+    if not prev:
+        return []
+    out = [f"  resumed after: {prev.get('reason')} — the resume resolved it: check again, never repeat it",
+           "  re-check: the current checks" + (f" (cplat pr wait {st['pr']})" if st.get("pr") else "") + ", not the earlier result"]
+    if stale := verification_stale(repo, st["spec"]):
+        out.append(f"  verification.md is {stale} commit(s) older than HEAD: stale; re-run the reviewer (/component:verify) "
+                   "before reading its result")
+    return out
+
+
+SIDE_ACTION = re.compile(r"/issue:report|\bcplat feedback\b|\b(?:file|open|raise|create|report)\b.{0,30}\b(?:issue|bug)\b",
+                         re.I | re.S)    # #987: a suggestion that only files something
+
+
+def side_action(question: str) -> bool:
+    """#987: the question's suggested answer is only a side action (filing an issue), which decides nothing."""
+    options = specmod._question(question)["options"]
+    return bool(options) and bool(SIDE_ACTION.search(options[0]))
 
 
 def finish(repo: Path) -> Path:
@@ -803,6 +847,8 @@ class CheckWatch:
         self.run_workflow: dict[str, str | None] = {}                 # run id → its workflow (database id)
         self.head_runs: list[dict] = []                               # this poll's workflow runs of the head commit
         self.lone_cancelled: set[tuple[str, str]] = set()            # cancelled runs no other run of their workflow replaces
+        self.deferred: set[tuple[str, str]] = set()                  # #931: runs with a transient failure, rerun once complete
+        self.waiting = False                                          # #931: this poll found such a failure
         self.refused: str | None = None                               # spec 102: the budget refused a rerun
         self.refused_checks: list[dict] = []
         self.expected: dict[str, bool] = {}                           # spec 178: check name -> required; {} = no expectation
@@ -974,13 +1020,15 @@ class CheckWatch:
     def _pr_run_missing(self) -> bool:
         """The repo runs workflows on pull requests, but the head shows no such run yet: GitHub creates it seconds after
         the push, while CodeQL's checks may already have passed (#787: two PRs merged with their CI red). After
-        NO_CHECKS_GRACE without one it is an error, never a green."""
+        NO_CHECKS_GRACE without one it is an error, never a green: a conflict with the base when the PR conflicts (#863)."""
         if not pr_workflows(self.repo) or any(r.get("event") in ("pull_request", "pull_request_target") for r in self.head_runs):
             self.no_pr_run_since = None
             return False
         if self.no_pr_run_since is None:
             self.no_pr_run_since = now()
         elif now() - self.no_pr_run_since > NO_CHECKS_GRACE:
+            if self.conflicting():       # #863: GitHub creates no pull_request run for a conflicting PR; the runner is fine
+                raise _conflicting(self)
             raise NoChecks(f"no pull_request workflow run was created on {(self.head or '')[:7]} of {self.pr} after "
                            f"{NO_CHECKS_GRACE}s; only {', '.join(sorted(self.reported)) or 'no'} check(s) reported",
                            hint="is a runner online and is the workflow's trigger met? Merging without CI is never done "
@@ -1010,6 +1058,7 @@ class CheckWatch:
         no other run of its workflow replaces (#510); returns the rest."""
         final: list[dict] = []
         rerun_now: set[tuple[str, str]] = set()
+        self.waiting = False
         for c in failed:
             r = run_of(c)
             if r and r in rerun_now:
@@ -1029,6 +1078,16 @@ class CheckWatch:
                 rerun_now.add(r)
                 continue
             log = gh(["run", "view", r[1], "-R", r[0], "--log-failed"], cwd=self.repo, check=False)
+            if not log.strip() and run_status(r[0], r[1]) != "completed":
+                # #931: no --log-failed and no rerun before the run completes; the finished job's own log tells transient now
+                job = c["_job_log"] = _job_log(self.repo, r[0], c, "")[0]   # the red brief reuses it
+                if hit := TRANSIENT.search("\n".join(job.splitlines()[-80:])):
+                    if r not in self.deferred:
+                        say(f"  wait     run {r[1]}: {c['name']} failed on a transient error ({hit.group(0)}); "
+                            "rerun once the run completes")
+                    self.deferred.add(r)
+                    self.waiting = True
+                    continue
             hit = TRANSIENT.search("\n".join(log.splitlines()[-80:]))
             if not hit:
                 c["_log_failed"] = log   # spec 108: the red brief reuses this fetch instead of asking gh again
@@ -1057,6 +1116,8 @@ class CheckWatch:
         failed = self._transient([c for c in cs if c.get("bucket") in FAILED and c not in own])
         if failed:
             return "red", cs, failed
+        if self.waiting:                      # #931: a transient failure waits for its run to complete
+            return "pending", cs, []
         own = [c for c in cs if self._own_cancel(c)]
         pending = [c for c in cs if c.get("bucket") == "pending" or c in own]
         if cs and not pending:
@@ -1248,7 +1309,7 @@ def _ci_checks(repo: Path, failed: list[dict]) -> list[failsum.CiCheck]:
         own = [ln for ln in rows if ln.split("\t", 1)[0] == c["name"]] or rows
         text, why = "".join(own), errors.get(r, "")
         if not text.strip():
-            text, why = _job_log(repo, r[0], c, why)
+            text, why = (c["_job_log"], why) if c.get("_job_log") else _job_log(repo, r[0], c, why)
         log = None
         if text.strip():
             log = quiet._log_path(repo, "ci-" + (re.sub(r"[^A-Za-z0-9._-]+", "-", c["name"]).strip("-") or "check"))
@@ -1286,12 +1347,21 @@ def red_summary(repo: Path, pr: str, cs: list[dict], failed: list[dict]) -> tupl
     title = f"RED: {len(failed)} of {len(cs)} check(s) failed on {pr}: " + ", ".join(c["name"] for c in failed)
     on, reason = failsum.enabled(repo)
     if not on:
-        return [title, f"summaries: off ({reason})", *failure_logs(repo, failed)], None
+        return [title, f"summaries: off ({reason})", *failure_logs(repo, failed), *rerun_lines(failed)], None
     summary = failsum.summarize_ci(title, _ci_checks(repo, failed), root=repo)
     for c in summary.checks:
         if c.log and not c.log.startswith("none"):
             failsum.write_sidecar(Path(c.log), failsum.Summary(title, [c]))
-    return summary.render().splitlines(), summary
+    return [*summary.render().splitlines(), *rerun_lines(failed)], summary
+
+
+def rerun_lines(failed: list[dict]) -> list[str]:
+    """#880: the run of each red check and the command that reruns exactly it (a workflow can have sibling runs per push)."""
+    by_run: dict[tuple[str, str], list[str]] = {}
+    for c in failed:
+        if r := run_of(c):
+            by_run.setdefault(r, []).append(c["name"])
+    return [f"run {rid} ({', '.join(names)}): gh run rerun {rid} -R {slug} --failed" for (slug, rid), names in by_run.items()]
 
 
 def red(repo: Path, pr: str, cs: list[dict], failed: list[dict]) -> list[str]:
@@ -1981,13 +2051,16 @@ def envwait_refresh_after() -> float:
 def argo_health(context: str, app: str, timeout: float, interval: float, images: set[str] | None = None,
                 revision: str | None = None, slug: str = "") -> str:
     """`Synced/Healthy` once the app runs the wanted build (spec 077: an image tag in `status.summary.images`, or a
-    revision at least `revision`), a sync error of that build (stops at once), or the last state when the time is up."""
+    revision at least `revision`), a sync error of that build or a pod of it stuck in ImagePullBackOff and the like for over
+    60 s (#867; both stop at once), or the last state when the time is up."""
+    import envwait
     begin = now()
     state = "missing"
-    refreshed = False
+    refreshes = 0
+    pods = envwait.PodWatch(lambda args: run(["kubectl", "--context", context, *args], check=False), now)
     while True:
-        if not refreshed and state.startswith(("waiting for", "missing")) and now() - begin >= envwait_refresh_after():
-            refreshed = True   # spec 153: Argo CD polls git every 3 minutes; ask once instead of waiting for the poll
+        if state.startswith(("waiting for", "missing")) and (refreshes == 0 or (refreshes == 1 and now() - begin >= envwait_refresh_after())):
+            refreshes += 1     # spec 153, #867: Argo CD polls git every 3 minutes; ask at once and once more instead of waiting
             run(["kubectl", "--context", context, "-n", "argocd", "annotate", "application", app,
                  "argocd.argoproj.io/refresh=hard", "--overwrite"], check=False)
             say(f"asked Argo CD for a hard refresh of {app} ({state} after {int(now() - begin)}s)")
@@ -2010,6 +2083,9 @@ def argo_health(context: str, app: str, timeout: float, interval: float, images:
                 state = f"{s.get('sync', {}).get('status', '?')}/{s.get('health', {}).get('status', '?')}"
                 if state == "Synced/Healthy" or s.get("health", {}).get("status") == "Degraded":
                     return state
+            stuck = pods(s, lambda img: img.rsplit("@", 1)[0].rsplit(":", 1)[-1] in images) if images else None
+            if stuck:
+                return stuck
         if now() - begin > max(timeout, 0):
             return state
         sleep(interval)
@@ -2263,11 +2339,48 @@ def merge_flag(ns: argparse.Namespace) -> bool | None:
     return False if ns.no_merge else (True if getattr(ns, "merge", False) else None)
 
 
+def shape_line(repo: Path) -> str:
+    """#869: the shape in one line, so a session needs no `cplat shape` call before `ship start`."""
+    import shapecmd
+    try:
+        r = shapecmd.route(repo)
+    except PlatformError as e:
+        return f"shape: error: {e}" + (f" ({e.hint})" if getattr(e, "hint", None) else "")
+    flags = [x for x, on in (("deployable", r["deployable"]), ("library", r["library"])) if on]
+    agents = " ".join(f"{role}={a}" for role, a in r["agents"].items())
+    props = ", ".join(["plugin " + r["plugin"], *flags])
+    line = f"shape: {r['shape']} ({props}); agents: {agents}"
+    return line + (f"\nunsupported: {r['unsupported']}" if r.get("unsupported") else "")
+
+
+UNIT_RULES = core.PLATFORM_ROOT / "plugins" / "component" / "references" / "unit-mode.md"
+
+
+def unit_rules(unit: str) -> list[str]:
+    """#869: the rules of one unit and of every unit, from unit-mode.md, so a unit session needs no Read of the file."""
+    try:
+        text = UNIT_RULES.read_text()
+    except OSError:
+        return [f"unit {unit}: rules in {UNIT_RULES}"]
+    key = unit.split(":", 1)[0] + (":" if ":" in unit else "")
+    row = next((ln for ln in text.splitlines() if ln.startswith("| `") and ln.split("`")[1].split("<")[0] == key), None)
+    out = [f"unit {unit}: {row.split('|')[2].strip()}" if row else f"unit {unit}: see {UNIT_RULES.name}"]
+    perm = next((ln for ln in text.splitlines() if ln.startswith("**Permissions:**")), None)
+    rules = text.split("## Rules for every unit", 1)[1].strip().splitlines() if "## Rules for every unit" in text else []
+    return out + ([perm] if perm else []) + ["Rules for every unit:", *rules]
+
+
 def start_plain(repo: Path, ns: argparse.Namespace) -> int:
     """`ship start` without the hand-off: begin or resume the run in this session."""
+    import briefing
     unit = getattr(ns, "unit", None)
+    if not unit and (env := os.environ.get("CPLAT_UNIT")):   # #869: $CPLAT_UNIT is the default; one that names no unit is ignored
+        try:
+            briefing.kind(env, "ship")
+            unit = env
+        except briefing.UnknownUnit:
+            unit = None
     if unit:                                   # spec 211: validate before anything changes; the shape line comes first
-        import briefing
         import shapecmd
         try:
             briefing.kind(unit, "ship")
@@ -2275,13 +2388,17 @@ def start_plain(repo: Path, ns: argparse.Namespace) -> int:
             print(f"ERROR: {e}", file=sys.stderr)
             return 2
         print("shape: " + json.dumps(shapecmd.route(repo)), flush=True)
+    else:
+        print(shape_line(repo))                # #869: no `cplat shape` call before `ship start`
     st = start(repo, ns.spec, merge_flag(ns), ns.take_over, Path(ns.system_dir).resolve() if ns.system_dir else None, ns.budget)
     if st["phase"] in ("plan", "build", "pr"):
         say(on_branch(repo, st["branch"]))
     print(describe(st, repo if unit else None))
+    if again := resume_lines(repo, st):     # #856: right where the resumed session starts
+        print("\n".join(again))
     if line := budget.limits_line(st.get("run_id")):
         print(line)
-    if unit:
+    if unit:                                   # the briefing carries the unit's rules from unit-mode.md (spec 211)
         _print_unit(repo, unit, [], _unit_tail(repo, unit, "ship", units._read(repo)))
     return 0
 
@@ -2297,7 +2414,8 @@ def main(argv: list[str]) -> int:
     g.add_argument("--merge", action="store_true", help="merge after green CI again, on a run started with --no-merge")
     p.add_argument("--take-over", action="store_true", help="move a claim on a tracked issue to this run (spec 082)")
     p.add_argument("--detach", action="store_true", help="hand the run to its own `cplat headless` process (spec 200)")
-    p.add_argument("--unit", default=None, help="a unit session's start: print the shape, where the run stands and the unit's briefing (spec 211)")
+    p.add_argument("--unit", default=None, help="the unit this session runs (default $CPLAT_UNIT): print the shape, where the run "
+                   "stands and the unit's briefing (spec 211)")
     p.add_argument("--full", action="store_true", help="pass --full to the headless ship (with --detach; no effect without)")
     p.add_argument("--answer", default=None, help="with --detach: the answer the headless session gets to the escalated question")
     p.add_argument("--context", default=None, help="with --detach: the kube context the headless run's deploy uses (spec 203)")
@@ -2425,6 +2543,11 @@ def main(argv: list[str]) -> int:
         print("\n".join(lines))
         return 0 if ok else 1
     if ns.cmd == "escalate":
+        if side := next((q for q in ns.question or [] if side_action(q)), None):
+            print(f"ERROR: the suggested answer of '{side}' is a side action, not an answer: it decides nothing, so the same stop "
+                  "comes back after the resume", file=sys.stderr)
+            print("  fix: suggest the decision itself (suggested: <what to do>); file an issue as a separate step", file=sys.stderr)
+            return 2
         evidence = ""
         if ns.evidence_file:
             try:
@@ -2447,6 +2570,13 @@ def main(argv: list[str]) -> int:
             # spec 155: the system ship reads this run (`cplat system ship repo result`) and archives it then
             print(f"ship run of {st['spec']} belongs to the system ship in {st['product'].get('dir')}: it records and archives it")
             return 0
+        if st and st["phase"] != "done" and not st.get("escalated") and (os.environ.get("CPLAT_UNIT") or os.environ.get("CPLAT_HEADLESS")):
+            # #827: an unattended session never ends a run that has not merged its PR; the next unit goes on from this phase
+            print(f"ERROR: ship run of {st['spec']} is in phase {st['phase']}, not done: an unattended session does not finish it",
+                  file=sys.stderr)
+            print("  fix: end the session; the next unit goes on from this phase (or escalate with `cplat component ship escalate`)",
+                  file=sys.stderr)
+            return 1
         print(f"ship run ended; state archived to {finish(repo)}")
         return 0
     return 2

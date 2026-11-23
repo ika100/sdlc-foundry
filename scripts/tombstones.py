@@ -62,6 +62,7 @@ def render(old: str, new: str) -> str:
         f"description: {json.dumps(description, ensure_ascii=False)}\n"
         f"moved-to: {json.dumps(new, ensure_ascii=False)}\n"
         "allowed-tools: Read, Glob\n"
+        "disable-model-invocation: true\n"   # #869: typed by a user only; listing it costs every session tokens
         "---\n"
         "\n"
         f"`{old}` was renamed in sdlc-foundry 5.0. Run no script, start no agent, change no file.\n"

@@ -2,6 +2,7 @@
 description: "Moved in 5.0: /svc:ship is /component:ship. Runs nothing."
 moved-to: "/component:ship"
 allowed-tools: Read, Glob
+disable-model-invocation: true
 ---
 
 `/svc:ship` was renamed in sdlc-foundry 5.0. Run no script, start no agent, change no file.

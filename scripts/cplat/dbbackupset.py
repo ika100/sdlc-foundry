@@ -15,8 +15,11 @@ import systemset
 from core import PlatformError, Report
 
 RETENTION = re.compile(r"^[1-9][0-9]*[dw]$")
+RESOURCE_NAME = re.compile(r"^[a-z][a-z0-9-]*$")                 # render.py's resource name rule (at most 30 characters)
+NEW_BUCKET = {"type": "bucket", "storage": "10Gi", "versioning": False}     # what `resource add <name> --type bucket` declares
 CRON_RANGES = [(0, 59), (0, 23), (1, 31), (1, 12), (0, 7)]        # minute, hour, day of month, month, day of week
 CRON_ITEM = re.compile(r"^(\*|[0-9]+|[0-9]+-[0-9]+)(/[0-9]+)?$")
+SCHEDULE_WORDS = {"hourly": "0 * * * *", "daily": "0 3 * * *", "weekly": "0 3 * * 0"}   # #862: words for the usual schedules, in UTC
 RENDER_HINT = "system.yaml and the generated files are restored: fix what the render names and run again"
 
 
@@ -43,6 +46,15 @@ def cron_ok(value: str) -> bool:
 
 def rtype(name: str, conf) -> str:
     return str((conf or {}).get("type") or ("database" if name == "postgres" else "unknown"))
+
+
+def _same_cluster(env: str, eff: dict | None, resources) -> bool:
+    """#886: a prod backup whose bucket is in-cluster (new, or declared without `external`), the doctor's `backup location` case."""
+    if env != model.ENVIRONMENTS[-1] or not eff:
+        return False
+    conf = resources.get(eff["to"]) or {}
+    inst = ((conf.get("instances") or {}).get(env) or {}) if hasattr(conf, "get") else {}
+    return not (inst.get("external") is True or (hasattr(conf, "get") and conf.get("external") is True))
 
 
 def run(ns: argparse.Namespace) -> int:
@@ -75,12 +87,19 @@ def run(ns: argparse.Namespace) -> int:
     if not ns.off and not current and "to" not in given:
         raise PlatformError(f"{key}: --schedule and --retention need --to on an instance without backup",
                             hint=f"add --to <bucket> (buckets: {names(buckets)})")
+    new_bucket = None       # #860: a target that is not declared yet is declared as an in-cluster bucket in the same change (one PR)
     if "to" in given and given["to"] not in buckets:
-        raise PlatformError(f"{key}.to: '{given['to']}' is not a bucket resource of the system (buckets: {names(buckets)})",
-                            hint="add one with /resource:add <name> --type bucket, or pick a listed bucket")
+        to = given["to"]
+        if to in resources or to in gitops.components_of(data) or not (RESOURCE_NAME.match(to) and len(to) <= 30):
+            raise PlatformError(f"{key}.to: '{to}' is not a bucket resource of the system (buckets: {names(buckets)})",
+                                hint="pick a listed bucket, or name a new one (lowercase letters, digits, hyphens) to declare it here")
+        new_bucket = to
+    if "schedule" in given and given["schedule"].strip().lower() in SCHEDULE_WORDS:
+        given["schedule"] = SCHEDULE_WORDS[given["schedule"].strip().lower()]
     if "schedule" in given and not cron_ok(given["schedule"]):
         raise PlatformError(f"{key}.schedule '{given['schedule']}' is not a five-field cron expression "
-                            "(minute hour day-of-month month day-of-week, in UTC)", hint='e.g. --schedule "0 3 * * *"')
+                            "(minute hour day-of-month month day-of-week, in UTC) or hourly, daily, weekly",
+                            hint='e.g. --schedule daily (= "0 3 * * *") or --schedule "30 2 * * *"')
     if "retention" in given and not (RETENTION.match(given["retention"]) and not given["retention"].endswith("\n")):
         raise PlatformError(f"{key}.retention '{given['retention']}' must be <n>d or <n>w with n of at least 1",
                             hint="e.g. --retention 30d or --retention 8w")
@@ -94,6 +113,13 @@ def run(ns: argparse.Namespace) -> int:
         eff = {k: str(base[k]) for k in ("to", "schedule", "retention") if k in base}
         kept = None
     r = Report(title=f"resource backup: {db}/{env} ({app_dir.name})")
+    same = _same_cluster(env, eff, resources)
+    if same:   # #886: say it where the person decides, not only in the doctor's later warning
+        r.next_steps.append(f"note: {env} backups to {eff['to']} live in the same cluster as {env} (`cplat platform doctor` warns about it); "
+                            f"for backups outside the cluster declare an external bucket first (`cplat resource add <name> --type bucket "
+                            f"--external`) and pass it as --to")
+    if new_bucket:
+        r.will_do.append(f"declare bucket {new_bucket} in system.yaml (in-cluster, {NEW_BUCKET['storage']}), in the same change")
     if eff is None:
         r.will_do.append(f"remove {key} (backups already in bucket {kept} are kept)")
     else:
@@ -102,13 +128,15 @@ def run(ns: argparse.Namespace) -> int:
     if ns.pr:
         r.will_do.append("[outward] open a pull request (branch resource/backup-…)")
     if ns.dry_run:
-        r.data = {"backup": eff, "kept_in": kept, "changed": [], "pr": None}
+        r.data = {"backup": eff, "kept_in": kept, "new_bucket": new_bucket, "same_cluster": same, "changed": [], "pr": None}
         r.emit(True, ns.json)
         return 0
 
     gitops.require_clean(repo)
     before = systemset.snapshot(repo)
     raw = (app_dir / "system.yaml").read_text()
+    if new_bucket:
+        data["resources"][new_bucket] = CommentedMap(NEW_BUCKET)
     res = data["resources"][db]
     if eff is None:
         del res["instances"][env]["backup"]
@@ -147,12 +175,13 @@ def run(ns: argparse.Namespace) -> int:
         title = (f"chore(resource): stop scheduled backups of {db} in {env}" if eff is None
                  else f"chore(resource): back up {db} in {env}")
         url = gitops.open_pr(repo, f"resource/backup-{gitops.slug(db)}-{gitops.slug(env)}", title,
-                             f"`cplat resource backup {db} --env {env}`: {r.will_do[0]}. Generated files regenerated by `devbox run render`.")
+                             f"`cplat resource backup {db} --env {env}`: {'; '.join(r.will_do[:-2])}. "
+                             "Generated files regenerated by `devbox run render`.")
         r.did.append(f"opened {url}")
         r.next_steps.append("review and merge the PR; the first scheduled backup runs after the sync")
     else:
         r.next_steps.append("review the diff, run `devbox run validate`, then commit (or re-run with --pr)")
     r.undo.append("discard the working-tree changes under applications and bootstrap")
-    r.data = {"backup": eff, "kept_in": kept, "changed": changed, "pr": url}
+    r.data = {"backup": eff, "kept_in": kept, "new_bucket": new_bucket, "same_cluster": same, "changed": changed, "pr": url}
     r.emit(False, ns.json)
     return 0

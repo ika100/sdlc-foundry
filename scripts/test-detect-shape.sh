@@ -19,7 +19,7 @@ mk() { local d="$tmp/$1"; mkdir -p "$d"; echo "$d"; }
 
 # (a) copier answers — local path form (what /component:new produces) and gh: form
 shapes=$(bash "$here/uv-script.sh" "$here/shapes.py" ids 2>/dev/null || python3 - <<'PY'
-print("service-python library-python web-nextjs gitops-app service-java service-go cluster-gitops")
+print("service-python library-python web-nextjs gitops-app service-java service-go service-typescript library-typescript cluster-gitops")
 PY
 )
 for s in $(echo "$shapes"); do
@@ -34,11 +34,15 @@ d=$(mk sniff-gitops);  mkdir -p "$d/applications/app"; touch "$d/applications/ap
 d=$(mk sniff-cluster); mkdir -p "$d/cluster"; touch "$d/cluster.yaml" "$d/cluster/operators-root.yaml"; expect "sniff cluster-gitops" cluster-gitops "$d"
 d=$(mk sniff-next-cfg); touch "$d/next.config.mjs"; expect "sniff next.config" web-nextjs "$d"
 d=$(mk sniff-next-pkg); echo '{"dependencies":{"next":"15.0.0"}}' > "$d/package.json"; expect "sniff package.json next" web-nextjs "$d"
+d=$(mk sniff-fastify);  echo '{"dependencies":{"fastify":"^5.0.0"}}' > "$d/package.json"; expect "sniff package.json fastify" service-typescript "$d"
+d=$(mk sniff-next-fastify); echo '{"dependencies":{"next":"16.0.0","fastify":"^5.0.0"}}' > "$d/package.json"; expect "next with fastify is a website" web-nextjs "$d"
 d=$(mk sniff-pom);      touch "$d/pom.xml"; expect "sniff pom.xml" service-java "$d"
 d=$(mk sniff-gradle);   touch "$d/build.gradle.kts"; expect "sniff build.gradle.kts" service-java "$d"
 d=$(mk sniff-go);       touch "$d/go.mod"; expect "sniff go.mod" service-go "$d"
 d=$(mk sniff-pysvc);    touch "$d/pyproject.toml" "$d/Dockerfile"; expect "sniff python service" service-python "$d"
 d=$(mk sniff-pylib);    touch "$d/pyproject.toml"; expect "sniff python library" library-python "$d"
+d=$(mk sniff-tslib);    echo '{"name":"@acme/types","devDependencies":{"typescript":"~5.9.3"}}' > "$d/package.json"; expect "sniff package.json library" library-typescript "$d"
+d=$(mk sniff-py-with-pkg); touch "$d/pyproject.toml"; echo '{"devDependencies":{"prettier":"3.0.0"}}' > "$d/package.json"; expect "python repo with a package.json stays python" library-python "$d"
 
 # Precedence + negatives
 d=$(mk prec-python-with-admin-ui); touch "$d/pyproject.toml" "$d/Dockerfile"; printf '_src_path: gh:ika100/sdlc-foundry/templates/service-python\n' > "$d/.copier-answers.yml"; touch "$d/next.config.js"

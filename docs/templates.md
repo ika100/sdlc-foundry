@@ -1,11 +1,12 @@
 # Adding a new shape (template authoring guide)
 
-A **shape** is a kind of repo the platform can bootstrap and operate: `service-python`, `library-python`, `web-nextjs`, `gitops-app`, `service-java`, `service-go`. This guide is the contract from [platform-vision §4.1](requirements/platform-vision.md) made concrete; `service-go` and `service-java` are the worked examples (copy their layout), and `web-nextjs` shows a non-Python JS stack. `uv run scripts/shapes.py check` (run in CI) enforces everything marked **[checked]** below.
+A **shape** is a kind of repo the platform can bootstrap and operate: `service-python`, `library-python`, `web-nextjs`, `gitops-app`, `service-java`, `service-go`, `service-typescript` and `library-typescript` (plugin `svc-ts`). This guide is the contract from [platform-vision §4.1](requirements/platform-vision.md) made concrete; `service-go` and `service-java` are the worked examples (copy their layout), and `web-nextjs` shows a non-Python JS stack. `uv run scripts/shapes.py check` (run in CI) enforces everything marked **[checked]** below.
 
 Deliver all of it in one PR.
 
 ## 1. Registry entry — `shapes.yml` [checked]
 
+Library shapes need a `publish:` block with `registry` (`github-release`, `github-npm`, `github-maven` or `github-nuget`) and a template that publishes only from its release tag: a `publish` recipe (`publish vX.Y.Z [--dry-run]`) and a `publish` CI job that needs every gate and holds the workflow's only write permission ([ADR-125](adr/125-library-releases-publish-to-github-on-the-tag.md)) **[checked]**.
 Deployable shapes also need a `runtime:` block (port, probes, numeric `user`, `volumes`, `env`, `resources`): `/component:add` copies it into the component's entry in `system.yaml` (ADR-017). 
 Add the shape (see [ADR-015](adr/015-shape-registry-as-code.md) for every field). Start with `status: planned` while the template is incomplete; switch to `stable` in the same PR that makes the check pass. `deployable: true` means `/component:new` adds the `deployable-service` topic. Add a row to the PRD §4 table (the check compares shape id, plugin and template).
 
@@ -71,4 +72,4 @@ The `/svc:*` orchestrators route to `<plugin>:<role>` through `cplat shape` (`sc
 
 ## 6. Keeping dependency pins current
 
-Dependabot cannot read `*.jinja` manifests, so the `bump-template-pins` workflow (Mondays, or run it by hand) does it: `scripts/bump_template_pins.py` renders `service-java`, `web-nextjs` and `service-go`, lets Maven / npm-check-updates / Go bump the rendered manifest (minor and patch only), copies each changed line back into the template when it is literal and unique, and re-renders to verify. The resulting pull request runs the normal smoke tests. To cover a new shape, add an entry to `UPDATERS` in the script. Setup: a repository secret `BUMP_TOKEN` (fine-grained, Contents + Pull requests write) makes CI start for the bot's pull request; without it the PR says to close and reopen it.
+Dependabot cannot read `*.jinja` manifests, so the `bump-template-pins` workflow (Mondays, or run it by hand) does it: `scripts/bump_template_pins.py` renders `service-java`, `web-nextjs`, `service-typescript`, `library-typescript` and `service-go`, lets Maven / npm-check-updates / Go bump the rendered manifest (minor and patch only), copies each changed line back into the template when it is literal and unique, and re-renders to verify. The resulting pull request runs the normal smoke tests. To cover a new shape, add an entry to `UPDATERS` in the script. Setup: a repository secret `BUMP_TOKEN` (fine-grained, Contents + Pull requests write) makes CI start for the bot's pull request; without it the PR says to close and reopen it.

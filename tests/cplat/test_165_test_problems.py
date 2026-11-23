@@ -250,3 +250,21 @@ def test_each_test_tool_gets_its_own_rerun_arguments_ac_165_7():  # AC-165.7
         ["-Dtest=TodoControllerTest#lists", "-Dsurefire.failIfNoSpecifiedTests=false"]
     assert flaky.rerun_args("vitest", ["tests/page.test.tsx > Page > renders", "tests/page.test.tsx > Page > links"]) == \
         ["tests/page.test.tsx"]
+
+
+def test_a_tightening_after_an_approved_amendment_is_judged_against_the_approved_test_987(built):  # #987
+    """The user approved a change of the criterion's test (an amendment renamed AC-007.1 to AC-007.8); a later tightening
+    of that test is compared with the approved version, not with the red commit (which refused it: criterion ids changed)."""
+    root, t = built
+    red = g("rev-parse", "HEAD", cwd=root).strip()
+    t.write_text(t.read_text().replace("# AC-007.1", "# AC-007.8"))
+    spec.approve_test_change(root, red, ["tests/test_alerts.py"], "amendment A1 moved the criterion")
+    g("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qam", "test: the amended criterion", cwd=root)
+    t.write_text(t.read_text() + "    assert sent_once()\n")
+    out = spec.tighten_test_change(root, red, ["tests/test_alerts.py"], "AC-007.8: once")
+    assert out["tests/test_alerts.py"] == (True, ""), out
+    assert spec.test_diff(root, red, ["tests/test_alerts.py"])["tests/test_alerts.py"][0]
+    g("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qam", "test: tightened", cwd=root)
+    t.write_text(t.read_text().replace("    assert sent_once()\n", "").replace("    assert send(password)\n", "    send(password)\n"))
+    good, why = spec.tighten_test_change(root, red, ["tests/test_alerts.py"], "looser")["tests/test_alerts.py"]
+    assert not good and "fewer assertions" in why                 # still a gate: looser than what was approved

@@ -179,7 +179,7 @@ def _release_candidate(c, cell: dict, smoke: dict | None) -> dict | None:
     if not diff.get("commits"):
         return None
     return {"version": releases.next_version(last, diff.get("subjects") or []), "commits": diff["commits"], "specs": diff["specs"],
-            "fixes": diff["fixes"], "digest": (smoke or {}).get("digest")}
+            "fixes": diff["fixes"], "digest": (smoke or {}).get("digest"), "subjects": diff.get("subjects") or []}
 
 
 def load(repo: Path, app: str | None) -> tuple[Path, model.Model]:
@@ -416,6 +416,8 @@ def backup_lines(b: dict) -> list[str]:
             rows.append((label, "external (backed up by its provider)"))
         elif st == "unknown":
             rows.append((label, f"unknown ({x['error']})"))
+        elif st == "pending" and x["archiving"] == "starting":     # #864: not a failure while the plugin comes up
+            rows.append((label, f"last base backup {x['last_success'] or 'never'}  archiving waiting for the backup plugin to start"))
         elif st == "pending":
             rows.append((label, f"last base backup never (first backup pending)  archiving ok  restore points "
                                 f"{x['earliest'] + ' … ' + (x['latest'] or x['earliest']) if x['earliest'] else 'none'}"))

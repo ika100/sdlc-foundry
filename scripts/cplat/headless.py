@@ -204,11 +204,66 @@ def repo_rules(repo: Path) -> dict[str, list[str]]:
             if isinstance(v := perms.get(k), list) and v}
 
 
+KEEP_PLUGINS = ("component", "shared", "svc")   # every shape's ship: the commands, quality/security, PM/architect/reviewer
+NO_MCP = ["--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}']
+# The built-in tools an unattended session and its subagents use (journeys 22 and 23 called nothing else). `--tools`
+# bounds the subagents too: a subagent may name a tool in its frontmatter, but a call to one left out is denied. The rest
+# of the default set (skills, tool search, cron, monitor, worktrees, …) cost about 12 k tokens on every model call.
+# Glob and Grep stay out of the unit sessions: the default set has neither on macOS and Linux (search runs through Bash),
+# and naming them adds 1.6 k to every session and subagent. A session that may plan keeps them with the web tools: the
+# architect has no Bash, so without them it cannot search the repo (journey 25: each plan unit's Glob and Grep denied).
+SESSION_TOOLS = ("Bash", "Read", "Edit", "Write", "Agent", "SendMessage")
+PLAN_TOOLS = ("Glob", "Grep", "WebSearch", "WebFetch")
+
+
+def _enabled_plugins(repo: Path) -> dict[str, bool]:
+    """The plugins Claude Code would enable here: the user's settings, then the repo's (later files win)."""
+    home = Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude")
+    out: dict[str, bool] = {}
+    for f in (home / "settings.json", repo / ".claude" / "settings.json", repo / ".claude" / "settings.local.json"):
+        try:
+            data = json.loads(f.read_text()).get("enabledPlugins") or {}
+        except (OSError, ValueError, AttributeError):
+            continue
+        out.update({k: bool(v) for k, v in data.items() if isinstance(k, str)} if isinstance(data, dict) else {})
+    return out
+
+
+def lean(repo: Path, prompt: str) -> tuple[dict[str, bool], list[str]]:
+    """#869: an unattended session loads only what its run uses. Every enabled plugin the repo's shape and the command
+    do not need is switched off and no MCP server is started: each skill, agent and MCP tool listed costs tokens on
+    every model call (37 k of fixed context went down to 28 k in a service repo). `CPLAT_HEADLESS_LEAN=0` keeps all."""
+    if os.environ.get("CPLAT_HEADLESS_LEAN") == "0":
+        return {}, []
+    import shapecmd
+    keep = set(KEEP_PLUGINS)
+    if m := re.match(r"/([a-z0-9-]+):", prompt):
+        keep.add(m.group(1))
+    try:
+        route = shapecmd.route(repo)
+    except Exception:      # an unknown shape: leave the plugins as they are, the session reports the shape itself
+        return {}, NO_MCP
+    keep |= {route["plugin"], *(a.split(":", 1)[0] for a in route["agents"].values())}
+    off = {name: False for name, on in _enabled_plugins(repo).items() if on and name.split("@", 1)[0] not in keep}
+    return off, NO_MCP
+
+
+def session_tools(prompt: str) -> list[str]:
+    """The `--tools` of an unattended session: the architect's search and web tools only where it may plan (the `plan`
+    unit, or a session that runs the whole command). `CPLAT_HEADLESS_LEAN=0` keeps the default set."""
+    if os.environ.get("CPLAT_HEADLESS_LEAN") == "0":
+        return []
+    unit = m.group(1) if (m := re.search(r"--unit\s+(\S+)", prompt)) else None
+    return ["--tools", ",".join([*SESSION_TOOLS, *(PLAN_TOOLS if unit in (None, "plan") else ())])]
+
+
 def claude_cmd(prompt: str, model: str | None, plugin_dirs: list[str] | None = None,
                allow: list[str] | None = None, deny: list[str] | None = None, add_dirs: list[str] | None = None,
-               rules: dict[str, list[str]] | None = None) -> list[str]:
+               rules: dict[str, list[str]] | None = None, repo: Path | None = None) -> list[str]:
     exe = os.environ.get("CPLAT_CLAUDE") or "claude"
     cmd = [exe, "-p", prompt, "--permission-mode", "acceptEdits", "--output-format", "text"]
+    plugins_off, mcp = lean(repo, prompt) if repo is not None else ({}, [])
+    cmd += mcp + (session_tools(prompt) if repo is not None else [])
     for d in add_dirs or []:      # a system ship's clones next to the gitops repo (a session may work only where it may cd)
         cmd += ["--add-dir", d]
     if model:
@@ -218,8 +273,9 @@ def claude_cmd(prompt: str, model: str | None, plugin_dirs: list[str] | None = N
     perms = {k: list(v) for k, v in (rules or {}).items()}
     if plugin_dirs:   # plugins loaded in place are not under ~/.claude/plugins, so their files need their own Read rule
         perms.setdefault("allow", []).extend(f"Read(/{d}/**)" for d in plugin_dirs)
-    if perms:
-        cmd += ["--settings", json.dumps({"permissions": perms})]
+    extra = ({"permissions": perms} if perms else {}) | ({"enabledPlugins": plugins_off} if plugins_off else {})
+    if extra:
+        cmd += ["--settings", json.dumps(extra)]
     if allow:
         cmd += ["--allowedTools", *allow]
     if deny:
@@ -503,7 +559,7 @@ def _main(argv: list[str], stack: contextlib.ExitStack) -> int:
             extra, not_allowed = envprefix.commands(repo, ids)
             allow += [f"Bash({c})" for c in extra]
     rules = repo_rules(repo)
-    cmd = claude_cmd(prompt, model, dirs, allow, deny, system_clones(repo, ids) if command == "/system:ship" else None, rules)
+    cmd = claude_cmd(prompt, model, dirs, allow, deny, system_clones(repo, ids) if command == "/system:ship" else None, rules, repo)
     if ns.dry_run:
         print(shlex.join(cmd))
         if allow is not None:
@@ -553,7 +609,7 @@ def _main(argv: list[str], stack: contextlib.ExitStack) -> int:
                             announced.add(c)
                             print(f"run allowlist: added {c}", flush=True)
                     session_env.update(preflight.env(allow))      # the session's CPLAT_RUN_ALLOWLIST names the added command too
-                return claude_cmd(p, model, dirs, allow, deny, rules=rules)
+                return claude_cmd(p, model, dirs, allow, deny, rules=rules, repo=repo)
 
             return supervisor.drive(repo, command, ids, prompt, make_cmd,
                                     session_env, rid, ns, log, state)

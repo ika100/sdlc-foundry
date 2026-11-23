@@ -5,11 +5,25 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "cplat"))
 
+
+def _git_auto_maintenance_off() -> None:
+    """#916: no git of a test starts a detached `git maintenance`; it changes .git while a fixture copies the repo.
+    Set at import, before module-scoped fixtures build their repos (a monkeypatch would come too late)."""
+    count = int(os.environ.get("GIT_CONFIG_COUNT") or 0)
+    for i, (k, v) in enumerate([("maintenance.auto", "false"), ("gc.auto", "0")], start=count):
+        os.environ[f"GIT_CONFIG_KEY_{i}"] = k
+        os.environ[f"GIT_CONFIG_VALUE_{i}"] = v
+    os.environ["GIT_CONFIG_COUNT"] = str(count + 2)
+
+
+_git_auto_maintenance_off()
+
 import sleepguard
 
 sleepguard.install()  # spec 185: before any cplat module binds time.sleep
 
-pytest_plugins = ["runtemp"]  # spec 208: the run's own directory, uv cache and temp root, removed when the run passes
+pytest_plugins = ["runtemp", "depsmap"]  # spec 208: the run's own directory, uv cache and temp root, removed when the run
+# passes; spec 212: --deps-record records the dependency map of a full run
 
 import pytest
 from console_support import console  # noqa: F401  (spec 122: the running-console fixture)
@@ -24,6 +38,24 @@ from sharding import (  # noqa: F401  (spec 112: --shard / --shard-report)
     pytest_sessionstart,
     pytest_testnodedown,
 )
+
+
+@pytest.fixture(scope="session")
+def _gh_guard_dir(tmp_path_factory):
+    d = tmp_path_factory.mktemp("gh-guard")
+    gh = d / "gh"
+    from waiting import with_prelude
+    gh.write_text(with_prelude('#!/bin/sh\necho "tests never call GitHub: gh $*" >&2\nexit 127\n'))
+    gh.chmod(0o755)
+    return d
+
+
+@pytest.fixture(autouse=True)
+def no_real_github(monkeypatch, _gh_guard_dir):
+    """Issue #905: a test that reached the real `gh` hit the account's rate limit and slept in `core.run`'s retry until the
+    test timeout. The first `gh` on PATH is a guard that fails at once (exit 127, "tests never call GitHub"); tests that
+    need `gh` put their own fake in front of it on PATH or replace the Python seam that calls it."""
+    monkeypatch.setenv("PATH", f"{_gh_guard_dir}{os.pathsep}{os.environ.get('PATH', '')}")
 
 
 @pytest.fixture(autouse=True)
@@ -64,6 +96,16 @@ def no_real_milestone_comments(monkeypatch):
         milestones.REAL_GH = milestones.gh
     monkeypatch.setattr(milestones, "gh", lambda args, *, cwd, timeout: (127, "", "tests never call GitHub"))
     milestones.reset()
+
+
+@pytest.fixture(autouse=True)
+def no_real_registry(monkeypatch):
+    """#1003: before a registry "not found" is RED, `system wait` asks the registry itself; tests never do. The image reads as
+    missing (the RED of #867/#925); the tests of #1003 replace `envwait.resolves`, those of the real request call `REAL_RESOLVES`."""
+    import envwait
+    if not hasattr(envwait, "REAL_RESOLVES"):
+        envwait.REAL_RESOLVES = envwait.resolves
+    monkeypatch.setattr(envwait, "resolves", lambda image: "missing")
 
 
 @pytest.fixture(autouse=True)

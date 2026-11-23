@@ -355,7 +355,7 @@ def show_next(action: dict, as_json: bool) -> None:
     if ans:
         answer_lines = [f"answer {ans['id']} (cause {ans['cause']}): {ans['reason']}"] + [
             f"  question: {q['text']}" + (f" (suggested: {q['suggested']})" if q.get("suggested") else "")
-            for q in ans["questions"]]
+            for q in ans["questions"]] + [f"  do: {ans['do']}"]
     say([f"action: {action['action']}"] + answer_lines + [f"start {s['id']} ({s['shape']}) in {s['clone']}" for s in action["start"]]
         + [f"running {i}" for i in action["running"]] + [f"blocked {b['id']} (waits for {', '.join(b['waits_for'])})"
                                                            for b in action["blocked"]]
@@ -431,6 +431,7 @@ def main(argv: list[str]) -> int:
     p.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT)
     p.add_argument("--wait-timeout", type=float, default=540.0, help="the Argo CD wait (exit 2 when it runs out)")
     p.add_argument("--interval", type=float, default=INTERVAL, help=argparse.SUPPRESS)
+    p.add_argument("--budget", type=float, default=480.0, help="seconds one call waits; then exit 3 (`WAIT:`): run it again (#924)")
     p = sub.add_parser("complete")
     p.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT)
     p = sub.add_parser("escalate")
@@ -513,9 +514,12 @@ def main(argv: list[str]) -> int:
         return 0 if ok else 1
     if ns.cmd == "land":
         import appship_joint
-        code, lines = appship_joint.land(repo, ns.timeout, ns.wait_timeout, ns.interval, min(ns.interval, 10.0))
-        say(lines)
-        return code
+        import waits
+        def body() -> tuple[int, str]:          # #924: a running land is a cplat wait the Stop hook sees (ADR-093)
+            code, lines = appship_joint.land(repo, ns.timeout, ns.wait_timeout, ns.interval, min(ns.interval, 10.0), ns.budget)
+            say(lines)
+            return code, "progress" if code == appship_joint.WAIT else waits.RESULTS[code]
+        return waits.record(repo, "system ship land", body)
     if ns.cmd == "complete":
         ok, lines = complete(repo, ns.timeout)
         say(lines)

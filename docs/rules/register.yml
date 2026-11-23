@@ -3,8 +3,8 @@
 # `cplat platform rules check` validates all of it.
 schema: 1
 baseline:
-  commit: "2f77b52e7946c1dcccaaf2cc0acf98046590abd3"
-  prompt_bytes: 361448
+  commit: "4c20eaa1792de263d577d1621afc3b24d9ad4de7"
+  prompt_bytes: 390314
   history:                       # newest last; written only by `cplat platform rules rebaseline`
     - date: "2026-11-12"
       old: 345859
@@ -56,6 +56,21 @@ baseline:
       new: 361448
       reason: "spec 193 merged with main (157, 205, #845); quick-task and build benchmarks passed on todo-api@136a96f"
       benchmark_runs: [20261120T113430Z-5cd7aece, 20261120T113628Z-407aa4fa]
+    - date: "2026-11-20"
+      old: 361448
+      new: 362326
+      reason: "#869: the growth is the tombstones' disable-model-invocation line (never loaded by a session) and a short note on test-diff red; benchmarks pass with fewer tokens"
+      benchmark_runs: [20261120T192907Z-807b0214, 20261120T193053Z-787ee3c0]
+    - date: "2026-11-21"
+      old: 362326
+      new: 387135
+      reason: "the svc-ts plugin's five agents for the service-typescript shape (spec 214)"
+      benchmark_runs: [20261121T080831Z-491cc83d, 20261121T080947Z-4f1777bb]
+    - date: "2026-11-22"
+      old: 387135
+      new: 390314
+      reason: "spec 219 adds the web ux-designer agent (one opus call per UI-changing website spec) and the UX step clauses of plan, build and the reviewer; quick-task and build benchmarks pass"
+      benchmark_runs: [20261122T100303Z-90dacb83, 20261122T100451Z-856bca81]
 hard:
   acceptance-tests-fixed:
     enforced_by: cplat spec test-diff

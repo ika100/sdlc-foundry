@@ -11,6 +11,8 @@ import shutil
 from pathlib import Path
 from typing import Callable
 
+import depstrace
+
 TAIL_LINES = 20
 
 
@@ -44,6 +46,10 @@ class SharedRenders:
         self._failures: dict[str, str] = {}
 
     def _build(self, key: str, build: Callable[[Path], Path]) -> None:
+        with depstrace.bucket(f"render:{key}"):   # spec 212: what the render reads counts for every test that copies it
+            self._build_traced(key, build)
+
+    def _build_traced(self, key: str, build: Callable[[Path], Path]) -> None:
         workdir = self.root / f"render-{len(self.builds)}"
         workdir.mkdir(parents=True)
         self.builds[key] = 1
@@ -63,6 +69,7 @@ class SharedRenders:
     def copy(self, key: str, build: Callable[[Path], Path], dest: Path) -> Path:
         if key not in self.builds:
             self._build(key, build)
+        depstrace.attach(f"render:{key}")
         if key in self._failures:
             raise RenderFailed(self._failures[key])
         dest = Path(dest)

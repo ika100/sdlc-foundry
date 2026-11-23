@@ -2,6 +2,7 @@
 description: "Moved in 5.0: /gitops:addon is /resource:add|remove (addon list: resources: in system.yaml; addon add observability: environments.<env>.observability in system.yaml). Runs nothing."
 moved-to: "/resource:add|remove (addon list: resources: in system.yaml; addon add observability: environments.<env>.observability in system.yaml)"
 allowed-tools: Read, Glob
+disable-model-invocation: true
 ---
 
 `/gitops:addon` was renamed in sdlc-foundry 5.0. Run no script, start no agent, change no file.

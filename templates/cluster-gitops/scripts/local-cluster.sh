@@ -54,8 +54,14 @@
 #   METRICS_SERVER_VERSION  metrics-server chart version (default: the targetRevision of operators/apps/metrics-server.yaml, else 3.14.0)
 #   WITH_METRICS_SERVER  1 = the pinned metrics-server, 0 = never; default: 1 exactly when operators/apps/metrics-server.yaml exists.
 #                        With 1, a new cluster is created without k3s' bundled metrics-server.
+#   PREPULL_POSTGRES     1 = pull the pinned Postgres image into the cluster's nodes in the background after the cluster starts, 0 = never;
+#                        default: 1 when a database is rendered (imageName in applications/) or the CloudNativePG operator is listed. The
+#                        image is the rendered one, else the versions table's default major; a failed pull is logged, never fatal (#925).
 #   REGISTRY_PORT        also create a local image registry reachable as localhost:<port> from the host and as
 #                        k3d-<cluster>-registry:<port> from the cluster
+#   DOCKERHUB_MIRROR     URL of a Docker Hub pull-through cache the nodes pull docker.io images through (for example
+#                        http://host.k3d.internal:5050 for `docker run -d -p 5050:5000 -e REGISTRY_PROXY_REMOTEURL=https://registry-1.docker.io
+#                        registry:2`); applies when the cluster is created. Unset: the nodes pull from Docker Hub directly.
 # With Argo CD, External Secrets, Kyverno and the LGTM stack come from operators/apps/<name>.yaml (applied from operators/root.yaml) when
 # that file exists; otherwise (or with WITH_ARGO=0) this script installs them itself.
 # Re-running `up` is safe; it re-applies credentials and the root Application.
@@ -203,6 +209,43 @@ wait_resource_metrics() {   # cpu and memory scaling need metrics.k8s.io; warn, 
   echo "WARNING: the cluster serves no resource metrics yet (v1beta1.metrics.k8s.io is not Available); cpu and memory triggers cannot scale until it is"
 }
 
+postgres_refs() {   # #925: the Postgres images a first database pulls: the rendered ones, else the table's default major
+  local refs src
+  refs=$(grep -rhoE 'imageName:[[:space:]]*["'"'"']?ghcr\.io/cloudnative-pg/postgresql:[^[:space:]"'"'"']+' applications 2>/dev/null \
+    | sed -E 's/^imageName:[[:space:]]*["'"'"']?//' | sort -u || true)
+  if [ -z "$refs" ]; then
+    for src in scripts/render.py scripts/system_render.py; do
+      [ -f "$src" ] || continue
+      refs=$(sed -n 's/^[[:space:]]*17:[[:space:]]*"\(ghcr\.io\/cloudnative-pg\/postgresql:[^"]*\)".*/\1/p' "$src" | head -1)
+      [ -z "$refs" ] || break
+    done
+  fi
+  printf '%s\n' "$refs" | grep . || true
+}
+prepull_postgres() {   # #925: crictl pull in each node (keeps the registry digest the kubelet asks for), in the background
+  local want refs nodes log
+  want="${PREPULL_POSTGRES:-auto}"
+  if [ "$want" = auto ]; then
+    want=0
+    if [ "$with_cnpg" = 1 ] || [ -f operators/apps/cloudnative-pg.yaml ] || [ -f cluster/operators/cloudnative-pg.yaml ] ||
+       grep -rqs 'ghcr\.io/cloudnative-pg/postgresql:' applications 2>/dev/null; then want=1; fi
+  fi
+  [ "$want" = 1 ] || return 0
+  refs=$(postgres_refs)
+  if [ -z "$refs" ]; then echo "Note: no pinned Postgres image found; the first database pulls it"; return 0; fi
+  nodes=$( { docker ps --format '{{.Names}}' --filter "label=k3d.cluster=$name" --filter label=k3d.role=server 2>/dev/null
+             docker ps --format '{{.Names}}' --filter "label=k3d.cluster=$name" --filter label=k3d.role=agent 2>/dev/null; } | grep . || true)
+  [ -n "$nodes" ] || return 0
+  log="${TMPDIR:-/tmp}/${name}-prepull.log"
+  log="${log//\/\//\/}"
+  echo "Pre-pulling the Postgres image in the background ($(printf '%s\n' "$refs" | sed 's/@sha256:.*//' | tr '\n' ' ' | sed 's/ $//')); log: $log"
+  REFS="$refs" NODES="$nodes" nohup bash -c '
+    for node in $NODES; do for ref in $REFS; do
+      if docker exec "$node" crictl pull "$ref"; then echo "pre-pulled $ref on $node"; else echo "WARNING: pre-pull of $ref on $node failed (the database pulls it itself)"; fi
+    done; done' >"$log" 2>&1 </dev/null &
+  disown 2>/dev/null || true
+}
+
 overrides() {   # overrides <VAR> <requested value> <the table's default> <row> <table version>
   if [ -n "$2" ] && [ "$2" != "$3" ]; then
     echo "WARNING: $1=$2 overrides the versions table ($4 $5); this cluster does not run what this platform release pins"
@@ -311,8 +354,17 @@ case "${1:-up}" in
       if [ "$with_metrics" = 1 ]; then   # WITH_METRICS_SERVER=1: one metrics source, the pinned metrics-server, not k3s' bundled one
         create_args+=(--k3s-arg "--disable=metrics-server@server:*")
       fi
+      mirror_file=""
+      if [ -n "${DOCKERHUB_MIRROR:-}" ]; then   # Docker Hub pulls through a cache: a flaky network costs one pull, not one per cluster
+        mirror_file="$(mktemp)"
+        printf 'mirrors:\n  "docker.io":\n    endpoint:\n      - "%s"\n' "$DOCKERHUB_MIRROR" > "$mirror_file"
+        create_args+=(--registry-config "$mirror_file")
+        echo "Docker Hub images: through $DOCKERHUB_MIRROR"
+      fi
       k3d cluster create "$name" "${create_args[@]}"
+      if [ -n "$mirror_file" ]; then rm -f "$mirror_file"; fi
     fi
+    prepull_postgres || true   # #925: off the first database's critical path, never fatal
 
     echo "Enabling the Gateway API (Traefik)"
     # k3s installs Traefik with a Helm job; its CRD chart brings the Gateway API CRDs on current k3s. Wait for that job

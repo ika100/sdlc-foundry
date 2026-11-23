@@ -1,4 +1,4 @@
-# ADR-126: Unit briefings are cut from the build instructions
+# ADR-128: Unit briefings are cut from the build instructions
 
 **Status:** Accepted (2026-11-21)
 

@@ -25,6 +25,8 @@ if [ -f "$answers" ]; then
     */templates/cluster-gitops|templates/cluster-gitops) echo cluster-gitops; exit 0 ;;
     */templates/service-java|templates/service-java)     echo service-java; exit 0 ;;
     */templates/service-go|templates/service-go)         echo service-go; exit 0 ;;
+    */templates/service-typescript|templates/service-typescript) echo service-typescript; exit 0 ;;
+    */templates/library-typescript|templates/library-typescript) echo library-typescript; exit 0 ;;
   esac
 fi
 
@@ -39,6 +41,9 @@ if [ ${#nextcfg[@]} -gt 0 ] || { [ -f package.json ] && grep -Eq '"next"[[:space
   echo web-nextjs; exit 0
 fi
 
+# a Node backend: package.json depends on fastify (a next app was caught above)
+if [ -f package.json ] && grep -Eq '"fastify"[[:space:]]*:' package.json; then echo service-typescript; exit 0; fi
+
 gradle=(build.gradle*)
 if [ -f pom.xml ] || [ ${#gradle[@]} -gt 0 ]; then echo service-java; exit 0; fi
 
@@ -48,5 +53,9 @@ if [ -f pyproject.toml ]; then
   if [ -f Dockerfile ]; then echo service-python; else echo library-python; fi
   exit 0
 fi
+
+# a TypeScript library: a package.json and no other manifest (a next app and a fastify service were caught above, and a
+# Java, Go or Python repo with a package.json for its tooling keeps its shape)
+if [ -f package.json ]; then echo library-typescript; exit 0; fi
 
 exit 1

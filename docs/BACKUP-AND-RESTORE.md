@@ -33,10 +33,10 @@ resources:
       s3: {endpoint: "https://s3.eu-central-1.amazonaws.com", bucket: acme-backups, region: eu-central-1, forcePathStyle: false}
 ```
 
-Set it with `/resource:backup <db> --env <env> --to <bucket> [--schedule <cron>] [--retention <n>d|<n>w]` (`--off` removes it), one PR; without an option the command takes one backup now.
+Set it with `/resource:backup <db> --env <env> --to <bucket> [--schedule <cron>] [--retention <n>d|<n>w]` (`--off` removes it), one PR (a `--to` bucket that is not declared yet is declared in it, in-cluster); without an option the command takes one backup now.
 
 - `to` names a bucket resource of the system; no component needs to use it. The target gets its instance in that environment from the backup itself (for a database backup, once a component that uses the database runs there), and its credentials go only to the backup machinery (the database's ObjectStore, Velero), so an app cannot read or delete its own backups. A component that lists the bucket in `uses` gets its S3_*/AWS_* variables as usual; for an external target with no such component, the ExternalSecret of its credentials is rendered in `addons/<env>/<bucket>/`.
-- `schedule` is a five-field cron in UTC with numbers only (default `0 3 * * *`); `retention` is `<n>d` or `<n>w` (default `30d`).
+- `schedule` is a five-field cron in UTC with numbers only (default `0 3 * * *`); the command also takes `hourly` (`0 * * * *`), `daily` (`0 3 * * *`) and `weekly` (`0 3 * * 0`) and stores the cron; `retention` is `<n>d` or `<n>w` (default `30d`).
 - `backup` sits on an environment and on `instances.<env>` of a database, never on the resource itself. An external database takes none.
 - `remote.s3` (`endpoint`, `bucket`, `region`, `forcePathStyle`, all four) is required when the target bucket is `external: true`: the backup objects take these as literal values, so they live in git (they are not secret). The keys stay in the secret store.
 - The first scheduled database backup runs right after `backup` is set, so a restore point exists at once.
@@ -50,7 +50,7 @@ The platform installs what backups need (the Barman Cloud plugin, cert-manager, 
 /resource:backup orders-db --env prod
 ```
 
-Waits until the base backup finishes (up to 30 minutes). Scheduled backups need no command.
+Waits until the base backup finishes (up to 30 minutes). Scheduled backups need no command. A cluster takes one backup at a time: when a backup of the database is still running (the schedule takes its first one as soon as it is set), the command says so, waits for it and reports it as the result; a backup that completed less than a minute ago is the result without a new one. When a backup fails, the output gives its own error and names a backup it overlapped.
 
 ## Restore a database
 

@@ -1,0 +1,14 @@
+{
+  "name": "svc-ts",
+  "version": "0.2.0",
+  "description": "Agents for TypeScript service and library repos (Fastify, pino, Vitest, pnpm, optional Drizzle/PostgreSQL, distroless Node): coder, tester, deployment, observability, and release. Used by the /component:* orchestrators when the repo shape is service-typescript or library-typescript. Requires devbox recipes from the matching Copier template.",
+  "author": {
+    "name": "Eike Hensler",
+    "email": "eike.hensler@gmail.com"
+  },
+  "homepage": "https://github.com/ika100/sdlc-foundry",
+  "repository": "https://github.com/ika100/sdlc-foundry",
+  "license": "Apache-2.0",
+  "dependencies": ["shared"],
+  "keywords": ["typescript", "node", "fastify", "pnpm", "devbox", "k8s", "agents"]
+}

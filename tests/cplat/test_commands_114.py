@@ -306,14 +306,15 @@ def new_component(tmp_path, capsys, *args):
 @pytest.mark.parametrize("args, template", [
     ([], "service-python"), (["--type", "service", "--lang", "java"], "service-java"), (["--type", "service", "--lang", "go"], "service-go"),
     (["--type", "website", "--lang", "typescript"], "web-nextjs"), (["--type", "library", "--lang", "python"], "library-python"),
-    (["--type", "website"], "web-nextjs"), (["--lang", "go"], "service-go"), (["--lang", "typescript"], "web-nextjs"), (["--type", "library"], "library-python")])
+    (["--type", "website"], "web-nextjs"), (["--lang", "go"], "service-go"), (["--lang", "typescript"], "web-nextjs"), (["--type", "library"], "library-python"),
+    (["--type", "service", "--lang", "typescript"], "service-typescript")])
 def test_component_new_maps_the_pair_to_its_template_ac_114_33(tmp_path, capsys, args, template):  # AC-114.33
     rc, out, err = new_component(tmp_path, capsys, *args)
     assert rc == 0, err
     assert f"templates/{template}" in out
 
 
-@pytest.mark.parametrize("args", [["--type", "service", "--lang", "typescript"], ["--type", "worker"], ["--lang", "unknown"], ["--type", "service", "--lang", "unknown"]])
+@pytest.mark.parametrize("args", [["--type", "website", "--lang", "go"], ["--type", "worker"], ["--lang", "unknown"], ["--type", "service", "--lang", "unknown"]])
 def test_an_invalid_pair_fails_listing_the_valid_ones_ac_114_33(tmp_path, capsys, args):  # AC-114.33
     rc, out, err = new_component(tmp_path, capsys, *args)
     assert rc == 1 and "is not a valid component type" in err and PAIRS in err

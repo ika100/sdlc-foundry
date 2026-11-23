@@ -15,7 +15,8 @@ Public API for the callers (ship, pr wait, headless, doctor) and for later specs
 
 A run is only ever written once, at `finish`; the store is `$CPLAT_RUNS_REPO` (owner/name), reached through
 `open_store()` (transport: runs_store). Without a reachable private store the line waits in a local buffer
-(1000 records). Recording never raises into a caller and never changes an exit code or stdout.
+(1000 records). Recording never raises into a caller and never changes an exit code or stdout. After a timeout or network
+error a marker skips the store for 3 minutes, in this process and the next commands (#848); `runs flush` always tries.
 
   mutate(run_id, change) -> "ok"|"none"|"error" / current_run(repo) / mark_incomplete(run_id, section, problem)
                                                                      hooks for agent metrics (spec 089, runs_agents)
@@ -67,6 +68,7 @@ BUILD_MARKERS = ("build:tests", "build:implement", "build:qa", "build:verify", "
 UNIT_MARKERS = {"red-tests": "build:tests", "batch": "build:implement", "task": "build:implement"}
 BUFFER_CAP = 1000
 BUDGET_SECONDS = 20.0
+SKIP_SECONDS = 180            # #848: after a timeout or network error the store is skipped this long, not waited on per record
 BATCH = 200
 MAX_TEXT = 500
 RESERVED = {"schema", "run_id", "kind", "repo", "spec", "platform_version", "mode", "started_at", "ended_at", "phases",
@@ -76,6 +78,9 @@ FILERS: dict[str, Callable[[dict, float], tuple[str, str]]] = {}   # name -> ret
 _KIND_RE = re.compile(r"^[a-z][a-z0-9-]*$")
 _SLUG_RE = re.compile(r"^[\w.-]+/[\w.-]+$")
 _MODULE_RE = re.compile(r"^[a-z_][a-z0-9_]*$")
+_OFFLINE_RE = re.compile(r"timeout|timed out|internet connection|dial tcp|no such host|connection (refused|reset)|network",
+                         re.IGNORECASE)
+_announced: set[str] = set()   # skip markers this process has warned about: one warning per skip, not one per record
 _IDENTIFIERS = {"run_id", "resumes", "parent", "repo", "spec", "platform_version", "started_at", "ended_at",
                 "benchmark_of"}
 
@@ -157,6 +162,46 @@ def _read_active(run_id: str | None) -> dict | None:
 
 def _write_active(rec: dict) -> None:
     _atomic_write(_active_path(rec["run_id"]), json.dumps(rec, ensure_ascii=False))
+
+
+def _skip_path() -> Path:
+    return state_dir() / "store-skip.json"
+
+
+def _skip_store(why: str) -> str:
+    """Skip the store for SKIP_SECONDS after a timeout / network error `why`; returns the note for the warning. Never raises."""
+    until = _iso(utcnow() + datetime.timedelta(seconds=SKIP_SECONDS))
+    try:
+        _atomic_write(_skip_path(), _dump({"until": until, "why": why}) + "\n")
+    except Exception:  # noqa: BLE001
+        pass
+    _announced.add(f"{_skip_path()}|{until}")       # this record's warning already says it
+    return f"{why}; skipping the store until {until[11:16]} UTC"
+
+
+def _skipped() -> dict | None:
+    """The active skip marker {"until", "why"}, else None (an expired or unreadable one counts as none)."""
+    try:
+        mark = json.loads(_skip_path().read_text())
+        return mark if str(mark["until"]) > _iso(utcnow()) else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _clear_skip() -> None:
+    with contextlib.suppress(Exception):
+        _skip_path().unlink(missing_ok=True)
+
+
+def _announce(problem: str | None) -> bool:
+    """False when the store is skipped and this process has already warned about that skip."""
+    if problem != "skipped":
+        return True
+    key = f"{_skip_path()}|{(_skipped() or {}).get('until')}"
+    if key in _announced:
+        return False
+    _announced.add(key)
+    return True
 
 
 def _read_lines(name: str) -> list[dict]:
@@ -262,12 +307,17 @@ def record_audit(event: dict) -> str | None:
         slug = configured_repo()
         if slug is None:
             return "no run store: CPLAT_RUNS_REPO is not set"
+        if skip := _skipped():
+            return f"audit event buffered locally: run store {slug} skipped until {skip['until'][11:16]} UTC after: {skip['why']}"
         deadline = monotonic() + BUDGET_SECONDS
         store = open_store(slug)
         if store.visibility(deadline=deadline) != "private":
             return f"run store {slug} is public"
+        _clear_skip()
         _flush_audit(store, deadline)
         return None
+    except runs_store.StoreUnreachable as e:
+        return f"audit event buffered locally: {_skip_store(str(e)) if _OFFLINE_RE.search(str(e)) else e}"
     except Exception as e:  # noqa: BLE001  (recording never changes an exit code)
         return f"audit event buffered locally: {e}"
 
@@ -545,17 +595,21 @@ def build_run(repo_dir: Path) -> str | None:
 
 
 def record_gate(repo_dir: Path, gate: str, result: str) -> bool:
-    """Set gates[gate] on the pointer's run and the budget stage of the same name; mark the phase. False without a pointer run."""
-    current = _read_pointer(_pointer(Path(repo_dir)))
-    if not current:
+    """`runs gate <gate> <result>` as a function (#869, spec 211): set gates[gate] on the pointer's run and the budget stage
+    of the same name; mark the phase. False without a pointer run. Never raises."""
+    try:
+        current = _read_pointer(_pointer(Path(repo_dir)))
+        if not current:
+            return False
+        rid = current.get("run_id")
+        _mutate(rid, lambda rec: rec.setdefault("gates", {}).__setitem__(gate, result))
+        _record_stage(Path(repo_dir), gate, result)
+        marker = {"acceptance": "build:qa", "security": "build:verify"}.get(gate)
+        if marker:
+            phase(rid, marker)
+        return True
+    except Exception:  # noqa: BLE001
         return False
-    rid = current.get("run_id")
-    _mutate(rid, lambda rec: rec.setdefault("gates", {}).__setitem__(gate, result))
-    _record_stage(Path(repo_dir), gate, result)
-    marker = {"acceptance": "build:qa", "security": "build:verify"}.get(gate)
-    if marker:
-        phase(rid, marker)
-    return True
 
 
 def ci_round(run_id: str | None) -> None:
@@ -654,13 +708,16 @@ def _buffer_followups(items: list[dict]) -> str | None:
                 dropped += _buffer_add(item)
     except Exception as e:  # noqa: BLE001
         return _emit(_warning(f"recording failed: {type(e).__name__}: {e}", buffered_count(), dropped))
+    problem = None
     try:
-        why = flush(budget=max(0.0, BUDGET_SECONDS - (monotonic() - t0))).detail
+        res = flush(budget=max(0.0, BUDGET_SECONDS - (monotonic() - t0)))
+        why, problem = res.detail, res.problem
     except Exception as e:  # noqa: BLE001
         why = f"recording failed: {type(e).__name__}: {e}"
     keys = {_key(i) for i in items}
     if any(_key(i) in keys for i in _safe_buffer()) or dropped:
-        return _emit(_warning(why or "recording failed: record not written", buffered_count(), dropped))
+        line = _warning(why or "recording failed: record not written", buffered_count(), dropped)
+        return _emit(line) if dropped or _announce(problem) else line
     return None
 
 
@@ -734,14 +791,16 @@ def finish(run_id: str | None, outcome: str, *, escalation: dict | None = None, 
             _incomplete_path(run_id).unlink(missing_ok=True)
     except Exception as e:  # noqa: BLE001
         return _emit(_warning(f"recording failed: {type(e).__name__}: {e}", buffered_count(), dropped))
+    problem = None
     try:
         res = flush(budget=max(0.0, BUDGET_SECONDS - (monotonic() - t0)))
-        why = res.detail
+        why, problem = res.detail, res.problem
     except Exception as e:  # noqa: BLE001
         why = f"recording failed: {type(e).__name__}: {e}"
     still = any(_key(i) == run_id for i in _safe_buffer())
     if still or dropped:
-        return _emit(_warning(why or "recording failed: record not written", buffered_count(), dropped))
+        line = _warning(why or "recording failed: record not written", buffered_count(), dropped)
+        return _emit(line) if dropped or _announce(problem) else line   # a skipped store is warned once per process
     return None
 
 
@@ -805,7 +864,7 @@ def _emit(line: str) -> str:
 @dataclass
 class FlushResult:
     store: str | None          # slug, or None when not configured
-    problem: str | None        # None | "unset" | "public" | "unreachable" | "budget"
+    problem: str | None        # None | "unset" | "public" | "unreachable" | "budget" | "skipped" (#848)
     detail: str                # human text for the problem ("" when none)
     written: int               # records written by this flush
     followups: int             # follow-up lines written by this flush
@@ -858,7 +917,8 @@ def _retry_filings(deadline: float, budget: float) -> None:
 def flush(*, budget: float = BUDGET_SECONDS, strict: bool = False) -> FlushResult:
     """(1) configured? (2) the store is private? (3) retry each pending filing once while at least half the budget is
     left. (4) write the buffer in ended_at order, 200 per commit, removing each written batch by key.
-    strict=True (the CLI) raises PlatformError for unset / public / unreachable instead of returning it."""
+    strict=True (the CLI) raises PlatformError for unset / public / unreachable instead of returning it, and ignores the skip
+    marker that a timeout or network error leaves (#848); the store answering clears it."""
     deadline = monotonic() + budget
     slug = configured_repo()
     if slug is None:
@@ -867,17 +927,21 @@ def flush(*, budget: float = BUDGET_SECONDS, strict: bool = False) -> FlushResul
             raise PlatformError("no run store configured (CPLAT_RUNS_REPO is not set)",
                                 hint="cplat platform runs init <owner/name>, then set CPLAT_RUNS_REPO=<owner/name>")
         return res
+    if not strict and (skip := _skipped()):
+        return _result(slug, "skipped", f"run store {slug} skipped until {skip['until'][11:16]} UTC after: {skip['why']}")
     store = open_store(slug)
 
     def unreachable(why: str) -> FlushResult:
+        note = _skip_store(why) if _OFFLINE_RE.search(why) else why
         if strict:
             raise PlatformError(f"run store {slug} is unreachable: {why}", hint=f"gh repo view {slug}   (is gh logged in, and may it read the repo?)")
-        return _result(slug, "unreachable", f"run store {slug} unreachable: {why}")
+        return _result(slug, "unreachable", f"run store {slug} unreachable: {note}")
 
     try:
         vis = store.visibility(deadline=deadline)
     except runs_store.StoreError as e:
         return unreachable(str(e))
+    _clear_skip()
     if vis != "private":
         if strict:
             raise PlatformError(f"run store {slug} is public; records are only written to a private repo",

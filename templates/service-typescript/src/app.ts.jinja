@@ -1,0 +1,40 @@
+import Fastify, { type FastifyBaseLogger, type FastifyInstance } from "fastify";
+{%- if needs_observability %}
+
+import { createMetrics, registerMetrics, type Metrics } from "./metrics.js";
+{%- endif %}
+
+export interface AppOptions {
+  /** The process logger (src/logger.ts); without one the app logs nothing, which is what tests want. */
+  logger?: FastifyBaseLogger;
+  /** Readiness check: true when every dependency the service needs answers. */
+  ready?: () => Promise<boolean>;
+{%- if needs_observability %}
+  metrics?: Metrics;
+{%- endif %}
+}
+
+/** The HTTP app without a listening socket: the server starts it, tests call it with `app.inject`. */
+export function buildApp(options: AppOptions = {}): FastifyInstance {
+  const app: FastifyInstance = options.logger
+    ? Fastify({ loggerInstance: options.logger })
+    : Fastify({ logger: false });
+  const ready = options.ready ?? (() => Promise.resolve(true));
+{%- if needs_observability %}
+
+  registerMetrics(app, options.metrics ?? createMetrics());
+{%- endif %}
+
+  // Liveness: the process is up and serving.
+  app.get("/health", () => ({ status: "ok" }));
+
+  // Readiness: the service can do its work (add a check for every dependency to `ready`).
+  app.get("/ready", async (_request, reply) => {
+    if (await ready()) {
+      return { status: "ready" };
+    }
+    return reply.code(503).send({ status: "unavailable" });
+  });
+
+  return app;
+}

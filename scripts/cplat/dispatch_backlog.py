@@ -248,8 +248,10 @@ def _contents(repo: Path, slug: str, path: str, ref: str) -> str:
 
 
 def _read_runs(slug: str) -> list[dict]:
+    """The active runs of this repo. `repo=slug` keeps the other repos' runs out before their rows are built: each row may ask
+    `gh`, and every repo of the store made `cplat next` wait past its 20 s (#891)."""
     import runlist
-    rows = runlist.collect(2)["runs"]
+    rows = runlist.collect(2, repo=slug)["runs"]
     out = []
     for r in rows:
         if not r.get("active") or r.get("repo") != slug:

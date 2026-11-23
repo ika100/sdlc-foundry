@@ -40,6 +40,7 @@ UNATTENDED = ["Plan", "Build", "Land", "Dev", "Staging"]
 TRIAGE_LABELS = {"alert", "smoke-failure", "signal"}
 MIN_COMPARABLE = 3
 _PARSED: dict[tuple[str, str], specmod.Spec] = {}   # the drafts `_drafts` parsed, read through `draft_spec`
+_MAIN_TEXTS: dict[str, dict[str, str | None]] = {}  # repo -> spec directory -> its spec.md on main; `collect_repo` takes it (#859)
 
 
 def gh(args: list[str]) -> str:
@@ -104,6 +105,23 @@ def _spec_text(slug: str, spec_id: str, ref: str | None = None) -> str | None:
     return out or None
 
 
+def _main_spec_texts(slug: str, names: list[str]) -> list[str | None] | None:
+    """The `spec.md` of each spec directory on the default branch from one GraphQL call (#859: one REST call per spec
+    took 15 s for 200 specs); None when the call fails or answers something else (the caller then asks per spec)."""
+    owner, _, name = slug.partition("/")
+    if not names or not owner or not name:
+        return None
+    fields = " ".join(f"s{i}: object(expression: {json.dumps(f'HEAD:docs/specs/{n}/spec.md')}) {{ ... on Blob {{ text }} }}"
+                      for i, n in enumerate(names))
+    query = f"query {{ repository(owner: {json.dumps(owner)}, name: {json.dumps(name)}) {{ {fields} }} }}"
+    try:
+        doc = _json(["api", "graphql", "-f", f"query={query}"])
+        repo = doc["data"]["repository"]
+        return [(repo.get(f"s{i}") or {}).get("text") or None for i in range(len(names))]
+    except Exception:  # noqa: BLE001 - asked per spec instead
+        return None
+
+
 def _parse(spec_id: str, text: str) -> specmod.Spec | None:
     m = specmod.FRONT.match(text)
     if not m:
@@ -126,11 +144,14 @@ def _drafts(slug: str) -> list[dict]:
     names = [e["name"] for e in _json(["api", f"repos/{slug}/contents/docs/specs"]) or [] if e.get("type") == "dir"]
     prs = _json(["pr", "list", "-R", slug, "--state", "open", "--draft", "--json", "number,body,createdAt,url,headRefName"]) or []
     marked = [MARKER.search(pr.get("body") or "") for pr in prs]
+    main_texts = _main_spec_texts(slug, names)
     # one `gh` call per spec: asked at once, not one after the other
     with ThreadPoolExecutor(max_workers=8) as pool:
-        main_texts = list(pool.map(lambda n: _spec_text(slug, n), names))
+        if main_texts is None:
+            main_texts = list(pool.map(lambda n: _spec_text(slug, n), names))
         pr_texts = list(pool.map(lambda pm: _spec_text(slug, pm[1].group(1), pm[0].get("headRefName")) if pm[1] else None,
                                  zip(prs, marked)))
+    _MAIN_TEXTS[slug] = dict(zip(names, main_texts))
     for name, text in zip(names, main_texts):
         parsed = _parse(name, text) if text else None
         if parsed and parsed.status == "draft":
@@ -195,7 +216,19 @@ def _issue_of(r: dict) -> dict | None:
     return issue if isinstance(issue, dict) and (r.get("engine") or r.get("kind") == "dispatch") and issue.get("number") else None
 
 
-def _finished(r: dict, issue: dict | None, cache: dict) -> bool:
+def _main_text(repo: str, spec_id: str, texts: dict[str, dict[str, str | None]] | None) -> str | None:
+    """The spec.md of a spec on main: from `texts` (repo -> directory -> text, what `_drafts` read; a bare number matches
+    its one directory), else asked on its own."""
+    known = (texts or {}).get(repo)
+    if known is None:
+        return _spec_text(repo, spec_id)
+    if spec_id in known:
+        return known[spec_id]
+    named = [n for n in known if n.split("-", 1)[0] == spec_id]
+    return known[named[0]] if len(named) == 1 else None
+
+
+def _finished(r: dict, issue: dict | None, cache: dict, texts: dict | None = None) -> bool:
     """True when the work of an escalated run is already finished: its issue is closed, its spec is `done`, or its
     `feature/<spec>` pull request or the run's own is merged. A GitHub failure counts as not finished (the item stays)."""
     repo, spec_id, pr = r.get("repo"), r.get("spec"), r.get("pr") or {}
@@ -218,7 +251,7 @@ def _finished(r: dict, issue: dict | None, cache: dict) -> bool:
         slug = issue.get("repo") or repo
         return ask(("issue", slug, issue["number"]),
                    lambda: (_json(["issue", "view", str(issue["number"]), "-R", slug, "--json", "state"]) or {}).get("state") == "CLOSED")
-    if spec_id and ask(("spec", repo, spec_id), lambda: getattr(_parse(spec_id, _spec_text(repo, spec_id) or ""), "status", None) == "done"):
+    if spec_id and ask(("spec", repo, spec_id), lambda: getattr(_parse(spec_id, _main_text(repo, spec_id, texts) or ""), "status", None) == "done"):
         return True
     if spec_id and ask(("branch", repo, spec_id), lambda: merged(["pr", "list", "-R", repo, "--head", f"feature/{spec_id}", "--state", "merged",
                                                                  "--json", "state", "--limit", "1"])):
@@ -226,7 +259,7 @@ def _finished(r: dict, issue: dict | None, cache: dict) -> bool:
     return bool(pr.get("number")) and ask(("pr", repo, pr["number"]), lambda: merged(["pr", "view", str(pr["number"]), "-R", repo, "--json", "state"]))
 
 
-def _escalations(rows: list[dict]) -> list[dict]:
+def _escalations(rows: list[dict], texts: dict | None = None) -> list[dict]:
     """Escalated runs with no newer active or done run of the same repo and spec (of a run for an issue: the same issue)
     and whose work is not already finished (`_finished`); a dispatcher unit whose `escalation.run` names another
     escalated run is left to that run's item."""
@@ -242,7 +275,7 @@ def _escalations(rows: list[dict]) -> list[dict]:
         newer = [o for o in rows if o is not r and o.get("repo") == r.get("repo") and o.get("spec") == r.get("spec")
                  and (not issue or (_issue_of(o) or {}).get("number") == issue["number"])
                  and (o.get("active") or o.get("phase") == "done") and str(o.get("started_at") or "") >= str(r.get("ended_at") or r.get("started_at") or "")]
-        if newer or _finished(r, issue, cache):
+        if newer or _finished(r, issue, cache, texts):
             continue
         spec_id, pr = r.get("spec"), r.get("pr") or {}
         number = (spec_id or "").split("-", 1)[0]
@@ -377,8 +410,57 @@ def _commit_time(slug: str | None, ref: str | None) -> str:
         return ""
 
 
-def _promotions(rows: list[dict], repo_of: dict[str, str], prod_promotion: str = "manual") -> list[dict]:
-    """A promote item exists only where prod waits for a person (`manual`); otherwise the rule promotes by itself."""
+def missing_prod_backups(m: model.Model, components: list[str] | None = None) -> list[dict]:
+    """#861: the in-cluster databases of prod without a backup, as {resource, to}: `to` is the bucket another environment of the
+    database backs up to, else `<db>-backups` (`resource backup --to` declares a bucket that does not exist yet, #860).
+    #900: a database exists in prod only once a consumer runs there; the databases that the promoted `components` use count
+    as prod databases too, unless system.yaml declares prod's instance external or with a backup."""
+    out, instances = [], list(getattr(m, "resource_instances", None) or [])
+    resources = {r.name: r for r in getattr(m, "resources", None) or []}
+
+    def to_of(name: str) -> str:
+        declared = (getattr(resources.get(name), "declared", None) or {}).values()
+        other = next((o.backup["to"] for o in instances if o.resource == name and o.backup), None) \
+            or next((d["backup"]["to"] for d in declared if d.get("backup")), None)
+        return other or f"{name}-backups"
+    for ri in instances:
+        if ri.environment != "prod" or ri.type != "database" or ri.external or ri.backup:
+            continue
+        out.append({"resource": ri.resource, "to": to_of(ri.resource)})
+    in_prod = {ri.resource for ri in instances if ri.environment == "prod"}
+    uses = [u for c in getattr(m, "components", None) or [] if c.name in (components or []) for u in c.uses]
+    for name in dict.fromkeys(uses):
+        r = resources.get(name)
+        prod = (getattr(r, "declared", None) or {}).get("prod") or {}
+        if r is None or r.type != "database" or name in in_prod or prod.get("external", r.external) or prod.get("backup"):
+            continue
+        out.append({"resource": name, "to": to_of(name)})
+    return out
+
+
+_SHA = re.compile(r"sha-([0-9a-f]{7,40})")
+
+
+def _release_first(name: str, slug: str | None, stg: dict, row: dict, since: str) -> dict:
+    """#901: the staged build has no release tag and prod takes release tags only: the item recommends the release."""
+    last = None
+    if slug:
+        out, _ = releases._call(["release", "view", "-R", slug, "--json", "tagName", "-q", ".tagName"])
+        last = (out or "").strip() or None
+    cand = row.get("release_candidate") or {}
+    return {"id": f"release:{slug}:{last or 'first'}", "kind": "release", "stage": "Release",
+            "object": _obj("release", slug, component=name, version=last), "since": since,
+            "reason": f"{name} {stg['version']} is verified in staging; prod takes release tags only",
+            "command": "/component:release", "cwd_repo": slug,
+            "consequence": {"changes": cand.get("subjects") or [f"the staged build {stg['version']} of {name}"], "since_tag": last, "next_version": cand.get("version"), "env": "prod"},
+            "way_back": None}
+
+
+def _promotions(rows: list[dict], repo_of: dict[str, str], prod_promotion: str = "manual",
+                missing_backups: list[dict] | dict[str, list[dict]] | None = None) -> list[dict]:
+    """A promote item exists only where prod waits for a person (`manual`); otherwise the rule promotes by itself.
+    `missing_backups` is one list for every component or a list per component name (#900).
+    #901: prod takes release tags only: the item names the release tag of the staged build, or recommends the release."""
     if prod_promotion != "manual":
         return []
     items = []
@@ -390,12 +472,22 @@ def _promotions(rows: list[dict], repo_of: dict[str, str], prod_promotion: str =
         if prod and prod.get("version") == stg["version"]:
             continue
         name, slug, to = row["component"], repo_of.get(row["component"]), stg["version"]
+        missing = (missing_backups.get(name) or [] if isinstance(missing_backups, dict) else missing_backups) or []
+        verified = _staging_smoke(slug, stg)
+        since = verified.get("at") or _commit_time(slug, stg.get("release") or stg.get("tag")) or runs._iso(runs.utcnow())
+        if not stg.get("release"):
+            sha = _SHA.fullmatch(str(stg.get("tag") or to))
+            tag = releases.tag_of(slug, sha.group(1)) if slug and sha else None
+            if tag is None:
+                items.append(_release_first(name, slug, stg, row, since))
+                continue
+            to = tag
+        if prod and str(prod.get("version") or "").lstrip("v") == to.lstrip("v"):
+            continue
         frm = (prod or {}).get("version") or (releases.previous_release(slug, to) if slug else None)
         between = releases.between(slug, frm, to) if slug and frm else {}
         migrations = between.get("migrations") or []
         digest = stg.get("digest")
-        verified = _staging_smoke(slug, stg)
-        since = verified.get("at") or _commit_time(slug, stg.get("release") or stg.get("tag")) or runs._iso(runs.utcnow())
         verified_digest = verified.get("digest") or digest   # the cell is `verified`: without a readable record, its own digest was
         bad = [Path(m["file"]).name for m in migrations if not m.get("additive")]
         items.append({
@@ -405,7 +497,8 @@ def _promotions(rows: list[dict], repo_of: dict[str, str], prod_promotion: str =
             "command": f"/instance:promote {name} --to prod --version {to}", "cwd_repo": slug,
             "consequence": {"from": frm, "to": to, "specs": between.get("specs") or [], "criteria": between.get("criteria"),
                             "commits": between.get("commits"), "migrations": migrations, "digest": digest,
-                            "verified_digest": verified_digest, "digest_matches": digest is not None and digest == verified_digest},
+                            "verified_digest": verified_digest, "digest_matches": digest is not None and digest == verified_digest,
+                            "env": "prod", "missing_backups": list(missing)},
             "way_back": {"command": f"/instance:promote {name} --to prod --version {frm}" if frm else None,
                          "warning": (f"migration {', '.join(bad)} is not additive" if bad else None)}})
     return items
@@ -529,14 +622,19 @@ def collect_repo(repo_dir: Path) -> dict:
         rows_f = pool.submit(lambda: runlist.collect(30, repo=slug)["runs"])
         drafts_f = pool.submit(_drafts, slug)
         triage_f = pool.submit(_triage, slug, all_triage=True)
+        drafts: list[dict] = []
+        try:
+            drafts = drafts_f.result()          # first: the escalations read the spec texts it read
+        except Exception as e:  # noqa: BLE001
+            src.fail("github", e, ["approve", "answer"])
         try:
             rows = rows_f.result()
             done = [r for r in rows if r.get("phase") == "done"]
-            items += _escalations(rows)
+            items += _escalations(rows, {slug: texts} if (texts := _MAIN_TEXTS.pop(slug, None)) is not None else None)
         except Exception as e:  # noqa: BLE001
             src.fail("runs", e, ["escalation"])
         try:
-            items += [_draft_item(d, None, done) for d in drafts_f.result()]
+            items += [_draft_item(d, None, done) for d in drafts]
         except Exception as e:  # noqa: BLE001
             src.fail("github", e, ["approve", "answer"])
         try:
@@ -592,7 +690,7 @@ def collect(repo_dir: Path, system: str | None = None, since_days: int = 90) -> 
                 src.fail("github", e, ["issues"])
         try:
             _, _, status_rows, _ = status_f.result()
-            items += _promotions(status_rows, components, _prod_promotion(m))
+            items += _promotions(status_rows, components, _prod_promotion(m), {c: missing_prod_backups(m, [c]) for c in components})
         except Exception as e:  # noqa: BLE001
             src.fail("cluster", e, ["promote"])
         items += _dispatch_items(repos, src)

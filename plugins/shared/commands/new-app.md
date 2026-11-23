@@ -2,6 +2,7 @@
 description: "Moved in 5.0: /shared:new-app is /system:new. Runs nothing."
 moved-to: "/system:new"
 allowed-tools: Read, Glob
+disable-model-invocation: true
 ---
 
 `/shared:new-app` was renamed in sdlc-foundry 5.0. Run no script, start no agent, change no file.

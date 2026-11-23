@@ -500,3 +500,11 @@ def test_internal_words_do_not_appear(world, capsys):  # AC-192.9
     for q in doc["questions"]:
         assert not BANNED.search(q["question"])
     assert {"schema", "bar", "screen", "waiting", "running", "drafts", "questions", "page", "unavailable", "how"} <= set(doc)
+
+
+def test_an_unreadable_source_says_what_failed_859(world, capsys):  # #859
+    """The screen names the failed call's error, so a timeout or a crash does not read as a missing login."""
+    world.gh_fail = "gh: HTTP 502: Bad Gateway (https://api.github.com/graphql)"
+    screen = world.doc(capsys)["screen"]
+    flat = " ".join(screen.split())
+    assert "Could not read GitHub; it may be missing" in flat and "Error: gh: HTTP 502: Bad Gateway" in flat

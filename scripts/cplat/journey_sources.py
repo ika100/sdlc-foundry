@@ -22,6 +22,7 @@ import transcripts
 
 Span = tuple[datetime.datetime, datetime.datetime]
 NO_RECORD_WARNING = "WARNING: no system ship run record overlaps the journey; repo sessions are not counted"
+ROOT_KINDS = ("product-ship", "ship")   # system ship and component ship: the runs whose repo sessions a journey counts
 
 
 def parse_ts(value) -> datetime.datetime | None:
@@ -93,10 +94,11 @@ def load_records(start: datetime.datetime, end: datetime.datetime, records_file:
 
 def system_tree(records: list[dict], coordinator_sessions: list[str], repos: list[str], start: datetime.datetime,
                 end: datetime.datetime) -> list[dict]:
-    """The `product-ship` runs of the window that belong to the journey, and every record reachable by `parent` / `ships`."""
+    """The system and component ship runs of the window that belong to the journey (ROOT_KINDS), and every record reachable
+    by `parent` / `ships`."""
     coordinators = set(coordinator_sessions)
     by_id = {r["run_id"]: r for r in records if r.get("run_id")}
-    roots = [r for r in records if r.get("kind") == "product-ship" and _overlaps(_record_span(r), start, end)
+    roots = [r for r in records if r.get("kind") in ROOT_KINDS and _overlaps(_record_span(r), start, end)
              and (coordinators & set(_sessions(r)) or r.get("repo") in repos)]
     tree: dict[str, dict] = {}
     todo = list(roots)
@@ -160,8 +162,12 @@ def record_evidence(records: list[dict], tree: list[dict], repos: list[str], sta
         kind = rec.get("kind")
         if kind == "pr-wait":
             add(rec.get("started_at"), rec.get("ended_at"), "ci")
-        elif kind == "verify":
-            add(rec.get("started_at"), rec.get("ended_at"), "smoke")
+        elif kind == "verify":         # #865: the record starts after the smoke ran; its smoke section has the run's length
+            took = rec["smoke"].get("duration_s") if isinstance(rec.get("smoke"), dict) else None
+            began = parse_ts(rec.get("started_at"))
+            if began and isinstance(took, (int, float)) and took > 0:
+                began -= datetime.timedelta(seconds=took)
+            add(began.isoformat() if began else None, rec.get("ended_at"), "smoke")
         elif kind == "wait":
             wait = rec.get("wait") if isinstance(rec.get("wait"), dict) else {}
             found = command_wait("cplat " + str(wait.get("command", "")))

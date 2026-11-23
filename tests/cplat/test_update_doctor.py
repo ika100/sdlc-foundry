@@ -82,6 +82,16 @@ def test_doctor_kube_context_warns_when_not_local(monkeypatch):
     assert doctor.check_kube()[0]["status"] == doctor.OK
 
 
+def test_doctor_warns_when_docker_does_not_answer(monkeypatch):
+    """#879: `docker info` running into its timeout is a warning row, not a crash of the whole doctor."""
+    def hung(*a, **k):
+        raise doctor.core.PlatformError("`docker info --format` timed out after 15s")
+    monkeypatch.setattr(doctor.shutil, "which", lambda t: "/usr/bin/docker")
+    monkeypatch.setattr(doctor, "run", hung)
+    row = doctor.check_docker()[0]
+    assert row["status"] == doctor.WARN and row["name"] == "docker daemon" and "no answer" in row["detail"]
+
+
 def test_doctor_repo_stamp(repo):
     (repo / ".platform-version").write_text("platform: 0.9.0\nshape: service-go\nref: main\n")
     assert any(c["name"] == "repo platform version" and c["status"] == doctor.WARN for c in doctor.check_repo(repo))
@@ -206,7 +216,8 @@ def test_update_keeps_the_web_apps_own_dependencies(tmp_path, new_service):
 
 
 def test_every_template_protects_its_dependency_manifest():
-    expected = {"service-python": "pyproject.toml", "library-python": "pyproject.toml", "service-java": "pom.xml", "service-go": "go.mod", "web-nextjs": "package.json"}
+    expected = {"service-python": "pyproject.toml", "library-python": "pyproject.toml", "service-java": "pom.xml", "service-go": "go.mod", "web-nextjs": "package.json",
+                "service-typescript": "package.json"}
     for template, manifest in expected.items():
         assert manifest in update.project_owned_patterns(template), f"{template}: {manifest} would be overwritten by /shared:update-service"
 

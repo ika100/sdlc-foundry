@@ -34,22 +34,23 @@ class Transcript:
         self.n += 1
         return f"toolu_{self.n}"
 
-    def model(self, minute):
+    def model(self, minute, usage=None, msg_id=None):
         self.events.append({"type": "assistant", "timestamp": at(minute),
-                            "message": {"id": f"msg_{self._id()}", "content": [{"type": "text", "text": "ok"}], "usage": {}}})
+                            "message": {"id": msg_id or f"msg_{self._id()}", "content": [{"type": "text", "text": "ok"}],
+                                        "usage": usage or {}}})
         return self
 
-    def call(self, start, end, name="Bash", **inp):
+    def call(self, start, end, name="Bash", output="ok", **inp):
         i = self._id()
         self.events.append({"type": "assistant", "timestamp": at(start),
                             "message": {"id": f"msg_{i}", "content": [{"type": "tool_use", "id": i, "name": name, "input": inp}],
                                         "usage": {}}})
         self.events.append({"type": "user", "timestamp": at(end),
-                            "message": {"content": [{"type": "tool_result", "tool_use_id": i, "content": "ok"}]}})
+                            "message": {"content": [{"type": "tool_result", "tool_use_id": i, "content": output}]}})
         return self
 
-    def bash(self, start, end, command):
-        return self.call(start, end, "Bash", command=command)
+    def bash(self, start, end, command, output="ok"):
+        return self.call(start, end, "Bash", output=output, command=command)
 
     def prompt(self, minute, text="go on"):
         self.events.append({"type": "user", "timestamp": at(minute), "message": {"content": text}})
@@ -95,6 +96,14 @@ class World:
     def actions_runs(self, *spans):
         self.gh_runs.write_text(json.dumps([{"createdAt": at(a), "startedAt": at(a), "updatedAt": at(b), "conclusion": "success"}
                                             for a, b in spans]))
+
+    def merged_prs(self, *prs):
+        """`gh pr list` answers these merged PRs: dicts of url, createdAt and mergedAt (minutes are turned into times)."""
+        answers = self.root / "prs.json"
+        answers.write_text(json.dumps([{k: at(v) if k in ("createdAt", "mergedAt") else v for k, v in p.items()} for p in prs]))
+        gh = self.root / "bin" / "gh"
+        if "pr list" not in gh.read_text():
+            gh.write_text(gh.read_text().replace('else echo "[]"', f'elif [ "$1 $2" = "pr list" ]; then cat "{answers}"; else echo "[]"'))
 
     def add_records(self, *records):
         self.records += list(records)

@@ -28,7 +28,7 @@ One `cplat` call per Bash invocation, output read whole (no `grep`, `head` or `t
 
 ## Phase `plan`
 
-Read `${CLAUDE_PLUGIN_ROOT}/commands/plan.md` and follow it for this spec; after the architect, `cplat platform runs agent spawned architect [--model-id <id>]`. Architect `BLOCKERS` → escalate with them. A plan with `done` tasks is not re-planned (escalate); a merge-conflict re-plan (build.md 2.4a) is the exception. Then `cplat component ship phase build`.
+Read `${CLAUDE_PLUGIN_ROOT}/commands/plan.md` and follow it for this spec; after the architect (and a ux-designer), `cplat platform runs agent spawned <role> [--model-id <id>]`. Architect `BLOCKERS` → escalate with them. A plan with `done` tasks is not re-planned (escalate); a merge-conflict re-plan (build.md 2.4a) is the exception. Then `cplat component ship phase build`.
 
 ## Phase `build`
 
@@ -39,7 +39,7 @@ Escalate on build's stop rules. Then `cplat component ship phase pr`.
 ## Phase `pr`
 
 1. Write `.pr-body.md` in the repo root (Write tool, never into `.git/`, because Claude Code refuses edits there) with the template in `${CLAUDE_PLUGIN_ROOT}/references/build-pr.md`, then `cplat deps report --body-file .git/PR_BODY.md`.
-2. `cplat component ship pr --title "feat(<scope>): <spec title, ≤72 chars>" --body-file .pr-body.md`: it runs the whole `devbox run ci` first; red → nothing is pushed: fix it via the coder (`cplat platform runs agent fix-round ci`), `cplat validate run` between rounds, and call it again; after the fix `cplat spec test-diff --task <task>` (`red` finds the red-tests commit): a `test helper` or `type-only` line → the last paragraph of `${CLAUDE_PLUGIN_ROOT}/references/build-tighten.md` without asking, exit 1 otherwise → escalate cause `decision` as a changed test. Then it pushes and opens the PR (platform repo: `--no-spec`). `cplat` puts a Summary at the top of the PR body; the orchestrator writes none.
+2. `cplat component ship pr --title "feat(<scope>): <spec title, ≤72 chars>" --body-file .pr-body.md`: it runs the whole `devbox run ci` first; red → nothing is pushed: fix it via the coder (`cplat platform runs agent fix-round ci`), `cplat validate run` between rounds, and call it again; after the fix `cplat spec test-diff --task <task>` (it finds the red-tests commit): a `test helper` or `type-only` line → the last paragraph of `${CLAUDE_PLUGIN_ROOT}/references/build-tighten.md` without asking, exit 1 otherwise → escalate cause `decision` as a changed test. Then it pushes and opens the PR (platform repo: `--no-spec`). `cplat` puts a Summary at the top of the PR body; the orchestrator writes none.
 
 ## Phase `land`
 

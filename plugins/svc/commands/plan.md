@@ -2,6 +2,7 @@
 description: "Moved in 5.0: /svc:plan is /component:plan. Runs nothing."
 moved-to: "/component:plan"
 allowed-tools: Read, Glob
+disable-model-invocation: true
 ---
 
 `/svc:plan` was renamed in sdlc-foundry 5.0. Run no script, start no agent, change no file.
