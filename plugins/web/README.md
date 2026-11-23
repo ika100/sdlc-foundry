@@ -6,6 +6,7 @@ Agents for **Next.js (App Router) web repos** — the `web-nextjs` shape. Used b
 
 | Agent | Model | Purpose |
 |---|---|---|
+| `ux-designer` | opus | `docs/specs/<id>/ux.md` (flows, screens, states, accessibility) before the architect, for specs that change what a user sees (spec 219; `cplat spec ux` decides) |
 | `coder` | sonnet | TypeScript / App Router implementation following the architect's plan |
 | `tester` | sonnet | Vitest + Testing Library, Playwright when enabled, coverage gate |
 | `deployment` | sonnet | Standalone-output Dockerfile, GHCR CI pipeline (image only) |

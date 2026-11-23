@@ -13,6 +13,7 @@ A feature is described, planned, built and verified from one folder: `docs/specs
 | `spec.md` | product-manager | **What**: problem, stories, acceptance criteria, non-goals, assumptions, open questions, changelog | [spec.md](${CLAUDE_PLUGIN_ROOT}/skills/spec-format/references/spec.md) |
 | `design.md` | architect (optional) | **How**: decisions, module boundaries, the contract (API, events, errors), data changes | [design.md](${CLAUDE_PLUGIN_ROOT}/skills/spec-format/references/design.md) |
 | `plan.md` | architect | **Tasks**: files, dependencies, parallel safety, which criteria each task covers | [plan.md](${CLAUDE_PLUGIN_ROOT}/skills/spec-format/references/plan.md) |
+| `ux.md` | ux-designer (website specs, spec 219) | **Screens**: flows, screens, states, accessibility; front matter `spec_id`, `spec_hash` | `cplat spec check` |
 | `verification.md` | reviewer | **Evidence**: per criterion met / not met, with tests and code | [verification.md](${CLAUDE_PLUGIN_ROOT}/skills/spec-format/references/verification.md) |
 
 Tests name the criteria they prove: [testing.md](${CLAUDE_PLUGIN_ROOT}/skills/spec-format/references/testing.md).

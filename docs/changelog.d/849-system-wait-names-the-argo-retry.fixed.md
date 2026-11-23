@@ -1,1 +1,0 @@
-**`cplat system wait` says why an app stays OutOfSync while Argo CD retries a failed sync (#849).** The TIMEOUT line of such an app now names the last sync failure and the retry attempt instead of only `OutOfSync/Healthy`. A sync that has failed with no retry pending already ends the wait at once as RED.
