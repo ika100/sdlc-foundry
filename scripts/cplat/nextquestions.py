@@ -30,6 +30,7 @@ import nextstate
 PER_PAGE = 4
 CHOOSE_PER_PAGE = 2
 _REVERT = "(a revert pull request takes it back)"
+_GREEN = {"passed", "passed-on-retry"}   # evidence.GREEN; nothing here imports I/O modules
 
 
 def _n(count: int, one: str, many: str) -> str:
@@ -319,8 +320,14 @@ def _release(ctx: _Ctx, item: dict) -> dict:
                           "review": ("Approve and merge", "approve-merge", "Review")}[kind]
     opts = [_option(ctx, oid, label, "", steps=[item["command"]], acts=acts, extra_cannot=extra),
             _details(ctx, qid, []), _later(ctx, [item], {"release": "Collect more", "promote": "Not now"}.get(kind, "Later"))]
+    smoke = (item.get("consequence") or {}).get("staging_smoke") if env == "prod" else None
+    unverified = smoke is not None and smoke not in _GREEN
+    if unverified:     # #946: never call it verified without a green staging smoke, nor recommend promoting it
+        opts = [_later(ctx, [item], "Hold it back"), {**opts[0], "label": "Promote to Prod anyway"}, opts[1]]
+    staged = (f"{item['what']} has no green staging smoke result" if smoke == "none" else
+              f"{item['what']} failed its staging smoke ({smoke})") if unverified else f"{item['what']} is verified in staging"
     text = {"release": f"{item.get('reason') or 'A release is ready'}. Release now?",
-            "promote": f"{item['what']} is verified in staging. Promote it to prod?" if env == "prod" else
+            "promote": f"{staged}. Promote it to prod{' anyway' if unverified else ''}?" if env == "prod" else
                        f"{item.get('reason') or item['what'] + ' can go to staging'}. Promote it to staging"
                        + (f" (run in {app})?" if (app := (item.get("consequence") or {}).get("app")) else "?"),
             "review": f"{item['what']} waits for your review. Approve and merge it?"}[kind]
@@ -331,7 +338,8 @@ def _release(ctx: _Ctx, item: dict) -> dict:
         opts.insert(0, _option(ctx, "backup-first", "Set the backup first", "", steps=steps,
                                acts=[{"what": "backup pull request", "target": f"{b['resource']} in prod",
                                       "undo": f"/resource:backup {b['resource']} --env prod --off"} for b in missing]))
-        text = f"{item['what']} is verified in staging, but the prod database {dbs} has no backup. Set the backup first, then promote?"
+        text = f"{staged}, and the prod database {dbs} has no backup. Set the backup first, then promote?" if unverified else \
+            f"{staged}, but the prod database {dbs} has no backup. Set the backup first, then promote?"
     return _question(qid, header, text, opts)
 
 

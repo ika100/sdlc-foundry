@@ -139,9 +139,18 @@ def validate(shapes: list[dict]) -> list[str]:
             errs.append(f"{sid}: ci_checks must list the CI job names new repos require on main (spec 054)")
         errs += _validation_errors(sid, s)
         errs += _publish_field_errors(sid, s)
+        errs += _ux_designer_errors(sid, s)
         if s.get("library") and s.get("deployable"):
             errs.append(f"{sid}: a library cannot be deployable")
     return errs
+
+
+def _ux_designer_errors(sid: str, s: dict) -> list[str]:
+    """Spec 219: a shape declares `ux_designer` only when its plugin has the agent `cplat shape` routes to."""
+    if not s.get("ux_designer"):
+        return []
+    agent = f"plugins/{s.get('plugin')}/agents/ux-designer.md"
+    return [] if (ROOT / agent).is_file() else [f"{sid}: ux_designer needs the agent {agent} (spec 219)"]
 
 
 def _publish_field_errors(sid: str, s: dict) -> list[str]:

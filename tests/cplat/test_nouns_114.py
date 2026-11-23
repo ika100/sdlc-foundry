@@ -443,6 +443,7 @@ def test_the_stop_hooks_run_the_5_0_gates_ac_114_38():  # AC-114.38
 def doctor_checks(repo, monkeypatch, home):
     import doctor
     monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(doctor, "check_docker", lambda: [])   # #879: never the runner's real `docker info`
     return {c["name"]: c for c in doctor.run_checks(repo)}
 
 

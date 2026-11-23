@@ -28,7 +28,7 @@ One `cplat` call per Bash invocation, output read whole (no `grep`, `head` or `t
 
 ## Phase `plan`
 
-Read `${CLAUDE_PLUGIN_ROOT}/commands/plan.md` and follow it for this spec; after the architect, `cplat platform runs agent spawned architect [--model-id <id>]`. Architect `BLOCKERS` → escalate with them. A plan with `done` tasks is not re-planned (escalate); a merge-conflict re-plan (build.md 2.4a) is the exception. Then `cplat component ship phase build`.
+Read `${CLAUDE_PLUGIN_ROOT}/commands/plan.md` and follow it for this spec; after the architect (and a ux-designer), `cplat platform runs agent spawned <role> [--model-id <id>]`. Architect `BLOCKERS` → escalate with them. A plan with `done` tasks is not re-planned (escalate); a merge-conflict re-plan (build.md 2.4a) is the exception. Then `cplat component ship phase build`.
 
 ## Phase `build`
 
