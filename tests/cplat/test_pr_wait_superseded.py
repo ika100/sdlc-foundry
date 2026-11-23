@@ -253,6 +253,36 @@ def test_a_repo_without_pull_request_workflows_is_green_on_its_checks_787(queued
     assert ok and queued.merges == [PR]
 
 
+class SuiteGh(QueuedGh):
+    """The head commit's check suites: `idle` foreign suites without check runs (#999)."""
+
+    idle = 1
+
+    def __call__(self, args, *, cwd, check=True):
+        if args[:2] == ["api", f"repos/{{owner}}/{{repo}}/commits/{self.heads[0]}/check-suites"]:
+            return str(self.idle)
+        return super().__call__(args, cwd=cwd, check=check)
+
+
+def test_a_queued_suite_of_another_app_without_runs_is_not_waited_for_999(fake, monkeypatch, tmp_path):   # #999
+    """PR #917 shape: every Actions check green, Dependabot's suite queued with no run: merges, the pull_request run exists (#787)."""
+    g = SuiteGh()
+    g.said, g.merges = fake.said, fake.merges
+    g.heads = ["abc123"]
+    monkeypatch.setattr(ship, "gh", g)
+    pr_workflow(tmp_path)
+    dependabot = {"name": ".github/dependabot.yml", "state": "QUEUED", "bucket": "pending", "link": "", "startedAt": ""}
+    g.checks = [[_run_check("ci-success", "pass", 42), dependabot]]
+    g.runs = [[CI_RUN]]
+    ok, lines = prmod.wait(tmp_path, PR, True, 600, 10, 300)
+    assert ok and g.merges == [PR] and any("not waited for" in s for s in g.said)
+    g.merges.clear()
+    g.idle = 0     # a pending check no idle foreign suite explains is still waited for
+    with pytest.raises(ship.ChecksPending, match="dependabot"):
+        prmod.wait(tmp_path, PR, True, 120, 10, 300)
+    assert g.merges == []
+
+
 class QueuedConflictGh(QueuedGh, ConflictGh):
     """The run list of the head commit plus the PR's mergeable state (#863)."""
 
