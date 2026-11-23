@@ -1,7 +1,7 @@
 ---
 spec_id: 211-unit-sessions-start-with-their
 title: Unit sessions start with their instructions, less bookkeeping
-status: building
+status: done
 priority: P1
 shape: platform
 tracks: [869]
@@ -77,3 +77,4 @@ None.
 - 2026-11-20 priority P1 proposed: P1: normal bug or feature
 - 2026-11-20 approved
 - 2026-11-21 building
+- 2026-11-23 done
