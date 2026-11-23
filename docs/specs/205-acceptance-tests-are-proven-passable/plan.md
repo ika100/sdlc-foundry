@@ -1,7 +1,7 @@
 ---
 spec_id: 205-acceptance-tests-are-proven-passable
 shape: platform
-spec_hash: 5b917ca2d63a
+spec_hash: e69b64ef2396
 summary: test-diff accepts comment, docstring and static-import edits on its own; cplat quiet test-fast --red classifies red pytest tests, the build sends wrong failures back to the tester and freezes only on a passing check; harness fixes after the freeze go to the tester
 tasks:
   - id: t1
