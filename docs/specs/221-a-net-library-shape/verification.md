@@ -1,7 +1,7 @@
 # Verification — 221 A .NET library shape
 
 **Result:** pass
-**Commit:** 35852fb6 · **Base:** the 218 branch (`80afde0b`), rebased onto `main` before the PR · **Trace:** 11/11 criteria named by tests (`tests/cplat/test_221_library_dotnet.py`); the real toolchain and a publish dry run on a real render are proved by the CI job `smoke-test-library-dotnet` and were run locally the same way (render, `devbox run ci`, `publish.sh v1.2.3 --dry-run`)
+**Commit:** e71cc4ea · **Base:** `2ba7218e` (main with spec 218) · **Trace:** 11/11 criteria named by tests (`tests/cplat/test_221_library_dotnet.py`); the real toolchain and a publish dry run on a real render are proved by the CI job `smoke-test-library-dotnet` and were run locally the same way (render, `devbox run ci`, `publish.sh v1.2.3 --dry-run`)
 
 | Criterion | Verdict | Tests | Implementation | Notes |
 |---|---|---|---|---|
