@@ -530,11 +530,13 @@ class PodWatch:
             return None                      # a pod of another version: not what this wait waits for
         name = (pod.get("metadata") or {}).get("name") or "?"
         for _, reason, seen, image, _ in self._failing(ns, pod, name):
-            event = self._event(ns, name)
+            events = self._events(ns, name)
+            event = events[-1] if events else ""
             why = f"pod {ns}/{name}: {reason} for {int(seen)}s, image {image}"
             if event:
                 why += f"; last event: {event}"
-            if reason in PULLS and NOT_IN_REGISTRY.search(event or ""):
+            # #1013: the not-found pull error is not always the last event; `Error: ImagePullBackOff` follows it
+            if reason in PULLS and any(NOT_IN_REGISTRY.search(e) for e in events):
                 if building and building() is not None:
                     continue                 # #892: the component's CI run builds that tag (or just pushed it)
                 if self._registry(image) in ("found", "unreachable"):
@@ -550,10 +552,6 @@ class PodWatch:
         events.sort(key=lambda e: (e.get("type") == "Warning",
                                    str(e.get("lastTimestamp") or e.get("eventTime") or (e.get("metadata") or {}).get("creationTimestamp") or "")))
         return [" ".join(str(e.get("message") or "").split()) for e in events]
-
-    def _event(self, ns: str, pod: str) -> str:
-        events = self._events(ns, pod)
-        return events[-1] if events else ""
 
 
 def _namespaces(status: dict) -> list[str]:
