@@ -279,6 +279,27 @@ shapes:
     status: stable
     adr: [127]
 
+  - id: library-dotnet
+    plugin: svc-dotnet
+    template: library-dotnet
+    deployable: false
+    test_globs: ["tests/**/*.cs"]   # where `cplat spec trace` looks for AC ids (ADR-026)
+    ci_checks: ["quality (dotnet format + analyzers)", "test (xunit + coverage)", "security (trivy + detect-secrets)", "ci-extra"]   # required on main by new-service (spec 054)
+    validation:   # spec 103: what `cplat validate` selects and which changes always run the full tests and security
+      selector: null
+    library: true
+    publish:   # spec 221 / ADR-125: the release tag's `publish` job pushes the NuGet package <Namespace> to nuget.pkg.github.com
+      registry: github-nuget
+    detection:
+      copier_src: templates/library-dotnet
+      sniff:
+        - "*.csproj or *.sln[x] (root or one level below) without a Dockerfile"
+    default_stack:
+      language: csharp
+      runtime: dotnet-lts
+    status: stable
+    adr: [125, 127]
+
   - id: platform
     plugin: svc
     template: null          # no template: the platform repo is never created, adopted, updated or rolled out from one (ADR-056)

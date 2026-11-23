@@ -6,7 +6,7 @@ Create a system with the platform script. **Request:** $ARGUMENTS
 
 A rule marked **Hard rule:** is never departed from. Any other rule is a practice: where its stated purpose does not apply, depart from it and name each departure and its reason in one line of your report.
 
-The manifest is a YAML file: `system` (name of the gitops-app repo), `owner`, optional `org` and `visibility`, and `components` (each with `name`, `description`, `type`, `lang`, optional `data` of template options). A component with `shape` is refused: use `type` and `lang`. If the user has no manifest yet, write one from what they describe (valid pairs: service/python, service/java, service/go, service/typescript, service/csharp, website/typescript, library/python, library/typescript; the gitops-app repo is implicit) and show it before using it.
+The manifest is a YAML file: `system` (name of the gitops-app repo), `owner`, optional `org` and `visibility`, and `components` (each with `name`, `description`, `type`, `lang`, optional `data` of template options). A component with `shape` is refused: use `type` and `lang`. If the user has no manifest yet, write one from what they describe (valid pairs: service/python, service/java, service/go, service/typescript, service/csharp, website/typescript, library/python, library/typescript, library/csharp; the gitops-app repo is implicit) and show it before using it.
 
 Run `cplat` one call per Bash invocation. Read `cplat`'s output whole, never through `grep`, `head` or `tail`, because its last lines carry the decisions and fixes; use `--json` where offered.
 

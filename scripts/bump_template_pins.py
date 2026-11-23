@@ -61,6 +61,10 @@ UPDATERS: dict[str, dict] = {
         # minor/patch within the major (dotnet list package --highest-minor); the Jinja-free PackageVersion lines map back
         "commands": [["dotnet", "restore"], [sys.executable, str(ROOT / "scripts" / "dotnet_bump_minor.py")]],
     },
+    "library-dotnet": {           # spec 221: the service's tooling, the same Directory.Packages.props mapping
+        "files": ["Directory.Packages.props"],
+        "commands": [["dotnet", "restore"], [sys.executable, str(ROOT / "scripts" / "dotnet_bump_minor.py")]],
+    },
     "service-go": {
         "files": ["go.mod", "go.sum"],
         "atomic": True,           # go.mod and go.sum belong together: apply both or neither

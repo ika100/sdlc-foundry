@@ -1,0 +1,13 @@
+namespace {{ namespace }}.Tests;
+
+public class GreetingsTests
+{
+    [Fact]
+    public void GreetsByName() => Assert.Equal("Hello, Ada!", Greetings.Greet(" Ada "));
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void GreetsTheWorldWithoutAName(string? name) => Assert.Equal("Hello, world!", Greetings.Greet(name));
+}

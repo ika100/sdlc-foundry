@@ -185,7 +185,7 @@ def test_the_harness_fix_uses_the_red_check_and_the_tightening_record_ac_205_7()
     assert points_to(BUILD_REL, "references/build-tighten.md")
     tighten = (ROOT / TIGHTEN_REL).read_text()
     assert RED_CHECK.search(tighten)                                             # interface: the check that finds a test error
-    assert "cplat spec test-diff $RED --tighten" in tighten and "--reason" in tighten   # interface: the existing record command
+    assert "cplat spec test-diff --tighten" in tighten and "--reason" in tighten   # interface: the existing record command
     assert "tester" in tighten and "2.5" in build_text()
 
 

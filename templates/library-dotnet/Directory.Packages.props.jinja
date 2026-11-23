@@ -1,0 +1,14 @@
+<Project>
+  <!-- Central package versions: a project references a package without a version, the version lives here. -->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <!-- A PackageVersion of a transitive package pins it too (how `devbox run deps-bump` patches a transitive finding). -->
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.12.0" />
+    <PackageVersion Include="xunit.v3.mtp-off" Version="4.0.3" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.1" />
+    <PackageVersion Include="coverlet.msbuild" Version="10.1.1" />
+  </ItemGroup>
+</Project>

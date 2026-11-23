@@ -4,10 +4,12 @@
 can be code: open the PR, wait for its checks, merge only when all of them passed, wait until `dev` runs the merge.
 It needs no branch protection or auto-merge, so it works for private repos on GitHub Free.
 
-  cplat component ship start <spec> [--no-merge|--merge] [--detach] [--context C] [--system-dir DIR] [--budget KEY=VALUE]   begin or resume; prints the state, the budget and the next step
+  cplat component ship start <spec> [--no-merge|--merge] [--detach] [--context C] [--system-dir DIR] [--budget KEY=VALUE] [--unit UNIT]   begin or resume; prints the state, the budget and the next step
+                                         (--unit: a unit session's start; first the shape, last the unit line and its briefing, spec 211)
                                          (--system-dir: /system:ship only, links the run to a system ship, spec 097)
   cplat component ship status [--json]             the state of the current run
-  cplat component ship unit [--json]               in a unit session ($CPLAT_UNIT): is the unit at its checkpoint (spec 131)
+  cplat component ship unit [--json]               in a unit session ($CPLAT_UNIT): the shape, where the run stands, is the unit
+                                         at its checkpoint, and its briefing (specs 131, 211)
   cplat component ship phase <phase>               record progress (plan, build, pr, land, deploy, done)
   cplat component ship pr --title T --body-file F [--no-spec]   check the title and the spec rule, run `devbox run ci`, push and open (or reuse) its PR
   cplat component ship gitops prepare <task>       a checkout of a gitops task's repo on spec/<spec>-<task> (spec 076)
@@ -2278,20 +2280,62 @@ def refresh_units(repo: Path) -> None:
         pass
 
 
+def _unit_tail(repo: Path, unit: str, command: str, data: dict | None) -> dict:
+    """Spec 211: the unit's checkpoint, next open unit and briefing (or why there is none)."""
+    import briefing
+    if data is None:
+        commit, why, nxt = None, "no units file", None
+        lines = [f"unit {unit}: open: no units file"]
+    else:
+        commit, why = units._evaluate(repo, data.get("command", "ship"), data["spec"], unit)
+        nxt = units.next_open(data)
+        lines = [f"unit {unit}: done at {commit[:7]}" if commit else f"unit {unit}: open: {why}", f"next unit: {nxt or 'none'}"]
+    try:
+        text, reason = briefing.build(unit, command), None
+    except briefing.BriefingUnavailable as e:
+        text, reason = None, e.reason
+    return {"lines": lines, "commit": commit, "why": why, "next": nxt, "briefing": text, "reason": reason}
+
+
+def _print_unit(repo: Path, unit: str, head: list[str], tail: dict) -> None:
+    """Print the parts of a unit start in their order, then set the unit-start marker."""
+    text, reason = tail["briefing"], tail["reason"]
+    last = text.rstrip("\n") if text is not None else \
+        f"briefing unavailable: {reason}; read the build instructions and the unit-mode reference in full"
+    print("\n".join([*head, *tail["lines"], "", last]))
+    runs.unit_started(repo, unit)
+
+
 def unit_command(repo: Path, as_json: bool) -> int:
-    """`ship unit`: has the session's own unit ($CPLAT_UNIT) reached its checkpoint (spec 131)."""
+    """`ship unit`: the shape, where the run stands, whether the session's own unit ($CPLAT_UNIT) reached its checkpoint,
+    and its briefing (specs 131, 211). Read-only apart from the unit-start marker."""
+    import briefing
+    import shapecmd
     unit = os.environ.get("CPLAT_UNIT")
     if not unit:
         print("not a unit session")
         return 2
     data = units._read(repo)
-    if data is None:
-        print(f"unit {unit}: open: no units file")
+    st = load_state(repo)
+    command = data.get("command", "ship") if data else ("ship" if st else "build")
+    try:
+        briefing.kind(unit, command)
+    except briefing.UnknownUnit as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 2
+    shape = shapecmd.route(repo)
+    tail = _unit_tail(repo, unit, command, data)
+    if as_json:
+        print(json.dumps({"unit": unit, "done": bool(tail["commit"]), "commit": tail["commit"], "missing": tail["why"] or None,
+                          "shape": shape, "next_unit": tail["next"], "briefing": tail["briefing"],
+                          "briefing_unavailable": tail["reason"]}))
+        runs.unit_started(repo, unit)
         return 0
-    spec_id, command = data["spec"], data.get("command", "ship")
-    commit, why = units._evaluate(repo, command, spec_id, unit)
-    line = f"unit {unit}: done at {commit[:7]}" if commit else f"unit {unit}: open: {why}"
-    print(json.dumps({"unit": unit, "done": bool(commit), "commit": commit, "missing": why or None}) if as_json else line)
+    status: list[str] = []
+    if data is not None:
+        status = (describe(st, repo).splitlines() if st and st.get("spec") == data["spec"]
+                  else [f"build {data['spec']}:", *units.describe_lines(repo)])
+    _print_unit(repo, unit, ["shape: " + json.dumps(shape), *status], tail)
     return 0
 
 
@@ -2349,19 +2393,34 @@ def unit_rules(unit: str) -> list[str]:
 
 def start_plain(repo: Path, ns: argparse.Namespace) -> int:
     """`ship start` without the hand-off: begin or resume the run in this session."""
-    print(shape_line(repo))
+    import briefing
+    unit = getattr(ns, "unit", None)
+    if not unit and (env := os.environ.get("CPLAT_UNIT")):   # #869: $CPLAT_UNIT is the default; one that names no unit is ignored
+        try:
+            briefing.kind(env, "ship")
+            unit = env
+        except briefing.UnknownUnit:
+            unit = None
+    if unit:                                   # spec 211: validate before anything changes; the shape line comes first
+        import shapecmd
+        try:
+            briefing.kind(unit, "ship")
+        except briefing.UnknownUnit as e:
+            print(f"ERROR: {e}", file=sys.stderr)
+            return 2
+        print("shape: " + json.dumps(shapecmd.route(repo)), flush=True)
+    else:
+        print(shape_line(repo))                # #869: no `cplat shape` call before `ship start`
     st = start(repo, ns.spec, merge_flag(ns), ns.take_over, Path(ns.system_dir).resolve() if ns.system_dir else None, ns.budget)
     if st["phase"] in ("plan", "build", "pr"):
         say(on_branch(repo, st["branch"]))
-    print(describe(st))
+    print(describe(st, repo if unit else None))
     if again := resume_lines(repo, st):     # #856: right where the resumed session starts
         print("\n".join(again))
     if line := budget.limits_line(st.get("run_id")):
         print(line)
-    if unit := (ns.unit or os.environ.get("CPLAT_UNIT")):
-        print("\n".join(unit_rules(unit)))
-        if os.environ.get("CPLAT_UNIT"):
-            unit_command(repo, False)
+    if unit:                                   # the briefing carries the unit's rules from unit-mode.md (spec 211)
+        _print_unit(repo, unit, [], _unit_tail(repo, unit, "ship", units._read(repo)))
     return 0
 
 
@@ -2376,7 +2435,8 @@ def main(argv: list[str]) -> int:
     g.add_argument("--merge", action="store_true", help="merge after green CI again, on a run started with --no-merge")
     p.add_argument("--take-over", action="store_true", help="move a claim on a tracked issue to this run (spec 082)")
     p.add_argument("--detach", action="store_true", help="hand the run to its own `cplat headless` process (spec 200)")
-    p.add_argument("--unit", default=None, help="the unit this session runs (default $CPLAT_UNIT): also print its rules and state (#869)")
+    p.add_argument("--unit", default=None, help="the unit this session runs (default $CPLAT_UNIT): print the shape, where the run "
+                   "stands and the unit's briefing (spec 211)")
     p.add_argument("--full", action="store_true", help="pass --full to the headless ship (with --detach; no effect without)")
     p.add_argument("--answer", default=None, help="with --detach: the answer the headless session gets to the escalated question")
     p.add_argument("--context", default=None, help="with --detach: the kube context the headless run's deploy uses (spec 203)")
@@ -2446,6 +2506,9 @@ def main(argv: list[str]) -> int:
             return 2
         if ns.context is not None and not ns.detach:
             print("ERROR: --context needs --detach", file=sys.stderr)
+            return 2
+        if ns.unit and ns.detach:
+            print("ERROR: --unit cannot be combined with --detach", file=sys.stderr)
             return 2
         if ns.detach:
             import ship_handoff
