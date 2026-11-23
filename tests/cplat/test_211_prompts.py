@@ -52,10 +52,14 @@ def test_no_prompt_tells_a_unit_session_to_run_shape_first_ac_211_6():  # AC-211
 
 
 def test_no_prompt_tells_a_unit_session_to_read_the_instructions_first_ac_211_6():  # AC-211.6
+    """Every sentence of ship.md and build.md that says to read build.md or unit-mode.md, `--unit` or not (a unit of a ship follows
+    ship.md's Phase `build`), has to name the unit session as the exception: the briefing replaces that reading (design section 7)."""
     for path in (SHIP, BUILD):
-        for sentence in unit_sentences(path):
-            reads = re.search(r"\bread\b", sentence) and re.search(r"(commands/build|references/unit-mode)\.md", sentence)
-            assert not reads or re.search(NEGATION, sentence), (path.name, sentence)
+        for sentence in re.split(r"[.;]\s+", path.read_text()):
+            reads = re.search(r"\bread\b", sentence, re.I) and re.search(r"(commands/build|references/unit-mode)\.md", sentence)
+            if reads:
+                assert re.search(r"\bunit\b", sentence) and re.search(NEGATION + r"|\b(except|unless|skip)", sentence), (
+                    path.name, sentence)
 
 
 def test_the_unit_mode_reference_is_still_the_source_both_prompts_name_ac_211_6():  # AC-211.6

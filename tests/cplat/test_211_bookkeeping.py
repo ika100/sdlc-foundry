@@ -88,6 +88,24 @@ def test_a_red_ci_records_only_the_stage_and_keeps_its_exit_code_ac_211_7(ci_rep
     assert (record(rid).get("gates") or {}).get("security") in (None, "not run") and stage_result(rid, "ci") == "failed"
 
 
+def test_a_red_ci_with_exit_code_2_records_the_stage_and_keeps_the_code_ac_211_7(ci_repo, capsys, monkeypatch):  # AC-211.7
+    rid = begin_build(ci_repo)
+    monkeypatch.setenv("FAKE_RC", "2")                                  # a real red CI can exit 2 (a pytest usage error)
+    capsys.readouterr()
+    assert quiet.main(["ci"]) == 2
+    assert f"recorded for build run {rid}: budget stage ci failed" in capsys.readouterr().out.splitlines()
+    assert stage_result(rid, "ci") == "failed"
+
+
+def test_quiets_own_refusals_record_nothing_ac_211_7(ci_repo, capsys):  # AC-211.7
+    rid = begin_build(ci_repo)
+    (ci_repo / "devbox.json").write_text(json.dumps({"shell": {"scripts": {"test-fast": "y"}}}))     # no `ci` script
+    assert quiet.main(["ci"]) == 2                                      # unknown script: refused before anything ran
+    assert quiet.main(["ci", "nonsense", "--bad"]) == 2                 # bad usage
+    assert "recorded for build run" not in capsys.readouterr().out
+    assert stage_result(rid, "ci") is None and not (record(rid).get("gates") or {}).get("security")
+
+
 def test_the_raw_form_records_too_ac_211_7(ci_repo, capsys):  # AC-211.7
     rid = begin_build(ci_repo)
     assert quiet.main(["--raw", "ci"]) == 0
