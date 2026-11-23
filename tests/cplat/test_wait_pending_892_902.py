@@ -1,7 +1,8 @@
 """#892 and #902: two false RED results of `cplat system wait`.
 
 #892: a pod of the new version in ImagePullBackOff on a tag that does not exist yet waits while the component's CI run on main is
-queued or running (it builds that tag), and fails fast as before when no run builds it or the run failed.
+queued or running (it builds that tag), and fails fast as before when no run builds it or the run failed. #1013: also when the
+not-found pull error is not the pod's last event.
 #902: a database Degraded only because WAL archiving to its in-cluster backup bucket fails waits while that bucket is not Ready and
 for a short window after, then it is RED as before.
 
@@ -16,7 +17,7 @@ import pytest
 
 import envwait
 from test_143_envwait import World, app, block, git
-from test_867_pod_failfast import events, stuck
+from test_867_pod_failfast import PULL_EVENT, events, stuck
 from test_runs import clock, mem, store, stored  # noqa: F401  (fixtures)
 
 
@@ -104,6 +105,34 @@ def test_a_pull_error_other_than_a_missing_tag_does_not_ask_github(w):
     ci = CI(w, [(0, RUNNING)])
     rc, _, _, _ = w.wait("--env", "dev", "--timeout", "900")
     assert rc == 1 and not ci.calls
+
+
+# #1013: the kubelet's events for a missing tag, newest last: the not-found pull error is followed by generic ones
+BACK_OFF = events(PULL_EVENT, "Error: ErrImagePull", "Error: ImagePullBackOff")
+
+
+def test_a_missing_tag_waits_while_ci_builds_it_when_a_generic_event_is_the_last(w):
+    fake = stuck(w, "ImagePullBackOff", evs=BACK_OFF)
+    ci = CI(w, [(0, RUNNING), (1300, PASSED)])
+    real = fake.__call__
+
+    def pulled(args, context=None, check=False):
+        if "pods" in args and w.t["now"] >= 1320:
+            fake.pods = []
+        return real(args, context, check)
+    w.mp.setattr("envwait.kubectl", pulled)
+    w.argo.polls = w.argo.polls * 33 + [w.ready()]
+    rc, out, _, _ = w.wait("--env", "dev", "--timeout", "900")
+    assert rc == 0 and not any(ln.startswith("RED:") for ln in out) and ci.calls
+
+
+def test_a_missing_tag_under_a_generic_last_event_still_fails_fast_without_a_run(w):
+    stuck(w, "ImagePullBackOff", evs=BACK_OFF)
+    CI(w, [(0, None)])
+    rc, out, _, _ = w.wait("--env", "dev", "--timeout", "900")
+    assert rc == 1 and 60 < w.t["slept"] <= 80
+    (red,) = block(out, "RED:")
+    assert "the image tag does not exist in the registry" in red and "last event: Error: ImagePullBackOff" in red
 
 
 # ---------------- #902 ----------------
