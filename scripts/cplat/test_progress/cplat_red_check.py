@@ -74,6 +74,7 @@ def _describe(excinfo) -> dict:
         "message": str(exc),
         "module": module,
         "module_file": _module_file(module),
+        "top_file": _module_file(module.split(".", 1)[0]) if module else None,
         "frames": frames,
     }
 
