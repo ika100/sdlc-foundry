@@ -346,3 +346,25 @@ def test_ci_runs_the_whole_suite_without_recording_ac_212_7():
     pytest_lines = [line for line in ci.splitlines() if "pytest tests/cplat" in line]
     assert pytest_lines
     assert all("--deps-record" not in line and "test-fast" not in line for line in pytest_lines)
+
+
+def test_a_map_that_vanishes_during_the_prune_is_skipped_988(tmp_path, monkeypatch):  # #988
+    """Two recordings at once: the other one replaced or pruned a map between this prune's listing and its stat. The prune goes
+    on (an error here left this run's .trace directory behind), and a failed write leaves no temp file."""
+    import depsmap
+    for i in range(7):
+        (tmp_path / f"m{i}.json").write_text("{}")
+        os.utime(tmp_path / f"m{i}.json", (1000 + i, 1000 + i))
+    real_stat, gone = Path.stat, tmp_path / "m6.json"
+
+    def stat(self, *a, **k):
+        if self == gone:
+            raise FileNotFoundError(self)
+        return real_stat(self, *a, **k)
+    monkeypatch.setattr(Path, "stat", stat)
+    depsmap.prune(tmp_path)
+    assert sorted(p.name for p in tmp_path.glob("*.json")) == ["m1.json", "m2.json", "m3.json", "m4.json", "m5.json", "m6.json"]   # m6 was skipped, m0 pruned
+    monkeypatch.setattr(depsmap.os, "replace", lambda *a: (_ for _ in ()).throw(OSError("disk full")))
+    with pytest.raises(OSError):
+        depsmap.write_map(tmp_path / "new.json", {"tests": {}})
+    assert not list(tmp_path.glob("*.tmp"))

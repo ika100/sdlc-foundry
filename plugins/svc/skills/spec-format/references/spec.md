@@ -13,6 +13,7 @@ tracks: [42]                       # optional: GitHub issues this spec answers
 parent: acme/shop-gitops:012-checkout   # optional: the system spec this component's spec is a slice of
 environments: [dev]                # optional: promotion refuses other environments
 explored: true                     # optional: set by `cplat spec new --explored`, never by hand, because it records a real exploration
+ux: needed                         # optional, website specs: needed | none; without it, criteria naming a visible element mean needed (spec 219)
 ---
 
 # 007 — Price alerts

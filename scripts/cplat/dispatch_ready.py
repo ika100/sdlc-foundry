@@ -157,7 +157,7 @@ def _own_runs(units: list[dict], runs: list[dict]) -> set[str]:
     return own
 
 
-def _claimed(c: Candidate, snap: Snapshot, units: list[dict], slug: str | None) -> str | None:
+def _claimed(c: Candidate, snap: Snapshot, units: list[dict], slug: str | None, history: list[dict] = ()) -> str | None:
     branch = _branch(c)
     for row in _issue_rows(c, snap):
         who, by_dispatch = claim.holder_by(row)
@@ -168,7 +168,8 @@ def _claimed(c: Candidate, snap: Snapshot, units: list[dict], slug: str | None) 
             return f"#{row['number']} is labelled {claim.LABEL} without a claim comment"
         if not (by_dispatch and who == branch):
             return f"#{row['number']} is claimed for {who}" + ("" if by_dispatch else " by a session")
-    own = _own_runs(units, snap.runs)
+    # #857: a worktree's unit file holds only its latest unit; an ended unit's run (and a child run it left open) is in history
+    own = _own_runs([*units, *(h for h in history if _key_of(h) == c.key)], snap.runs)
     issues = set(_issue_numbers(c))
     for r in snap.runs:
         if r.get("run_id") in own:
@@ -303,7 +304,7 @@ def judge(cands: list[Candidate], snap: Snapshot, state: dict, units: list[dict]
         if hold := _spec_hold(c, state, snap, units):
             out.append(_held(v, *hold))
             continue
-        if detail := _claimed(c, snap, units, slug):
+        if detail := _claimed(c, snap, units, slug, state.get("history") or []):
             out.append(_held(v, "claimed", detail))
             continue
         if detail := _blocked(c, snap):

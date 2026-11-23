@@ -64,15 +64,19 @@ class Detached:
 class FakeTime:
     """Seams `clock` (a datetime) and `sleep`; a sleep moves the clock and calls `on_sleep(n, now)`."""
 
-    def __init__(self, on_sleep=None):
+    def __init__(self, on_sleep=None, guard_polls=True):
         self.now = dt.datetime(2026, 11, 15, 10, 0, 0)
         self.sleeps = []
         self.on_sleep = on_sleep
+        self.guard_polls = guard_polls   # False: the guard's look at a still running session is no sleep of the run (as #939)
 
     def clock(self):
         return self.now
 
     def sleep(self, seconds):
+        import headless
+        if not self.guard_polls and seconds == headless.GUARD_POLL:
+            return
         self.sleeps.append(seconds)
         self.now += dt.timedelta(seconds=seconds)
         if self.on_sleep:
