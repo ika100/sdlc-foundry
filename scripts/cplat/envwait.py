@@ -13,10 +13,14 @@ Every wait asks Argo CD for a hard refresh of each app not yet at the revision w
 InvalidImageName or CrashLoopBackOff longer than 60 s is RED at once, naming pod, reason, image and the last event (#867), except an
 image tag not in the registry while the component's CI run on main is queued or running (#892: it builds that image; one
 `gh run list`, asked again at most once a minute while it runs, and 5 more minutes for the kubelet's pull back-off after it passed).
+The pods of an external Helm entry's child Application (`<svc>-<env>-chart`) are read in that child's destination namespace (#883).
 The pods of a database or other add-on app (pods named after one of its resources: a CloudNativePG cluster's instance and initdb
 pods, a bucket's pods) in one of those states longer than 60 s are named on the app's progress line (#925): a missing tag or
 manifest (or an invalid image name) is RED as for a component; a pull failing on the network reads "image pull failing: <cause>"
 and keeps waiting, as does a crash loop. Each poll lists a namespace's pods once.
+Before a registry "not found" is RED, the wait asks the registry for the image itself (anonymous OCI manifest request, at most once a
+minute per image, #1003): an image that resolves, or a registry this host cannot reach either, is a transient pull failure and waits
+for the kubelet's retry; only an image the registry does not have (or cannot be asked about anonymously) is RED.
 A database Degraded only because WAL archiving to its in-cluster backup bucket fails waits while that bucket is not Ready and for
 5 minutes after the archiving failure began or the bucket became Ready (#902), then it is RED as before. A context that is not the system's
 cluster, a cluster that does not answer, or no Argo CD exits 1 at once.
@@ -31,6 +35,9 @@ import re
 import shlex
 import subprocess
 import time
+import urllib.error
+import urllib.parse
+import urllib.request
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -67,6 +74,11 @@ BUILDING = ("queued", "in_progress", "waiting", "pending", "requested")
 ARCHIVE_GRACE = 300.0
 ARCHIVE_FAILURE = re.compile(r"barman-cloud|exit status|could not connect|endpoint|connection|timed? ?out", re.I)
 NOT_IN_REGISTRY = re.compile(r"manifest unknown|not found", re.I)
+# #1003: during a network drop the registry answered "not found" for a correct pin; the wait asks the registry itself first.
+REGISTRY_RECHECK = 60.0
+MANIFESTS = ", ".join(["application/vnd.oci.image.index.v1+json", "application/vnd.oci.image.manifest.v1+json",
+                       "application/vnd.docker.distribution.manifest.list.v2+json",
+                       "application/vnd.docker.distribution.manifest.v2+json"])
 NO_ARGO = re.compile(r"doesn't have a resource type|the server could not find the requested resource|namespaces? \"?argocd\"? not found",
                      re.I)
 # A ComparisonError whose cause is the network (#506): Argo CD could not reach the repo and retries by itself, so the wait keeps
@@ -74,6 +86,53 @@ NO_ARGO = re.compile(r"doesn't have a resource type|the server could not find th
 NETWORK = re.compile(r"i/o timeout|connection (?:reset|refused|timed out)|TLS handshake timeout|context deadline exceeded"
                      r"|temporary failure in name resolution|server misbehaving|lookup \S+ on \S+: no such host|network is unreachable"
                      r"|no route to host|unexpected EOF", re.I)
+
+
+def _reference(image: str) -> tuple[str, str, str]:
+    """(registry host, repository, tag or digest) of an image reference; Docker Hub's short names as the kubelet reads them."""
+    name, _, digest = image.partition("@")
+    first, _, rest = name.partition("/")
+    if rest and ("." in first or ":" in first or first == "localhost"):
+        host, path = first, rest
+    else:
+        host, path = "registry-1.docker.io", name if rest else f"library/{name}"
+    path, _, tag = path.rpartition(":") if ":" in path.rsplit("/", 1)[-1] else (path, "", "latest")
+    return ("registry-1.docker.io" if host == "docker.io" else host), path, digest or tag
+
+
+def resolves(image: str) -> str | None:  # tests replace this
+    """#1003: "found" or "missing" for an image the registry answers about without credentials (its anonymous token flow),
+    "unreachable" when this host cannot reach the registry, None when it cannot tell (private image, an unexpected answer)."""
+    host, path, ref = _reference(image)
+    url, token = f"https://{host}/v2/{path}/manifests/{ref}", None
+    for _ in range(2):
+        headers = {"Accept": MANIFESTS, **({"Authorization": f"Bearer {token}"} if token else {})}
+        try:
+            with urllib.request.urlopen(urllib.request.Request(url, method="HEAD", headers=headers), timeout=10):
+                return "found"
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                return "missing"
+            challenge = e.headers.get("WWW-Authenticate") or ""
+            if e.code != 401 or token or not challenge.lower().startswith("bearer "):
+                return None
+            fields = dict(re.findall(r'(\w+)="([^"]*)"', challenge))
+            if not fields.get("realm"):
+                return None
+            query = "&".join(f"{k}={urllib.parse.quote(fields[k], safe='')}" for k in ("service", "scope") if fields.get(k))
+            try:
+                with urllib.request.urlopen(fields["realm"] + ("?" + query if query else ""), timeout=10) as r:
+                    answer = json.loads(r.read() or b"{}")
+            except (urllib.error.HTTPError, ValueError):
+                return None
+            except (urllib.error.URLError, OSError):
+                return "unreachable"
+            token = answer.get("token") or answer.get("access_token")
+            if not token:
+                return None
+        except (urllib.error.URLError, OSError):
+            return "unreachable"
+    return None
 
 
 def kubectl(args: list[str], context: str | None = None, check: bool = False) -> subprocess.CompletedProcess:  # tests replace this
@@ -218,11 +277,15 @@ def list_apps(ctx: str) -> dict[str, dict]:
         raise PlatformError(f"cannot read the Argo CD applications of context {ctx}: {e}") from None
 
 
-def resolve_context(repo: Path, explicit: str | None, known: set[str], what: str) -> tuple[str, dict[str, dict]]:
-    """(context, its applications). Without --context the configured or current context must hold one of `known`."""
+def resolve_context(repo: Path, explicit: str | None, known: set[str], what: str,
+                    own: tuple[str, str] | None = None) -> tuple[str, dict[str, dict]]:
+    """(context, its applications). Without --context the configured context, else `own` (the context, source of the
+    environment's cluster), else the current context, which must hold one of `known`."""
     ctx, source = explicit, "--context"
     if not ctx:
         ctx, source = settings.kube_context(repo)
+    if not ctx and own:
+        ctx, source = own                         # #987: the environment's cluster, not whatever context is current
     if not ctx:
         p = kubectl(["config", "current-context"])
         ctx, source = (p.stdout.strip() if p.returncode == 0 else ""), "the current context"
@@ -276,6 +339,15 @@ class Pins:
         return self.cache[key] or t.tag
 
 
+def _retry_note(op: dict) -> str:
+    """Why a sync that Argo CD retries has not landed (#849): the last failure and the retry count, or ''."""
+    retries = op.get("retryCount")
+    retries = retries if isinstance(retries, int) else 0
+    if op.get("phase") != "Running" or not (retries or op.get("message")):
+        return ""
+    return f" (last sync failed: {op.get('message') or 'no message'}; Argo CD retries" + (f", attempt {retries}" if retries else "") + ")"
+
+
 def judge(t: Target, st: dict | None, wanted: str, at, ctx: str, pins=None, archive=None) -> tuple[str, str, str]:
     """(kind: reached | behind | retrying | red, the progress line, what it waits for or why it is red). `retrying` is a
     ComparisonError with a network cause (#506): it waits like `behind` and turns RED at the timeout. `archive(t, st)` says why a
@@ -311,9 +383,9 @@ def judge(t: Target, st: dict | None, wanted: str, at, ctx: str, pins=None, arch
             return "behind", line, pending
         return "red", line, "health Degraded" + (f": {health['message']}" if health.get("message") else "")
     if t.component and tag and not _matches(images, tag):
-        return "behind", line, f"waiting for image {waits.tag_short(tag)}, runs {', '.join(images) or 'nothing'}"
+        return "behind", line, f"waiting for image {waits.tag_short(tag)}, runs {', '.join(images) or 'nothing'}" + _retry_note(op)
     if (sync, hstatus) != ("Synced", "Healthy"):
-        return "behind", line, f"{sync}/{hstatus}"
+        return "behind", line, f"{sync}/{hstatus}" + _retry_note(op)
     return "reached", line, ""
 
 
@@ -360,15 +432,24 @@ class PollReads:
 class PodWatch:
     """Whether a pod of the version a wait expects is stuck: a container waiting in one of POD_FAILURES for more than
     POD_FAIL_AFTER seconds (seen during this wait, or since the pod started). `get` runs kubectl with the wait's context,
-    `clock` is the wait's clock. Reads nothing when the app names no namespaced workload; a kubectl error reads as no pods."""
+    `clock` is the wait's clock. Reads nothing when the app names no namespaced workload or child Application; a kubectl error
+    reads as no pods."""
 
     def __init__(self, get, clock):
-        self.get, self.clock, self.first = get, clock, {}
+        self.get, self.clock, self.first, self.asked = get, clock, {}, {}
+
+    def _registry(self, image: str) -> str | None:
+        """#1003: what the registry says about `image` (`resolves`), asked again at most every REGISTRY_RECHECK seconds."""
+        at, answer = self.asked.get(image, (None, None))
+        if at is None or self.clock() - at >= REGISTRY_RECHECK:
+            answer = resolves(image)
+            self.asked[image] = (self.clock(), answer)
+        return answer
 
     def __call__(self, status: dict, wanted, building=None) -> str | None:
         """`building()` (optional) is the state of the CI run that builds the image: "building", "built" (it passed after it was
         seen building) or None (no run builds it, or it failed). A missing image tag is not stuck while it builds (#892)."""
-        for ns in _namespaces(status):
+        for ns in self._spaces(status):
             for pod in self._pods(ns):
                 why = self._stuck(ns, pod, wanted, building)
                 if why:
@@ -394,6 +475,9 @@ class PodWatch:
                     net = NETWORK.search(text)
                     if net:
                         return "waiting", f"image pull failing: {net.group(0)} ({where})"
+                    if (reason in PULLS and seen > POD_FAIL_AFTER and NOT_IN_REGISTRY.search(text)
+                            and self._registry(image) in ("found", "unreachable")):
+                        return "waiting", f"image pull failing: the registry answered not found, but {self._shown_answer(image)} ({where})"
                     if (reason == "InvalidImageName" or NOT_IN_REGISTRY.search(text)) and seen > POD_FAIL_AFTER:
                         return "red", (f"pod {ns}/{name}: {reason} for {int(seen)}s, image {image}"
                                        + (f"; last event: {pulls[-1]}" if pulls else "") + " (the image tag does not exist in the registry)")
@@ -401,6 +485,23 @@ class PodWatch:
                         return "waiting", f"image pull failing: {reason} ({where})"
                     return "waiting", where
         return None
+
+    def _shown_answer(self, image: str) -> str:
+        if self.asked[image][1] == "found":
+            return "the image resolves from this host: waiting for the kubelet's retry"
+        return "this host cannot reach the registry either: waiting for the network"
+
+    def _spaces(self, status: dict) -> list[str]:
+        """The namespaces of the app's workloads and (#883) the destination namespace of each child Application it manages (an
+        external Helm entry's `<svc>-<env>-chart`, one level): the chart's pods run there."""
+        spaces = set(_namespaces(status))
+        for r in status.get("resources") or []:
+            if r.get("kind") == "Application" and r.get("group") == "argoproj.io" and r.get("name"):
+                child = _json(self.get(["-n", r.get("namespace") or "argocd", "get", "application", str(r["name"]), "-o", "json"]))
+                ns = ((child.get("spec") or {}).get("destination") or {}).get("namespace")
+                if ns:
+                    spaces.add(str(ns))
+        return sorted(spaces)
 
     def _pods(self, ns: str) -> list[dict]:
         return [p for p in _json(self.get(["-n", ns, "get", "pods", "-o", "json"])).get("items") or [] if isinstance(p, dict)]
@@ -436,6 +537,8 @@ class PodWatch:
             if reason in PULLS and NOT_IN_REGISTRY.search(event or ""):
                 if building and building() is not None:
                     continue                 # #892: the component's CI run builds that tag (or just pushed it)
+                if self._registry(image) in ("found", "unreachable"):
+                    continue                 # #1003: a transient answer; the kubelet's retry pulls it
                 why += " (the image tag does not exist in the registry)"
             return why
         return None
@@ -659,7 +762,12 @@ def system_wait(repo: Path, ns: argparse.Namespace, command: str) -> tuple[int, 
     wanted = wanted_revision(repo, ns.revision)
     system, targets, every = env_targets(repo, ns.system, wanted, ns.env, ns.components)
     m = model.load_dir(gitops.find_app(repo, ns.system))
-    ctx, items = resolve_context(repo, envcluster.env_context(repo, m, ns.env, ns.context), every, f"system {system}")
+    cluster = envcluster.cluster_of(m, ns.env)
+    mapped = settings.kube_contexts_with_source(repo).get(cluster) if cluster else None
+    own = (mapped[0], f"kube_contexts of cluster {cluster}, {mapped[1]}") if mapped else None
+    # #987: the root app counts as the system's: while it has a ComparisonError its apps are not generated, and the watch refreshes it
+    ctx, items = resolve_context(repo, envcluster.env_context(repo, m, ns.env, ns.context), every | {f"{system}-root"},
+                                 f"system {system}", own)
     return watch(repo, targets, wanted, ctx, items, f"in {ns.env}", command, ns.refresh, ns.timeout, ns.interval, system)
 
 

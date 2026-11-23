@@ -6,6 +6,7 @@ The premise answer of the fake claude is the JSON `{"verdict": "holds"|"resolved
 """
 import re
 
+import dispatch_state
 import runs
 
 from dispatch_world import SLUG, git, world  # noqa: F401  (fixture)
@@ -248,3 +249,19 @@ def test_skip_and_prioritize_write_nothing_to_github_ac_167_5(world):  # AC-167.
     assert world.run("skip", "#1", "--reason", "later").rc == 0
     assert world.gh_writes() == []
     assert git(world.repo, "worktree", "list").count("\n") == 0
+
+
+def test_a_run_left_open_under_an_ended_unit_does_not_claim_the_spec_857(world):  # #857
+    """An escalated unit's child build run stays open; the next unit's file replaced the ended one in the worktree. The run belongs
+    to the dispatcher's own (ended) unit, so after resume the spec is ready, while a session's open run still claims it."""
+    world.policy(sources=["specs"])
+    sid = world.spec(7, "price-alerts")
+    unit_run = runs.start("dispatch", repo=SLUG, spec=sid)
+    runs.start("build", repo=SLUG, spec=sid, parent=unit_run)     # left open when the unit escalated
+    runs.finish(unit_run, "escalated", escalation={"reason": "AC timing unmeasured", "cause": "environment"})
+    [c] = world.plan()["candidates"]
+    assert c["verdict"] == "held" and c["reason"] == "claimed"    # before: no record of the ended unit's run
+    dispatch_state.history_add(SLUG, {"unit": "spec-007.5", "item": sid, "kind": "ship", "outcome": "escalated",
+                                      "ended_at": "2026-11-19T20:10:00", "run_id": unit_run})
+    [c] = world.plan()["candidates"]
+    assert c["verdict"] == "ready", c

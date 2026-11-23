@@ -257,7 +257,17 @@ def _release_lines(out: _Lines, item: dict, head_shown: bool = False) -> None:
 def _unavailable_lines(out: _Lines, state: dict) -> None:
     for u in state.get("unavailable") or []:
         name, hint = _SOURCES.get(u.get("source"), (u.get("source"), None))
-        out.add(f"Could not read {name}; it may be missing {hint}." if hint else f"Could not read {name}.")
+        error, why = str(u.get("error") or ""), ""
+        if error.startswith("no answer within"):      # #859: a slow source is named as slow, not only as missing a login
+            name = f"{name} {error.removeprefix('no answer ')}"
+        elif error:
+            why = f" Error: {_short(error)}"           # #859: any other failure says what failed
+        out.add((f"Could not read {name}; it may be missing {hint}." if hint else f"Could not read {name}.") + why)
+
+
+def _short(text: str, limit: int = 100) -> str:
+    text = " ".join(text.split())
+    return text if len(text) <= limit else text[:limit - 1] + "…"
 
 
 def _tail_lines(out: _Lines, state: dict, also: dict[str, int], later: int, waiting: bool) -> None:

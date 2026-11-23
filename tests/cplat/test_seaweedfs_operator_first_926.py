@@ -10,7 +10,7 @@ import time
 
 import pytest
 
-from credentials_fixtures import FakeKube, addon, bucket_plan, plan_of, run_script
+from credentials_fixtures import FakeKube, addon, bucket_plan, cred, plan_of, run_script
 from resources_fixtures import ENVS, comp, ok, platform_render_module, system
 
 
@@ -38,8 +38,12 @@ def test_the_bucket_plan_waits_for_the_operator_webhook_this_repo_installs(tmp_p
         hook = plan_of(g, addon(env, "files"))["webhook"]
         assert hook == {"host": "seaweedfs-operator-webhook.seaweedfs-operator.svc", "port": 443,
                         "seconds": r.WEBHOOK_WAIT_SECONDS, "settle": r.WEBHOOK_SETTLE_SECONDS}, env
-    # the wait and the settle time fit in the credentials Job's deadline (300 s) with time left to write the Secret
-    assert r.WEBHOOK_WAIT_SECONDS + r.WEBHOOK_SETTLE_SECONDS + 5 * 2 < 300
+    # the wait and the settle time fit in the credentials Job's deadline with time left to write the Secret (#1004)
+    deadline = cred(g, addon("dev", "files"))["credentials-job.yaml"]["spec"]["activeDeadlineSeconds"]
+    assert deadline >= r.WEBHOOK_WAIT_SECONDS + r.WEBHOOK_SETTLE_SECONDS + 5 * 2
+    # the operator's own install took 8 min in journey 27 (#1004): the wait covers it
+    assert r.WEBHOOK_WAIT_SECONDS >= 480
+    assert r.credentials_deadline({}) == 300
 
 
 def test_an_owner_managed_environment_does_not_wait_for_a_webhook_it_does_not_know(tmp_path):

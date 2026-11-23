@@ -156,7 +156,8 @@ def test_a_bucket_renders_the_five_credentials_files_without_a_verify_ac_128_7(t
         ns = NS.format(env)
         docs = cred(g, addon(env, "files"))
         lab = docs["credentials-job.yaml"]["metadata"]["labels"]
-        check_owner_files(g, addon(env, "files"), "shop-files", ns, lab, ["shop-files-app"], ["shop-files-access-key", "shop-files-secret-key"])
+        check_owner_files(g, addon(env, "files"), "shop-files", ns, lab, ["shop-files-app"], ["shop-files-access-key", "shop-files-secret-key"],
+                          deadline=690)   # #1004: a bucket that waits for the SeaweedFS webhook gets room for the 600 s wait
         plan = plan_of(g, addon(env, "files"))
         assert "verify" not in plan
         assert plan["secrets"] == [{"name": "shop-files-app", "labels": {}, "generate": {"accessKeyId": 20, "secretAccessKey": 40},
