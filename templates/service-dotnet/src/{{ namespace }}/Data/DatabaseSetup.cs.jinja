@@ -1,0 +1,98 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Design;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
+
+namespace {{ namespace }}.Data;
+
+/// <summary>Registers the database: the DbContext, the migrations at startup and the readiness checks.</summary>
+public static class DatabaseSetup
+{
+    /// <summary>
+    /// The schema belongs to the migrations in Data/Migrations/. They run once the server listens, so that liveness answers
+    /// while the database starts; the service is ready only after they are applied and while the database answers.
+    /// </summary>
+    public static IServiceCollection AddDatabase(this IServiceCollection services, DatabaseSettings settings)
+    {
+        services.AddDbContext<AppDbContext>(options => options.UseNpgsql(settings.ConnectionString));
+        services.AddSingleton<MigrationState>();
+        services.AddHostedService<DatabaseMigrator>();
+        services.AddHealthChecks()
+            .AddCheck<MigrationState>("migrations", tags: [ServiceApp.ReadyTag])
+            .AddDbContextCheck<AppDbContext>("database", tags: [ServiceApp.ReadyTag]);
+        return services;
+    }
+}
+
+/// <summary>Readiness: unhealthy until the migrations are applied.</summary>
+public sealed class MigrationState : IHealthCheck
+{
+    private volatile bool _applied;
+
+    /// <summary>Marks the migrations as applied.</summary>
+    public void MarkApplied() => _applied = true;
+
+    /// <inheritdoc />
+    public Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default) =>
+        Task.FromResult(_applied ? HealthCheckResult.Healthy() : HealthCheckResult.Unhealthy("migrations not applied yet"));
+}
+
+/// <summary>Applies the pending migrations once the host has started, retrying while the database is still starting.</summary>
+public sealed partial class DatabaseMigrator(IServiceScopeFactory scopes, MigrationState state, IHostApplicationLifetime lifetime,
+    ILogger<DatabaseMigrator> logger) : BackgroundService
+{
+    /// <summary>Attempts before the service gives up and stops.</summary>
+    public int Attempts { get; init; } = 30;
+
+    /// <summary>The pause between two attempts.</summary>
+    public TimeSpan Delay { get; init; } = TimeSpan.FromSeconds(2);
+
+    /// <inheritdoc />
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        await Task.Yield();
+        try
+        {
+            await MigrateWithRetryAsync(stoppingToken);
+            state.MarkApplied();
+        }
+        catch (Exception error) when (error is not OperationCanceledException)
+        {
+            LogMigrationFailed(logger, error);
+            Environment.ExitCode = 1;
+            lifetime.StopApplication();
+        }
+    }
+
+    /// <summary>Migrates, waiting up to <see cref="Attempts"/> × <see cref="Delay"/> for the database.</summary>
+    public async Task MigrateWithRetryAsync(CancellationToken cancellationToken)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                await using var scope = scopes.CreateAsyncScope();
+                await scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.MigrateAsync(cancellationToken);
+                return;
+            }
+            catch (Exception error) when (error is not OperationCanceledException && attempt < Attempts)
+            {
+                LogRetry(logger, attempt, error.Message);
+                await Task.Delay(Delay, cancellationToken);
+            }
+        }
+    }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "database not reachable yet, retrying the migration (attempt {Attempt}): {Error}")]
+    private static partial void LogRetry(ILogger logger, int attempt, string error);
+
+    [LoggerMessage(Level = LogLevel.Critical, Message = "the database migrations failed")]
+    private static partial void LogMigrationFailed(ILogger logger, Exception error);
+}
+
+/// <summary>Lets <c>dotnet ef</c> build the DbContext without starting the service or reaching a database.</summary>
+public sealed class DesignTimeDbContextFactory : IDesignTimeDbContextFactory<AppDbContext>
+{
+    /// <inheritdoc />
+    public AppDbContext CreateDbContext(string[] args) =>
+        new(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(DatabaseSettings.FromEnvironment().ConnectionString).Options);
+}

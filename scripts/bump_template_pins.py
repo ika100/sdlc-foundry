@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Keep the dependency pins inside the Copier templates current (issue #56, idea 2).
 
-Dependabot cannot read `pom.xml.jinja`, `package.json.jinja` or `go.mod.jinja`, so new projects would start with old
+Dependabot cannot read `pom.xml.jinja`, `package.json.jinja`, `go.mod.jinja` or `Directory.Packages.props.jinja`, so new projects would start with old
 versions and receive the update pull requests on day one. This script instead:
 
   1. renders each template with its defaults into a temporary directory,
@@ -55,6 +55,11 @@ UPDATERS: dict[str, dict] = {
     "library-typescript": {
         "files": ["package.json"],
         "commands": [["npx", "--yes", "npm-check-updates", "-u", "--target", "minor"]],
+    },
+    "service-dotnet": {
+        "files": ["Directory.Packages.props"],
+        # minor/patch within the major (dotnet list package --highest-minor); the Jinja-free PackageVersion lines map back
+        "commands": [["dotnet", "restore"], [sys.executable, str(ROOT / "scripts" / "dotnet_bump_minor.py")]],
     },
     "service-go": {
         "files": ["go.mod", "go.sum"],

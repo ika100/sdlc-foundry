@@ -217,7 +217,7 @@ def test_update_keeps_the_web_apps_own_dependencies(tmp_path, new_service):
 
 def test_every_template_protects_its_dependency_manifest():
     expected = {"service-python": "pyproject.toml", "library-python": "pyproject.toml", "service-java": "pom.xml", "service-go": "go.mod", "web-nextjs": "package.json",
-                "service-typescript": "package.json"}
+                "service-typescript": "package.json", "service-dotnet": "Directory.Packages.props"}
     for template, manifest in expected.items():
         assert manifest in update.project_owned_patterns(template), f"{template}: {manifest} would be overwritten by /shared:update-service"
 

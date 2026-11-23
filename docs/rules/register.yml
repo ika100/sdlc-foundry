@@ -3,8 +3,8 @@
 # `cplat platform rules check` validates all of it.
 schema: 1
 baseline:
-  commit: "4c20eaa1792de263d577d1621afc3b24d9ad4de7"
-  prompt_bytes: 390314
+  commit: "4451f0f5ee39f20b192247e932347610d211741a"
+  prompt_bytes: 415271
   history:                       # newest last; written only by `cplat platform rules rebaseline`
     - date: "2026-11-12"
       old: 345859
@@ -71,6 +71,11 @@ baseline:
       new: 390314
       reason: "spec 219 adds the web ux-designer agent (one opus call per UI-changing website spec) and the UX step clauses of plan, build and the reviewer; quick-task and build benchmarks pass"
       benchmark_runs: [20261122T100303Z-90dacb83, 20261122T100451Z-856bca81]
+    - date: "2026-11-23"
+      old: 390314
+      new: 415271
+      reason: "the svc-dotnet plugin's five agents for the service-dotnet shape (spec 218)"
+      benchmark_runs: [20261123T101426Z-644188be, 20261123T101806Z-c78e833a]
 hard:
   acceptance-tests-fixed:
     enforced_by: cplat spec test-diff

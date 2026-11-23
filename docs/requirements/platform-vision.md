@@ -46,6 +46,7 @@ The platform supports the following shapes. New shapes are added per §4.1.
 | `service-go` | `svc-go` | `service-go` | Go 1.22+, stdlib `net/http` + `chi` router | stable (extensibility case study) |
 | `service-typescript` | `svc-ts` | `service-typescript` | Node LTS, pnpm, Fastify, optional Drizzle on PostgreSQL (ADR-124) | stable |
 | `library-typescript` | `svc-ts` | `library-typescript` | Node LTS, pnpm, ESM npm package on GitHub Packages (ADR-125) | stable |
+| `service-dotnet` | `svc-dotnet` | `service-dotnet` | .NET 10 LTS, ASP.NET Core minimal APIs, optional EF Core on PostgreSQL (ADR-127) | stable |
 
 `gitops-app` is distinct from the single platform-wide GitOps repo we already have. The platform-wide repo discovers all `deployable-service` repos via topic. A `gitops-app` repo is system-scoped — it pins which services, which versions, which environments make up one SaaS system. A user with N SaaS systems has N `gitops-app` repos.
 

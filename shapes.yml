@@ -247,6 +247,38 @@ shapes:
     status: stable
     adr: [124, 125]
 
+  - id: service-dotnet
+    plugin: svc-dotnet
+    template: service-dotnet
+    deployable: true
+    test_globs: ["tests/**/*.cs"]   # where `cplat spec trace` looks for AC ids (ADR-026)
+    smoke_tag: 'Trait\(\s*"Category"\s*,\s*"smoke"\s*\)'   # regex: a test file naming a (smoke) criterion must match it (spec 091)
+    ci_checks: ["quality (dotnet format + analyzers)", "test (xunit + coverage)", "security (trivy + detect-secrets)", "ci-extra"]   # required on main by new-service (spec 054)
+    validation:   # spec 103: what `cplat validate` selects and which changes always run the full tests and security
+      selector: null
+      mandatory:
+        api-contract: ["**/openapi*", "**/api/**", "**/Routes/**", "**/Endpoints/**"]
+        migrations: ["**/Data/Migrations/**", "**/Data/AppDbContext.cs"]
+    library: false
+    detection:
+      copier_src: templates/service-dotnet
+      sniff:
+        - "*.csproj or *.sln[x] (root or one level below) + Dockerfile"
+    default_stack:
+      language: csharp
+      runtime: dotnet-lts
+      framework: aspnetcore-minimal-api
+    runtime:
+      port: 8080
+      probes: {liveness: /health, readiness: /ready}
+      metrics: /metrics   # Prometheus endpoint scraped by the observability addon's collector
+      user: 65532
+      volumes: {tmp: /tmp}
+      env: {LOG_LEVEL: INFO}
+      resources: {requests: {cpu: 50m, memory: 128Mi}, limits: {cpu: 500m, memory: 512Mi}}
+    status: stable
+    adr: [127]
+
   - id: platform
     plugin: svc
     template: null          # no template: the platform repo is never created, adopted, updated or rolled out from one (ADR-056)

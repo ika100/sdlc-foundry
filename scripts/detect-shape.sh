@@ -27,6 +27,7 @@ if [ -f "$answers" ]; then
     */templates/service-go|templates/service-go)         echo service-go; exit 0 ;;
     */templates/service-typescript|templates/service-typescript) echo service-typescript; exit 0 ;;
     */templates/library-typescript|templates/library-typescript) echo library-typescript; exit 0 ;;
+    */templates/service-dotnet|templates/service-dotnet) echo service-dotnet; exit 0 ;;
   esac
 fi
 
@@ -48,6 +49,11 @@ gradle=(build.gradle*)
 if [ -f pom.xml ] || [ ${#gradle[@]} -gt 0 ]; then echo service-java; exit 0; fi
 
 if [ -f go.mod ]; then echo service-go; exit 0; fi
+
+# a .NET service: a solution or project at the root or one level below (src/<Name>/<Name>.csproj sits two levels down,
+# next to the root's .slnx) and a Dockerfile
+dotnet=(*.sln *.slnx *.csproj */*.csproj)
+if [ ${#dotnet[@]} -gt 0 ] && [ -f Dockerfile ]; then echo service-dotnet; exit 0; fi
 
 if [ -f pyproject.toml ]; then
   if [ -f Dockerfile ]; then echo service-python; else echo library-python; fi

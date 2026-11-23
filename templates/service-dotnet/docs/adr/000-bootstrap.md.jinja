@@ -1,0 +1,29 @@
+# ADR-000: Bootstrap
+
+## Status
+
+Accepted on bootstrap.
+
+## Context
+
+`{{ project_name }}` was created from the `service-dotnet` Copier template at `ika100/sdlc-foundry`. The template encodes the platform's .NET service conventions (platform ADR-127):
+
+- .NET {{ dotnet_major }} LTS SDK via devbox; C# with nullable reference types, central package versions and lock files
+- ASP.NET Core minimal APIs on Kestrel, JSON log lines on stdout{% if needs_observability %}, prometheus-net metrics on `/metrics`, OpenTelemetry tracing (OTLP when `OTEL_EXPORTER_OTLP_ENDPOINT` is set){% endif %}
+{%- if needs_database %}
+- PostgreSQL through EF Core and Npgsql; migrations in `src/{{ namespace }}/Data/Migrations/` (dotnet-ef), applied at startup; Testcontainers tests
+{%- endif %}
+- `dotnet format` + the .NET analyzers (warnings are errors) as the quality gate; trivy for the locked packages
+- xUnit with an 80 % line coverage gate (coverlet); smoke tests of category `smoke`
+- Chiseled .NET image, numeric non-root user → `{{ docker_registry }}/{{ project_name }}`
+- No Kubernetes manifests here: the system's gitops-app repo owns them (platform ADR-017); this repo ships a container image
+- GitHub topic `deployable-service` for ArgoCD discovery
+- Claude Code agents from the `sdlc-foundry` marketplace (`svc-dotnet` + `svc` + `shared`)
+
+## Decision
+
+We adopt the platform conventions verbatim. Any deviation must be justified in a new ADR.
+
+## Consequences
+
+Skeleton updates (CI, devbox recipes, Dockerfile, .NET bump, build and analyzer settings) arrive through `copier update`; `src/`, `tests/`, `Directory.Packages.props`, the solution and `docs/adr/` are project-owned and never overwritten.

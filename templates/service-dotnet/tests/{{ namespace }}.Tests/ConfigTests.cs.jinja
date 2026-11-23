@@ -1,0 +1,46 @@
+namespace {{ namespace }}.Tests;
+
+public sealed class ConfigTests
+{
+    [Fact]
+    public void Defaults_apply_without_variables()
+    {
+        var config = AppConfig.FromEnvironment(new Dictionary<string, string?>());
+
+        Assert.Equal({{ port }}, config.Port);
+        Assert.Equal(LogLevel.Information, config.LogLevel);
+        Assert.Equal("{{ project_name }}", config.ServiceName);
+    }
+
+    [Fact]
+    public void Variables_override_the_defaults()
+    {
+        var config = AppConfig.FromEnvironment(new Dictionary<string, string?>
+        {
+            ["PORT"] = "9090",
+            ["LOG_LEVEL"] = "debug",
+            ["OTEL_SERVICE_NAME"] = "svc",
+        });
+
+        Assert.Equal(new AppConfig(9090, LogLevel.Debug, "svc"), config);
+    }
+
+    [Theory]
+    [InlineData("0")]
+    [InlineData("70000")]
+    [InlineData("http")]
+    public void An_invalid_port_falls_back_to_the_default(string port) =>
+        Assert.Equal({{ port }}, AppConfig.FromEnvironment(new Dictionary<string, string?> { ["PORT"] = port }).Port);
+
+    [Theory]
+    [InlineData("TRACE", LogLevel.Trace)]
+    [InlineData("Debug", LogLevel.Debug)]
+    [InlineData("info", LogLevel.Information)]
+    [InlineData("WARN", LogLevel.Warning)]
+    [InlineData("error", LogLevel.Error)]
+    [InlineData("FATAL", LogLevel.Critical)]
+    [InlineData("loud", LogLevel.Information)]
+    [InlineData(null, LogLevel.Information)]
+    public void Log_level_accepts_any_case_and_falls_back_to_info(string? value, LogLevel expected) =>
+        Assert.Equal(expected, AppConfig.ParseLogLevel(value));
+}
