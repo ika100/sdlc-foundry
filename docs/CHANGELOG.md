@@ -6,6 +6,40 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+## [5.29.1] - 2026-11-23
+
+### Fixed
+
+**A registry "not found" for a pinned image that exists no longer stops the deploy wait (#1003).** During a network drop ghcr.io answered "not found" for the correctly pinned Postgres image, `cplat system wait` was RED with "the image tag does not exist in the registry", and the system ship stopped on a stale-pin diagnosis while the kubelet's retry pulled the image minutes later. Before that RED the wait now asks the registry itself (an anonymous OCI manifest request, at most once a minute per image): an image that resolves reads "the registry answered not found, but the image resolves from this host: waiting for the kubelet's retry", a registry this host cannot reach either waits for the network, and only an image the registry does not have (or that cannot be checked anonymously, such as a private one) is RED as before.
+
+**The first in-cluster bucket waits until the SeaweedFS operator has finished installing (#1004).** In journey 27 the operator's install, mostly its certificate Job, took 8 minutes. The bucket's credentials Job stopped waiting for the operator's webhook after 200 s, so the `Seaweed` apply then failed with `x509: certificate signed by unknown authority`, and Argo CD retried it for 16 minutes before prod synced. The Job now waits up to 600 s, and its deadline grows from 300 to 690 s so the wait fits. Credentials Jobs of buckets that do not install the operator keep 300 s. **Action:** existing systems get the change with `/platform:update` and a re-render.
+
+**The detached-wait tests no longer fail on a busy machine.** Two tests of `tests/cplat/test_202_wait_detach.py` counted the loop guard's 10 s looks at a still running fake session as sleeps of the run when the session took longer than a second (the same cause as #939); their fake clock now passes those looks without recording them. The loop-guard tests, which drive their clock through the looks, are unchanged.
+
+**One spec's escalation no longer holds another spec that tracks the same issue (#832).** The dispatcher's escalation labels each tracked issue `needs-decision`; a second spec tracking that issue was then held as if it had its own open question ("#568 carries needs-decision"). The label now holds only the spec whose unit escalated; a label no dispatcher unit put there still holds every spec that tracks the issue. (Removing the label on `cplat dispatch resume <spec>` came with #823.)
+
+**A red check on the release PR no longer lifts the release hold (#855).** `cplat platform release` cleared the hold when the release PR's CI went red, so another session's PR could merge while the person reran a flaky job, and the resumed release then had to start again (`main moved`). Red CI is now a stop like `CONFIRM: merge`: `main` stays held for 2 hours (`release hold: merges into … wait until …`, lift it with `cplat platform hold --clear`), and after the rerun `cplat platform release` goes on from the open PR.
+
+**A resumed ship run checks the cause of its escalation again instead of repeating it (#856).** After a person fixed the cause and resumed, the next unit read the old `ESCALATED` reason and a `verification.md` written before the fix, and escalated again within a minute with the same reason. `cplat component ship start` (and `ship status`) now show `resumed after: <reason> — the resume resolved it: check again, never repeat it`, what to check (`cplat pr wait <pr>`), and when `verification.md` is older than HEAD, that it is stale and the reviewer runs again. `ship escalate` refuses the same reason while `verification.md` was not checked again.
+
+**A run left open under an escalated dispatcher unit no longer holds the spec as claimed (#857).** A unit's worktree keeps only its latest unit file, so after an escalation the old unit's child build run counted as a foreign claim and `cplat dispatch resume` left the spec `held: claimed (run … is open for it)` until the run was ended by hand. Each unit's history entry now records its run, and runs below an ended unit of the same item count as the dispatcher's own.
+
+**A paused dispatcher starts nothing, and a skipped item's paused unit stays paused (#858).** A `cplat dispatch pause` that landed while a cycle asked the agent about an item (the premise or mode call, seconds to minutes after the cycle read its pause state) did not stop that item's start; each start now reads the pause again. And `resume` restarted every paused unit, also one whose item was skipped, which then took the slot; such a unit now stays paused until `cplat dispatch resume <item>`.
+
+**`cplat next` says why it could not read a source (#859).** A source that failed for a reason other than a timeout showed only the fixed guess, such as "it may be missing a GitHub login", while `gh` worked. The line now adds `Error: <the error, shortened to 100 characters>`; a timeout keeps its "within 20 s" wording.
+
+**The backup plugin wait names the plugin's real Service, not the chart release (#885).** The PreSync job of a backed-up database waited for `<release>.cnpg-system.svc`, which matched only because the release is called `barman-cloud`; the chart names its Service from `service.name` (fixed to `barman-cloud`, because the plugin's TLS certificate is issued for it). The host now comes from that one constant beside the operator's install, so a renamed release (the local cluster installs it as `plugin-barman-cloud`) no longer makes every sync wait its full 10 minutes. The rendered job is unchanged.
+
+**`/resource:backup … --env prod` says when the backups would stay in the prod cluster (#886).** Declaring a new bucket for a prod backup (or picking an in-cluster one) and then seeing `/platform:doctor` warn that prod backups live in the same cluster asked the person to decide twice. The preview and the result now end with a note that the backups live in the same cluster as prod and how to use an external bucket instead (`cplat resource add <name> --type bucket --external`, then `--to <name>`); `--json` has `same_cluster`.
+
+**The quiet-window test no longer fails on a busy machine (#939).** `test_no_session_starts_inside_the_quiet_window` recorded every guard poll as a quiet-window wait when the fake session took longer than a second to exit; the test's fake sleep now passes guard polls without recording them and checks only the quiet-window wait.
+
+**The build prompt runs `cplat quiet test-fast --red` only in pytest repos (#987).** In a vitest repo `--red` prints its usage line (exit 2, as AC-205.5 says), but the build's all-green step read as if every repo should run it, so web units hit exit 2 twice. The step now names `--red` as the pytest path and the summary's innermost frame as the check for other repos. Update the plugins (`/plugin marketplace update`).
+
+**`cplat system wait` uses the environment's own cluster and accepts a root app with a ComparisonError (#987).** Without `--context` the wait read the current kube context, even when another session had switched it and `system.yaml` names the environment's cluster; it now takes the context `kube_contexts` maps to that cluster before falling back to the current one (`--context` and `kube_context` still come first). And a context that held only the system's root app, with a ComparisonError (so its apps were not generated yet), was refused as "not the cluster of system"; the root app now marks the system's cluster, and the wait refreshes it as before.
+
+**Two test-map recordings at once no longer leave a `.trace` directory or a temp file behind (#988).** The recorder's prune read the age of every kept map; when the other recording replaced or pruned one between the listing and that read, the prune failed, and the run's `.trace` directory was never removed (a flaky AC-212.6 test in CI). The prune now skips a map that is gone, the trace is removed on every path, and a failed write removes its temp file.
+
 ## [5.29.0] - 2026-11-22
 
 ### Added
