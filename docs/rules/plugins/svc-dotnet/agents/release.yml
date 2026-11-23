@@ -23,11 +23,3 @@ rules:
   class: hard
   hard: issue-filing-needs-consent
   source: ADR-033
-- id: R7
-  text: you never commit to main, never create the git tag and never choose the version or the commit
-  class: retired
-  retired: 2026-11-10
-  reason: the Rules section states the same hard rule once, so the role paragraph no longer repeats it
-  benchmark_runs:
-  - 20261123T101426Z-644188be
-  - 20261123T101806Z-c78e833a
