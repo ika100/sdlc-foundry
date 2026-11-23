@@ -32,7 +32,7 @@ Read `${CLAUDE_PLUGIN_ROOT}/commands/plan.md` and follow it for this spec; after
 
 ## Phase `build`
 
-Read `${CLAUDE_PLUGIN_ROOT}/commands/build.md` and follow its Phases 0–6 for this spec; skip Phase 7. Gitops tasks (with `repo:`) → read `${CLAUDE_PLUGIN_ROOT}/references/ship-gitops.md` and follow it.
+Read `${CLAUDE_PLUGIN_ROOT}/commands/build.md` and follow its Phases 0–6 skipping Phase 7 (a unit session follows its briefing). Gitops tasks (with `repo:`) → read `${CLAUDE_PLUGIN_ROOT}/references/ship-gitops.md` and follow it.
 
 Escalate on build's stop rules. Then `cplat component ship phase pr`.
 

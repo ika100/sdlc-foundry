@@ -114,14 +114,15 @@ def _record_ci(cwd: Path, rc: int) -> None:
 
 
 def main(argv: list[str]) -> int:
-    rc = _main(argv)
+    ran: list[bool] = []
+    rc = _main(argv, ran)
     args = argv[1:] if argv and argv[0] == "--raw" else argv
-    if args == ["ci"] and rc not in (2, 124):
+    if args == ["ci"] and ran and rc != 124:
         _record_ci(Path.cwd(), rc)
     return rc
 
 
-def _main(argv: list[str]) -> int:
+def _main(argv: list[str], ran: list[bool] | None = None) -> int:
     cwd = Path.cwd()
     raw = bool(argv) and argv[0] == "--raw"
     args = argv[1:] if raw else argv
@@ -144,6 +145,8 @@ def _main(argv: list[str]) -> int:
         import quiet_repeat
         return quiet_repeat.run(cwd, repeat, targs, raw=raw, on=on)
     cmd = ["devbox", "run", script] + (["--", *targs] if targs else [])
+    if ran is not None:
+        ran.append(True)  # quiet's own refusals returned above; from here the exit code is the script's
     log = _log_path(cwd, script)
     if script == "test-fast":
         import quiet_limit
