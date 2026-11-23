@@ -80,6 +80,7 @@ shapes:
       language: typescript
       runtime: node-lts
       framework: nextjs-app-router
+    ux_designer: true   # spec 219: /component:plan runs <plugin>:ux-designer before the architect for specs that change what a user sees
     runtime:
       port: 3000
       probes: {liveness: /api/health, readiness: /api/ready}

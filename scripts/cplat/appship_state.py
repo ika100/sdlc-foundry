@@ -237,7 +237,9 @@ def start(repo: Path, ref: str, max_: int | None = None, context: str | None = N
         if max_:
             st["max"] = max_
         for r in st.get("repos", {}).values():
-            if r.get("state") == "escalated":
+            if r.get("state") == "escalated" and r.get("questions"):
+                r.pop("held", None)    # #957: its questions wait for the user's answer: `next` asks `answer` again, `repo resume` takes it
+            elif r.get("state") == "escalated":
                 r["state"] = "ready"
                 r.pop("reason", None)
                 r.pop("cause", None)
