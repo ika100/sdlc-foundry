@@ -22,13 +22,13 @@ REPLACED = {
 }
 # the pair a lone --type or --lang completes to
 TYPE_DEFAULT_LANG = {"service": "python", "website": "typescript", "library": "python"}
-LANG_DEFAULT_TYPE = {"python": "service", "java": "service", "go": "service", "typescript": "website"}
+LANG_DEFAULT_TYPE = {"python": "service", "java": "service", "go": "service", "typescript": "website", "csharp": "service"}
 
 
 def valid_pairs() -> list[tuple[str, str]]:
     """The (type, lang) pairs `component new` accepts: the registry's, never service/unknown."""
-    order = [("service", "python"), ("service", "java"), ("service", "go"), ("service", "typescript"), ("website", "typescript"),
-             ("library", "python"), ("library", "typescript")]
+    order = [("service", "python"), ("service", "java"), ("service", "go"), ("service", "typescript"), ("service", "csharp"),
+             ("website", "typescript"), ("library", "python"), ("library", "typescript")]
     pairs = [p for p in model.TYPE_LANGS if p != ("service", "unknown")]
     return sorted(pairs, key=lambda p: order.index(p) if p in order else len(order))
 
@@ -55,7 +55,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="cplat component new", description=__doc__)
     p.add_argument("words", nargs="*", help="<name> [description words...]")
     p.add_argument("--type", dest="type_", help="service, website or library (default service)")
-    p.add_argument("--lang", help="python, java, go or typescript (default python)")
+    p.add_argument("--lang", help="python, java, go, typescript or csharp (default python)")
     p.add_argument("--shape", help=argparse.SUPPRESS)  # internal: a shape id (system new, tests)
     for flag in REPLACED:
         p.add_argument(f"--{flag}", action="store_true", help=argparse.SUPPRESS)

@@ -23,7 +23,7 @@ import deps_parse
 import gates
 import runs
 from core import PlatformError
-from deps_parse import DEP_FILES, TOOLS, Finding
+from deps_parse import TOOLS, Finding
 
 MAX_ROUNDS = 2
 GATE_TIMEOUT = 3600
@@ -241,7 +241,7 @@ def _cmd_patch(ns: argparse.Namespace) -> int:
     if shape not in TOOLS:
         print(f"NOT A DEPENDENCY FINDING: {shape} repos never bump dependencies (spec 095)")
         return 4
-    dep_files = DEP_FILES[shape]
+    dep_files = deps_parse.dep_files(shape, repo)
     for line in git(repo, ["status", "--porcelain", "--", *dep_files]).splitlines():
         raise PlatformError(f"{line.split(None, 1)[-1].strip()} has uncommitted changes",
                             hint="commit them first; cplat deps commits only its own bumps")

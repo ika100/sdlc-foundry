@@ -631,7 +631,7 @@ def test_owner_is_a_required_non_empty_string_ac_114_57(tmp_path, owner):  # AC-
 # ---------------- AC-114.58: type and lang ----------------
 
 @pytest.mark.parametrize("type_, lang", [("service", "python"), ("service", "java"), ("service", "go"), ("service", "typescript"),
-                                         ("website", "typescript"), ("library", "python"), ("service", "unknown")])
+                                         ("service", "csharp"), ("website", "typescript"), ("library", "python"), ("service", "unknown")])
 def test_the_valid_type_lang_pairs_render_ac_114_58(tmp_path, type_, lang):  # AC-114.58
     doc = tiny()
     c = component(doc, "api")
