@@ -21,13 +21,13 @@ from test_smoke_091_templates import TEMPLATES, UV_SHIM, example_smoke_test, hea
 BASE = "http://shop-api.shop-prod.localhost:8088"
 READ_ID = "tests/test_smoke_health.py::test_health_answers_at_the_base_url"
 WRITE_ID = "tests/test_smoke_tasks.py::test_a_task_can_be_created"
-SHAPES = ["service-python", "service-java", "service-go", "web-nextjs", "service-typescript"]
+SHAPES = ["service-python", "service-java", "service-go", "web-nextjs", "service-typescript", "service-dotnet"]
 CLAUDE = {"service-python": "CLAUDE.md", "service-java": "CLAUDE.md.jinja", "service-go": "CLAUDE.md.jinja",
-          "web-nextjs": "CLAUDE.md.jinja", "service-typescript": "CLAUDE.md.jinja"}
+          "web-nextjs": "CLAUDE.md.jinja", "service-typescript": "CLAUDE.md.jinja", "service-dotnet": "CLAUDE.md.jinja"}
 MARK = {"service-python": "@pytest.mark.writes", "service-java": '@Tag("writes")', "service-go": "TestSmokeWrites",
-        "web-nextjs": "@writes", "service-typescript": "@writes"}
+        "web-nextjs": "@writes", "service-typescript": "@writes", "service-dotnet": '[Trait("Category", "writes")]'}
 HOW = {"service-python": "@pytest.mark.writes", "service-java": "-DexcludedGroups=writes", "service-go": "-skip '^TestSmokeWrites'",
-       "web-nextjs": "--grep-invert @writes", "service-typescript": "(?!.*@writes)"}
+       "web-nextjs": "--grep-invert @writes", "service-typescript": "(?!.*@writes)", "service-dotnet": "Category!=writes"}
 
 
 # ---------------- cplat: what the recipe gets and what a read-only run means ----------------
@@ -161,6 +161,8 @@ def test_the_sample_smoke_test_is_read_only_so_it_runs_everywhere(shape):  # AC-
         assert "func TestSmokeWrites" not in code
     elif shape == "service-typescript":
         assert "@writes" not in "\n".join(ln for ln in code.splitlines() if "it(" in ln)
+    elif shape == "service-dotnet":
+        assert '[Trait("Category", "writes")]' not in code and '[Trait("Category", "smoke")]' in code
     else:
         assert "@writes" not in "\n".join(ln for ln in text.splitlines() if ln.startswith("test("))
 

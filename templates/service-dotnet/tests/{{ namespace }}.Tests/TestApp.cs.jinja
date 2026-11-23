@@ -1,0 +1,28 @@
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
+{%- if needs_database %}
+using Microsoft.Extensions.Diagnostics.HealthChecks;
+{%- endif %}
+
+namespace {{ namespace }}.Tests;
+
+/// <summary>The service in memory (no port): <c>using var app = TestApp.Create(); var http = app.CreateClient();</c></summary>
+internal static class TestApp
+{
+    public static WebApplicationFactory<Program> Create(Action<IServiceCollection>? configure = null) =>
+        new WebApplicationFactory<Program>().WithWebHostBuilder(host => host.ConfigureTestServices(services =>
+        {
+{%- if needs_database %}
+            // The probes run here without a database; DatabaseTests starts a real PostgreSQL.
+            services.Remove(services.Single(d => d.ImplementationType == typeof(DatabaseMigrator)));
+            services.Configure<HealthCheckServiceOptions>(options =>
+            {
+                foreach (var registration in options.Registrations.Where(r => r.Name is "migrations" or "database").ToList())
+                {
+                    options.Registrations.Remove(registration);
+                }
+            });
+{%- endif %}
+            configure?.Invoke(services);
+        }));
+}
