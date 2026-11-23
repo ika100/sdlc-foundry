@@ -129,7 +129,7 @@ def main(argv: list[str]) -> int:
     if ns.details_file:
         details = sys.stdin.read() if ns.details_file == "-" else Path(ns.details_file).read_text(errors="replace")
     title = redact(ns.title.strip())[:120]
-    labels = ["feedback", "bug" if ns.kind == "bug" else "enhancement"]
+    labels = ["triage", "feedback", "bug" if ns.kind == "bug" else "enhancement"]
     body = build_body(ns.kind, ns.what, ns.command, details, Path(ns.repo_dir).resolve())
     print(f"## Draft issue for {REPO}\n\n**{title}**   (labels: {', '.join(labels)})\n\n{body}\n")
     if not ns.submit:
