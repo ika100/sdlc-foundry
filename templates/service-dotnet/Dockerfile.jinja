@@ -1,0 +1,40 @@
+# syntax=docker/dockerfile:1.7
+
+# The framework-dependent build is architecture-independent: build on the native platform, run on the target one.
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:{{ dotnet_major }}.0 AS builder
+WORKDIR /src
+
+# Restore first for layer caching (the committed lock file pins every package; a render without one gets it written).
+COPY global.json Directory.Build.props Directory.Packages.props ./
+COPY src/{{ namespace }}/{{ namespace }}.csproj src/{{ namespace }}/packages.lock.json* src/{{ namespace }}/
+RUN dotnet restore src/{{ namespace }}/{{ namespace }}.csproj --locked-mode
+
+COPY .editorconfig ./
+COPY src ./src
+RUN dotnet publish src/{{ namespace }}/{{ namespace }}.csproj --no-restore -c Release -o /app
+
+
+# Chiseled Ubuntu: no shell, no package manager, the ASP.NET Core runtime only.
+FROM mcr.microsoft.com/dotnet/aspnet:{{ dotnet_major }}.0-noble-chiseled AS runtime
+# Links the GHCR package to this repository, so CI's GITHUB_TOKEN can push to it (no manual "Manage Actions access" step).
+LABEL org.opencontainers.image.source="https://github.com/{{ github_org }}/{{ project_name }}" \
+      org.opencontainers.image.description="{{ description | replace('"', '') | replace('\\', '') }}"
+WORKDIR /app
+
+# The service binds PORT itself; the image's default ASPNETCORE_HTTP_PORTS would only log an override warning.
+# No diagnostics IPC socket: the root filesystem is read-only in the cluster.
+ENV PORT={{ port }} \
+    ASPNETCORE_HTTP_PORTS= \
+    DOTNET_EnableDiagnostics=0
+
+# The published service only; root-owned and read-only for the runtime user.
+COPY --from=builder /app ./
+
+# Numeric UID: Kubernetes cannot verify runAsNonRoot for a named user. 65532 is the platform's non-root user (as in the
+# Go, Java and TypeScript images).
+USER 65532:65532
+
+EXPOSE {{ port }}
+
+# No shell for a HEALTHCHECK: liveness and readiness are Kubernetes probes on /health and /ready.
+ENTRYPOINT ["dotnet", "{{ namespace }}.dll"]

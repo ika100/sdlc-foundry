@@ -1,0 +1,25 @@
+using System.Net;
+
+namespace {{ namespace }}.Tests.Smoke;
+
+/// <summary>
+/// Smoke tests (category <c>smoke</c>) run against a deployment through <c>devbox run smoke</c> (SMOKE_BASE_URL);
+/// <c>devbox run test</c> skips them.
+/// </summary>
+// #474: a smoke test that creates, changes or deletes data also carries [Trait("Category", "writes")]; it then runs only in dev.
+// This one only reads, so it runs in every environment.
+public sealed class HealthSmokeTests
+{
+    [Fact]
+    [Trait("Category", "smoke")]
+    public async Task Health_answers_ok()
+    {
+        var baseUrl = Environment.GetEnvironmentVariable("SMOKE_BASE_URL");
+        Assert.SkipWhen(string.IsNullOrEmpty(baseUrl), "SMOKE_BASE_URL is not set: smoke tests run against a deployment");
+
+        using var http = new HttpClient();
+        var response = await http.GetAsync(new Uri(baseUrl!.TrimEnd('/') + "/health"), TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+}

@@ -1,0 +1,38 @@
+using System.Diagnostics;
+using Prometheus;
+
+namespace {{ namespace }};
+
+/// <summary>
+/// Prometheus HTTP metrics on <c>/metrics</c>: <c>http_requests_total</c> and <c>http_request_duration_seconds</c> by
+/// method, route and status, next to prometheus-net's default .NET and process metrics. The route is the endpoint's
+/// pattern (<c>/items/{id}</c>), never the raw path, and <c>unmatched</c> for a request no endpoint handles.
+/// </summary>
+public static class HttpMetrics
+{
+    private static readonly string[] Labels = ["method", "route", "status"];
+
+    private static readonly Counter Requests = Metrics.CreateCounter(
+        "http_requests_total", "HTTP requests by method, route and status.", new CounterConfiguration { LabelNames = Labels });
+
+    private static readonly Histogram Duration = Metrics.CreateHistogram(
+        "http_request_duration_seconds", "HTTP request duration in seconds by method, route and status.",
+        new HistogramConfiguration { LabelNames = Labels, Buckets = [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10] });
+
+    /// <summary>Counts and times every request; call after <c>UseRouting</c> so that the route pattern is known.</summary>
+    public static IApplicationBuilder UseHttpRequestMetrics(this IApplicationBuilder app) => app.Use(async (context, next) =>
+    {
+        var start = Stopwatch.GetTimestamp();
+        try
+        {
+            await next(context);
+        }
+        finally
+        {
+            var route = (context.GetEndpoint() as RouteEndpoint)?.RoutePattern.RawText ?? "unmatched";
+            string[] values = [context.Request.Method, route, context.Response.StatusCode.ToString(System.Globalization.CultureInfo.InvariantCulture)];
+            Requests.WithLabels(values).Inc();
+            Duration.WithLabels(values).Observe(Stopwatch.GetElapsedTime(start).TotalSeconds);
+        }
+    });
+}

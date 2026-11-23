@@ -36,6 +36,7 @@ RUFF = re.compile(r"^(\S+?):(\d+):(\d+): ([A-Z]{1,5}\d{1,4}) (.*)$")
 CHECKSTYLE = re.compile(r"^\[(?:WARN|WARNING|ERROR)\] (\S.*?):\[(\d+)(?:,\d+)?\] \((\w+)\) (\w+): (.*)$")
 SPOTLESS = re.compile(r"^\[ERROR\]\s+(\S+\.java)\s*$")
 GOLANGCI = re.compile(r"^(\S+?):(\d+):(\d+): (.*) \(([\w-]+)\)$")
+DOTNET_FORMAT = re.compile(r"^(\S.*?)\((\d+),\d+\): (?:error|warning) (\w+): (.*?)(?: \[[^\]]*\])?$")
 ESLINT_PROBLEM = re.compile(r"^\s+(\d+):(\d+)\s+(?:error|warning)\s+(.*?)\s{2,}(\S+)\s*$")
 
 
@@ -101,6 +102,15 @@ class Step(NamedTuple):
     stop_on_fail: bool = False
 
 
+def parse_dotnet_format(lines: list[str]) -> list[Violation]:
+    out = []
+    for ln in lines:
+        m = DOTNET_FORMAT.match(ln.strip())
+        if m:
+            out.append(Violation(m[1], m[2], m[3], m[4]))
+    return out
+
+
 def no_lines(_: list[str]) -> list[Violation]:
     return []
 
@@ -116,6 +126,8 @@ def steps(template: str, rendered: Path) -> list[Step] | None:
     if template in ("web-nextjs", "service-typescript", "library-typescript"):
         found = [] if (rendered / "node_modules").exists() else [Step(["npx", "-y", PNPM, "install"], no_lines, True)]
         return found + [Step(["npx", "-y", PNPM, "lint"], parse_eslint)]
+    if template == "service-dotnet":
+        return [Step(["dotnet", "format", "--verify-no-changes", "--severity", "warn"], parse_dotnet_format)]
     if template in ("gitops-app", "cluster-gitops"):
         return None
     raise SystemExit(f"template lint: unknown template {template}")
@@ -192,7 +204,7 @@ def render_data(template: str) -> list[str]:
     if template in ("service-python", "library-python"):
         data["module_name"] = "lint_" + template.replace("-", "_")
         data["description"] = "Smoke test"
-    elif template in ("web-nextjs", "service-typescript", "library-typescript"):
+    elif template in ("web-nextjs", "service-typescript", "library-typescript", "service-dotnet"):
         data["description"] = "Smoke test"
     elif template == "gitops-app":
         data.update(app_name="lint", description="Smoke test")
