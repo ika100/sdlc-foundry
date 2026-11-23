@@ -79,7 +79,7 @@ def test_submit_files_with_labels(tmp_path, monkeypatch, capsys):
     seen = {}
     monkeypatch.setattr(feedback, "create_issue", lambda title, body, labels: seen.update(title=title, body=body, labels=labels) or "https://github.com/x/y/issues/1")
     assert feedback.main(["--kind", "idea", "--title", "support cockroach", "--what", "please", "--submit", "--repo-dir", str(tmp_path)]) == 0
-    assert seen["labels"] == ["feedback", "enhancement"] and "## The idea" in seen["body"]
+    assert seen["labels"] == ["triage", "feedback", "enhancement"] and "## The idea" in seen["body"]
     assert "Filed: https://github.com/x/y/issues/1" in capsys.readouterr().out
 
 
