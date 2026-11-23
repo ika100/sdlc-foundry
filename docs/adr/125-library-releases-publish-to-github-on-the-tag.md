@@ -47,4 +47,4 @@ GitHub Free gives every owner the GitHub Packages registries for npm, Maven and 
 - A new library shape is incomplete until its `publish` block, recipe and job pass `shapes.py check`; the contract is the
   same for every ecosystem, only the build, the version source and the upload differ.
 - PyPI, npmjs.org, Maven Central and nuget.org are not used; a public registry would be a new `registry` value.
-- Packages are not signed and carry no provenance attestation yet.
+- Packages carry a build provenance attestation (`actions/attest-build-provenance` in the `publish` job, which also gets `id-token: write` and `attestations: write`; #966). They are not otherwise signed. A private repo needs GitHub Enterprise for attestations (ADR-019).

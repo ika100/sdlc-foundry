@@ -97,6 +97,8 @@ def test_the_publish_job_runs_on_the_tag_after_every_gate_with_the_only_write_pe
     assert "refs/tags/v" in job["if"] and "push" in job["if"]
     assert {"quality", "test", "security", "ci-extra"} <= set(job["needs"])
     assert job["permissions"]["contents"] == "write"
+    assert job["permissions"]["id-token"] == job["permissions"]["attestations"] == "write"  # #966
+    assert any(str(s.get("uses", "")).startswith("actions/attest-build-provenance@") for s in job["steps"])
     assert wf["permissions"] == {"contents": "read"}
     assert [n for n, j in wf["jobs"].items() if "write" in (j.get("permissions") or {}).values()] == ["publish"]
     checkout = next(s for s in job["steps"] if str(s.get("uses", "")).startswith("actions/checkout@"))

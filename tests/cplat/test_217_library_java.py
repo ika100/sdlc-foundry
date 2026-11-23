@@ -382,7 +382,8 @@ def test_ci_has_the_library_job_set_and_the_publish_job_ac_217_8(default):  # AC
     pub = jobs["publish"]
     assert pub["if"] == "github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')"
     assert pub["needs"] == ["quality", "test", "security", "ci-extra"]
-    assert pub["permissions"] == {"contents": "read", "packages": "write"}
+    assert pub["permissions"] == {"contents": "read", "packages": "write", "id-token": "write", "attestations": "write"}  # #966
+    assert any(str(s.get("uses", "")).startswith("actions/attest-build-provenance@") for s in pub["steps"])
     assert [n for n, j in jobs.items() if "write" in (j.get("permissions") or {}).values()] == ["publish"]
     step = next(s for s in pub["steps"] if "devbox run publish" in str(s.get("run", "")))
     assert step["run"] == 'devbox run publish "$GITHUB_REF_NAME"'
