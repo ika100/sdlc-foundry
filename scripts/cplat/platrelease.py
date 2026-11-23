@@ -171,7 +171,11 @@ def _wait_pr(repo: Path, url: str, o: Opts, merge: bool, slug: str) -> None:
         raise land_merge._base_moved(repo, url) from e
     if not ok:
         print("\n".join(lines))
-        raise core.PlatformError(f"CI is red on {url}: not merged")
+        # #855: red CI is a stop the release resumes from (rerun the job, run it again): main stays held, with the stop's expiry
+        kept = release_hold.stop(dispatch_state.slug_of(repo), "ci")
+        raise core.PlatformError(f"CI is red on {url}: not merged" + (f"\n{pub.stop_line(dispatch_state.slug_of(repo), kept).rstrip()}"
+                                                                         if kept else ""),
+                                 hint="rerun the red job (or fix it on the release branch), then run cplat platform release again")
 
 
 def _wait_e2e(repo: Path, url: str, o: Opts) -> None:

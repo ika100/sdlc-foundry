@@ -200,6 +200,9 @@ def _schedule(repo: Path, slug: str, policy, snap, state: dict, units: list[dict
         if sched.why_not is not None:
             e.v = _held(v, "budget", sched.why_text)
             continue
+        if act and (ds.load(slug).get("steering") or {}).get("paused"):
+            sched.why_not, sched.why_text = dispatch_gate.PAUSED, dispatch_gate.PAUSED   # #858: paused while this cycle read the backlog
+            continue
         slot = free[0]
         if act:
             try:
@@ -253,6 +256,9 @@ def _fill(repo: Path, slug: str, policy, snap, state: dict, units: list[dict], f
             continue
         if not free:
             continue                                        # no free slot: it queues
+        if act and (ds.load(slug).get("steering") or {}).get("paused"):
+            sched.why_not, sched.why_text = dispatch_gate.PAUSED, dispatch_gate.PAUSED   # #858
+            break
         slot = free[0]
         if act:
             try:
@@ -289,10 +295,15 @@ def _remember(slug: str, cand, unit: str) -> None:
 
 # ---------------- one cycle ----------------
 
+def _key(unit: dict) -> str:
+    return str(unit.get("key") or ds.unit_key(str(unit.get("unit") or "")))
+
+
 def _settle_units(repo: Path, slug: str, policy, lines: list[str], needs: list[dict]) -> None:
     """Steering and the ends of units: flags for a pause, resume of paused units first, then observe and act on each unit."""
     state = ds.load(slug)
     paused = (state.get("steering") or {}).get("paused")
+    skipped = (state.get("steering") or {}).get("skipped") or {}
     units = du.adopt(repo, slug)
     if paused == "pause":
         du.pause_flags(units)
@@ -302,7 +313,7 @@ def _settle_units(repo: Path, slug: str, policy, lines: list[str], needs: list[d
     for u in order:
         try:
             if u.get("status") == "paused":
-                if paused is None:
+                if paused is None and _key(u) not in skipped:       # #858: a skipped item's unit stays paused until `resume <item>`
                     step = du.resume_paused(repo, slug, u, policy)
                 else:
                     continue
@@ -311,7 +322,7 @@ def _settle_units(repo: Path, slug: str, policy, lines: list[str], needs: list[d
                     continue                                # nothing is started again while paused
                 step = du.advance(repo, slug, u, policy)
                 now = ds.read_unit(u["worktree"]) or u
-                if paused is None and now.get("status") == "paused":
+                if paused is None and now.get("status") == "paused" and _key(now) not in skipped:
                     step.lines += du.resume_paused(repo, slug, now, policy).lines
         except PlatformError as err:
             lines.append(f"error {u.get('unit')}: {_first(err)}")

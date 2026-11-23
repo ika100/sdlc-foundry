@@ -108,6 +108,7 @@ def test_a_fix_unit_lands_and_finishes_done_with_its_tokens(env):
     assert "in-progress" not in env.labels_of(1) and any("cplat-release" in c for c in env.comments_of(1))
     [entry] = ds.load(SLUG)["history"]
     assert entry["outcome"] == "done" and entry["tokens"] == 4321 and "pull/" in entry["pr"]
+    assert entry["run_id"] == res.unit["run_id"]                    # #857: the ended unit's runs stay its own
     assert os.path.isdir(wt)                                        # kept until a newer snapshot has seen the merge
     du.cleanup(env.repo, SLUG, "9999")
     assert not os.path.isdir(wt)
