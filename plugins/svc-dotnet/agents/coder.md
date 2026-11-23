@@ -39,7 +39,7 @@ Write files with Write and Edit, never through the shell (`cat >`, heredocs, `te
 | Need | Command |
 |---|---|
 | Auto-fix lint | `devbox run lint-fix` |
-| Build with the analyzers | `devbox run typecheck` |
+| Analyzer build | `devbox run typecheck` |
 | Quick local test loop | `devbox run test-fast` |
 | Run the service | `devbox run dev` |
 | A database migration | `devbox run migrate-new <Name>` |
