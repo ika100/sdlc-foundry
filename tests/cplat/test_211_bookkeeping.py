@@ -99,7 +99,9 @@ def test_a_build_run_inside_a_ship_is_recorded_on_the_ship_run_ac_211_7(ci_repo,
     st = ship.start(ci_repo, "7", True)
     assert runs.main(["begin", "build", "--spec", SPEC, "--dir", str(ci_repo)]) == 0
     assert quiet.main(["ci"]) == 0
-    assert record(st["run_id"])["gates"]["security"] == "passed" and stage_result(st["run_id"], "ci") == "passed"
+    assert record(st["run_id"])["gates"]["security"] == "passed"
+    held = json.loads(ship.state_path(ci_repo).read_text())["stages"]      # in a ship the ship state holds the stages (budget._holder)
+    assert held["ci"]["result"] == "passed"
 
 
 def test_without_a_build_run_nothing_is_recorded_and_the_output_is_unchanged_ac_211_7(ci_repo, capsys):  # AC-211.7
@@ -121,7 +123,7 @@ def test_an_explicit_call_afterwards_adds_no_second_entry_ac_211_7(ci_repo):  # 
     assert build_markers(rid) == before == ["build:verify"]
     assert stage_result(rid, "ci") == "passed"
     stages = budget.find(rid)[1]["stages"]
-    assert list(stages) == ["ci"]                                       # one stage entry, not a second one
+    assert sorted(stages) == ["ci", "security"]                         # one entry each (runs gate records its stage, §4), no second ci
 
 
 # ---------------- AC-211.9: markers set by commands ----------------
