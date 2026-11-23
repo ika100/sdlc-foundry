@@ -1,6 +1,7 @@
 """Shared helpers for platform.py: process execution, errors, registry access, versions, reporting."""
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
@@ -27,6 +28,9 @@ class PlatformError(Exception):
 
 
 RATE_LIMITED = re.compile(r"API rate limit (?:already )?exceeded|secondary rate limit", re.I)
+RATE_POLL_EVERY = 900          # seconds between two looks at the REST rate_limit during a long wait (#1028)
+RATE_REFILLED = 100            # remaining calls that end a wait early: the bucket has refilled
+RATE_WAIT_HOOKS: list = []     # context managers entered around a rate-limit wait: the merge lock lets go of its lock (#1028)
 RATE_LIMIT_MAX_WAIT = 65 * 60   # seconds a single call may wait for GitHub's limits in total (spec 137)
 sleep = time.sleep              # tests replace these two
 now = time.time
@@ -114,6 +118,34 @@ def _rate_limit_wait(kind: str) -> float | None:
     except (OSError, ValueError, subprocess.TimeoutExpired):
         return None
     return wait if wait > 30 else None
+
+
+def _rate_limit_refilled(kind: str) -> bool:
+    """True when `gh api rate_limit` (REST, not counted against GraphQL) shows the named bucket refilled (#1028)."""
+    if kind == "secondary":
+        return False
+    try:
+        out = subprocess.run(["gh", "api", "rate_limit", "--jq", f".resources.{kind}.remaining"], text=True, capture_output=True,
+                             timeout=30).stdout.strip()
+        return int(out) >= RATE_REFILLED
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return False
+
+
+def _rate_limit_sleep(wait: float, kind: str) -> float:
+    """Sleep up to `wait` seconds with every RATE_WAIT_HOOKS context entered (so no merge lock is held), looking at the REST
+    bucket every RATE_POLL_EVERY seconds and ending early when it has refilled. Returns the seconds slept."""
+    slept = 0.0
+    with contextlib.ExitStack() as stack:
+        for hook in list(RATE_WAIT_HOOKS):
+            stack.enter_context(hook())
+        while slept < wait:
+            step = min(RATE_POLL_EVERY, wait - slept)
+            sleep(step)
+            slept += step
+            if slept < wait and _rate_limit_refilled(kind):
+                break
+    return slept
 
 
 def _journey_wait(seconds: float, kind: str) -> None:
@@ -204,9 +236,9 @@ def run(cmd: list[str], *, cwd: Path | str | None = None, check: bool = True, ca
                                      "console or another session's CI waits): stop it, then run the command again")
         until = time.strftime("%H:%M", time.gmtime(now() + wait))
         print(f"GitHub rate limit ({kind}): waiting until {until} UTC", file=sys.stderr, flush=True)
-        sleep(wait)
-        waited += wait
-        _journey_wait(wait, kind)
+        slept = _rate_limit_sleep(wait, kind)
+        waited += slept
+        _journey_wait(slept, kind)
     if check and proc.returncode != 0:
         detail = (proc.stderr or proc.stdout or "").strip().splitlines()[-6:]
         raise PlatformError(f"`{' '.join(cmd[:4])}` failed (exit {proc.returncode}): " + " | ".join(detail))

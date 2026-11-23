@@ -58,7 +58,7 @@ def test_not_implemented():
 
 
 def test_missing_module():
-    import redcheck  # noqa: F401
+    import pkg.redcheck  # noqa: F401
 
 
 def test_missing_attribute():
@@ -164,7 +164,7 @@ def test_each_test_gets_its_class_and_the_exception_line_ac_205_5(world, capsys)
     assert {n for n, (c, _) in got.items() if c == "test error"} == ERRORS
     assert got["test_passes"][0] == "passes"
     assert set(got) == MISSING | ERRORS | {"test_passes"}                    # one line per test, no other
-    assert got["test_missing_module"][1] == "ModuleNotFoundError: No module named 'redcheck'"
+    assert got["test_missing_module"][1] == "ModuleNotFoundError: No module named 'pkg.redcheck'"
     assert got["test_non_test_frame"][1] == "ValueError: bad input"
     assert got["test_helper_mkdir"][1].startswith("FileNotFoundError: ")      # the spec 157 case: a helper creates no parents
     assert got["test_helper_wrong_arguments"][1].startswith("TypeError: ")
@@ -205,12 +205,60 @@ def test_a_test_node_id_selects_one_test_ac_205_5(world, capsys):  # AC-205.5
 
 
 def test_a_collection_error_naming_a_missing_module_is_missing_behaviour_once_per_test_ac_205_5(world, capsys):  # AC-205.5
-    world.put("tests/test_new.py", "import redcheck\n\n\ndef test_one():\n    assert redcheck.x\n\n\ndef test_two():\n    assert redcheck.y\n")
+    world.put("tests/test_new.py", "import pkg.redcheck\n\n\ndef test_one():\n    assert pkg.redcheck.x\n\n\ndef test_two():\n    assert pkg.redcheck.y\n")
     rc, judged, _ = red(capsys, "tests/test_new.py")
     got = by_name(judged, "tests/test_new.py")
     assert set(got) == {"test_one", "test_two"}
     assert {c for c, _ in got.values()} == {"missing behaviour"}
-    assert all(why == "ModuleNotFoundError: No module named 'redcheck'" for _, why in got.values())
+    assert all(why == "ModuleNotFoundError: No module named 'pkg.redcheck'" for _, why in got.values())
+    assert rc == 0
+
+
+# ---------------- AC-205.5 (#956): only the repo's own code is missing behaviour ----------------
+
+def test_a_missing_third_party_package_is_a_test_error_naming_the_dev_dependency_ac_205_5(world, capsys):  # AC-205.5
+    world.put("tests/test_red.py", "def test_a():\n    import testcontainers_956  # noqa: F401\n")
+    world.put("tests/test_top.py", "import testcontainers_956.postgres\n\n\ndef test_b():\n    assert True\n")
+    rc, judged, _ = red(capsys, "tests/test_red.py")
+    assert by_name(judged)["test_a"] == ("test error", "testcontainers_956 is not installed: add it to the dev dependencies")
+    assert rc == 1
+    rc, judged, _ = red(capsys, "tests/test_top.py")                          # at collection too
+    assert by_name(judged, "tests/test_top.py")["test_b"] == (
+        "test error", "testcontainers_956 is not installed: add it to the dev dependencies")
+    assert rc == 1
+
+
+def test_own_code_importing_a_missing_package_is_a_test_error_ac_205_5(world, capsys):  # AC-205.5
+    world.put("pkg/store.py", "import testcontainers_956  # noqa: F401\n")
+    world.put("tests/test_red.py", "def test_a():\n    import pkg.store  # noqa: F401\n")
+    rc, judged, _ = red(capsys, "tests/test_red.py")
+    assert by_name(judged)["test_a"] == ("test error", "testcontainers_956 is not installed: add it to the dev dependencies")
+    assert rc == 1
+
+
+def test_a_missing_name_of_an_installed_package_is_a_test_error_ac_205_5(world, capsys):  # AC-205.5
+    world.put("tests/test_red.py", "def test_a():\n    from json import no_such_name_956  # noqa: F401\n")
+    rc, judged, _ = red(capsys, "tests/test_red.py")
+    cls, why = by_name(judged)["test_a"]
+    assert cls == "test error" and why.startswith("ImportError: ") and "no_such_name_956" in why
+    assert rc == 1
+
+
+def test_a_missing_own_package_is_missing_behaviour_ac_205_5(world, capsys):  # AC-205.5
+    world.put("pyproject.toml", '[project]\nname = "my-service"\n')
+    world.put("tests/test_red.py", "def test_a():\n    import my_service  # noqa: F401\n")
+    rc, judged, _ = red(capsys, "tests/test_red.py")
+    assert by_name(judged)["test_a"] == ("missing behaviour", "ModuleNotFoundError: No module named 'my_service'")
+    assert rc == 0
+
+
+def test_a_new_module_of_a_package_under_src_is_missing_behaviour_ac_205_5(world, capsys):  # AC-205.5
+    world.put("src/mylib/__init__.py", "")
+    world.put("tests/test_red.py", "def test_a():\n    from mylib import newmod  # noqa: F401\n\n\n"
+                                   "def test_b():\n    import mylib.other  # noqa: F401\n")
+    rc, judged, _ = red(capsys, "tests/test_red.py")
+    got = by_name(judged)
+    assert got["test_a"][0] == "missing behaviour" and got["test_b"][0] == "missing behaviour"
     assert rc == 0
 
 

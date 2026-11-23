@@ -40,7 +40,9 @@ LABELS = {
     "p2": ("fef2c0", "Priority 2: cosmetic, convenience, easy workaround"),
 }
 PRIORITY_LABELS = tuple(priority.label_of(level) for level in priority.LEVELS)
-DECISION_LABELS ={"needs-info", "tracked", "question", "duplicate", "wontfix"}
+DECISION_LABELS = {"needs-info", "tracked", "question", "duplicate", "wontfix"}
+# Without `triage`, an issue already routed (triaged, needs-decision), a platform note or started work is no triage work.
+NOT_TRIAGE_LABELS = {"triaged", "needs-decision", "retro", "notify", "in-progress"}
 BODY_LIMIT = 4000
 COMMENT_LIMIT = 1500
 FENCE = "-----"
@@ -55,11 +57,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("-R", "--repo", help="OWNER/REPO (default: the repo of the current directory)")
     sub = p.add_subparsers(dest="action", required=True)
     ls = sub.add_parser("list", help="the intake queue")
-    ls.add_argument("--new", action="store_true", help="also issues that carry none of the triage labels (filed without the form)")
+    ls.add_argument("--new", action="store_true", help="no effect: the queue already holds issues filed without the form")
     ls.add_argument("--waiting", action="store_true", help="only issues labelled needs-info")
     ls.add_argument("--json", action="store_true")
     ba = sub.add_parser("batch", help="every queued issue with its facts, read in one request and saved for the next steps")
-    ba.add_argument("--new", action="store_true", help="also issues that carry none of the triage labels")
+    ba.add_argument("--new", action="store_true", help="no effect: the queue already holds issues filed without the form")
     ba.add_argument("--json", action="store_true")
     ov = sub.add_parser("overview", help="the grouped overview and the question pages of the proposals, from the saved batch")
     ov.add_argument("--proposals", required=True, metavar="FILE")
@@ -111,15 +113,16 @@ def summary(issue: dict) -> dict:
 
 
 def queue(issues: list[dict], *, new: bool = False, waiting: bool = False) -> list[dict]:
-    """Issues to look at: `triage` and no decision yet; with `new` also issues without any triage label; `waiting` = needs-info."""
+    """Issues to look at: every open issue without a decision, whatever labels it was filed with (a form, `/issue:report`,
+    by hand); an issue that is routed, a platform note or started work only while it carries `triage`; `waiting` = needs-info.
+    `new` is kept for old callers and changes nothing."""
     out = []
     for issue in issues:
         labels = _labels(issue)
         if waiting:
             keep = "needs-info" in labels
         else:
-            undecided = not labels & DECISION_LABELS
-            keep = undecided and ("triage" in labels or (new and not labels & set(LABELS)))
+            keep = not labels & DECISION_LABELS and ("triage" in labels or not labels & NOT_TRIAGE_LABELS)
         if keep:
             out.append(issue)
     return sorted(out, key=lambda i: i.get("createdAt", ""))
