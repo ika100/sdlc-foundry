@@ -62,7 +62,7 @@
     {
       "name": "svc-dotnet",
       "source": "./plugins/svc-dotnet",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "description": "Agents for .NET service repos (ASP.NET Core minimal APIs, xUnit, optional EF Core/PostgreSQL, chiseled .NET image): coder, tester, deployment, observability, release.",
       "category": "agents",
       "tags": [
@@ -88,8 +88,8 @@
     {
       "name": "svc-java",
       "source": "./plugins/svc-java",
-      "version": "0.8.1",
-      "description": "Agents for Java service repos (Spring Boot 4, Maven, JDK 21, distroless): coder, tester, deployment, observability, release.",
+      "version": "0.9.0",
+      "description": "Agents for Java service and library repos (Spring Boot 4, Maven, JDK 21, distroless; plain jars on GitHub Packages): coder, tester, deployment, observability, release.",
       "category": "agents",
       "tags": [
         "java",
@@ -126,7 +126,7 @@
     {
       "name": "system",
       "source": "./plugins/system",
-      "version": "1.25.0",
+      "version": "1.25.2",
       "description": "Spec-driven features across a system's components (gitops-app repo): /system:new creates a system, /system:status shows it, /system:spec writes the system spec, /system:plan assigns its criteria to the component repos (ADR-011/026), /system:ship ships it unattended in plan order (ADR-042). Provides the planner agent.",
       "category": "agents",
       "tags": [

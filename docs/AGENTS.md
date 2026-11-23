@@ -79,7 +79,7 @@ The flow only works when the architect's plan is machine-readable. `docs/specs/<
 ```yaml
 ---
 spec_id: <NNN>-<slug>
-shape: <shape-id>      # service-python | web-nextjs | service-java | service-go | service-typescript | service-dotnet | …
+shape: <shape-id>      # service-python | web-nextjs | service-java | service-go | service-typescript | service-dotnet | library-dotnet | …
 spec_hash: <from cplat spec hash>   # the plan is invalid once the criteria change
 tasks:
   - id: t1
@@ -206,15 +206,15 @@ The spec formats (`spec.md`, `design.md`, `plan.md`, `verification.md`, test tag
 | `observability` | sonnet | `/api/metrics`, OpenTelemetry instrumentation, alerts |
 | `release` | sonnet | `package.json` version (a library: none, the tag is its version), CHANGELOG, release PR |
 
-### `svc-java` plugin (`service-java`)
+### `svc-java` plugin (`service-java`, `library-java`)
 
 | Agent | Model | Job |
 |---|---|---|
-| `coder` | sonnet | Spring Boot 4 / Java 21 implementation |
+| `coder` | sonnet | Spring Boot 4 / Java 21 implementation (a library: plain Java) |
 | `tester` | sonnet | JUnit 5 + Spring Boot Test, JaCoCo gate |
 | `deployment` | sonnet | Distroless Java image, JVM-aware probes |
 | `observability` | sonnet | Actuator + Micrometer + OTel agent |
-| `release` | sonnet | `pom.xml` version via `versions:set` |
+| `release` | sonnet | `pom.xml` version via `versions:set` (a library: none, the tag is its version) |
 
 ### `svc-go` plugin (`service-go`)
 
@@ -236,7 +236,7 @@ The spec formats (`spec.md`, `design.md`, `plan.md`, `verification.md`, test tag
 | `observability` | sonnet | prom-client, OpenTelemetry Node SDK, pino trace ids |
 | `release` | sonnet | `package.json` version, CHANGELOG, release PR |
 
-### `svc-dotnet` plugin (`service-dotnet`)
+### `svc-dotnet` plugin (`service-dotnet`, `library-dotnet`)
 
 | Agent | Model | Job |
 |---|---|---|
@@ -244,7 +244,7 @@ The spec formats (`spec.md`, `design.md`, `plan.md`, `verification.md`, test tag
 | `tester` | sonnet | xUnit v3 through `WebApplicationFactory`, Testcontainers PostgreSQL, smoke tests of category `smoke` |
 | `deployment` | sonnet | chiseled ASP.NET Core image, numeric non-root user |
 | `observability` | sonnet | prometheus-net, OpenTelemetry .NET SDK, trace ids in the JSON log lines |
-| `release` | sonnet | CHANGELOG + PR; the image tag is the version |
+| `release` | sonnet | CHANGELOG + PR; the tag is the version (the image's, or the package's for a library) |
 
 ### Noun plugins (`component`, `api`, `resource`, `instance`, `issue`, `platform`)
 
