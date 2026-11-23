@@ -45,6 +45,7 @@ tasks:
     covers: [AC-211.7]
     parallel_safe: true
     depends_on: [t3]
+    done: true
   - id: t6
     title: Ship and build instructions start unit sessions from the briefing and drop the bookkeeping calls
     files: [plugins/component/commands/build.md, plugins/component/commands/ship.md, plugins/component/references/build-test-approval.md, plugins/component/references/build-tighten.md, plugins/component/references/build-load-run.md, plugins/component/references/ship-land-red.md, docs/rules/plugins/component/commands/build.yml, docs/rules/plugins/component/commands/ship.yml, docs/rules/plugins/component/references/build-test-approval.yml, docs/rules/plugins/component/references/build-tighten.yml, docs/rules/plugins/component/references/build-load-run.yml, docs/rules/plugins/component/references/ship-land-red.yml]
