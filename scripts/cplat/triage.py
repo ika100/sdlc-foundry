@@ -40,9 +40,9 @@ LABELS = {
     "p2": ("fef2c0", "Priority 2: cosmetic, convenience, easy workaround"),
 }
 PRIORITY_LABELS = tuple(priority.label_of(level) for level in priority.LEVELS)
-# A decision takes an issue out of the queue; so does a label that marks it as no triage work (platform notes, started work).
-DECISION_LABELS = {"needs-info", "tracked", "question", "duplicate", "wontfix", "triaged", "needs-decision"}
-NOT_TRIAGE_LABELS = {"retro", "notify", "in-progress"}
+DECISION_LABELS = {"needs-info", "tracked", "question", "duplicate", "wontfix"}
+# Without `triage`, an issue already routed (triaged, needs-decision), a platform note or started work is no triage work.
+NOT_TRIAGE_LABELS = {"triaged", "needs-decision", "retro", "notify", "in-progress"}
 BODY_LIMIT = 4000
 COMMENT_LIMIT = 1500
 FENCE = "-----"
@@ -114,14 +114,15 @@ def summary(issue: dict) -> dict:
 
 def queue(issues: list[dict], *, new: bool = False, waiting: bool = False) -> list[dict]:
     """Issues to look at: every open issue without a decision, whatever labels it was filed with (a form, `/issue:report`,
-    by hand), except platform notes and started work; `waiting` = needs-info. `new` is kept for old callers and changes nothing."""
+    by hand); an issue that is routed, a platform note or started work only while it carries `triage`; `waiting` = needs-info.
+    `new` is kept for old callers and changes nothing."""
     out = []
     for issue in issues:
         labels = _labels(issue)
         if waiting:
             keep = "needs-info" in labels
         else:
-            keep = not labels & (DECISION_LABELS | NOT_TRIAGE_LABELS)
+            keep = not labels & DECISION_LABELS and ("triage" in labels or not labels & NOT_TRIAGE_LABELS)
         if keep:
             out.append(issue)
     return sorted(out, key=lambda i: i.get("createdAt", ""))

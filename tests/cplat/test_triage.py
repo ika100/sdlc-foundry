@@ -52,10 +52,15 @@ def test_issues_filed_without_the_triage_label_are_in_the_queue():
     assert [i["number"] for i in triage.queue(issues, new=True)] == [1, 2, 3, 4]
 
 
-@pytest.mark.parametrize("label", ["needs-info", "tracked", "question", "duplicate", "wontfix", "triaged", "needs-decision",
-                                   "retro", "notify", "in-progress"])
-def test_a_decision_or_a_non_triage_label_keeps_an_issue_out(label):
+@pytest.mark.parametrize("label", ["needs-info", "tracked", "question", "duplicate", "wontfix"])
+def test_a_decision_keeps_an_issue_out(label):
     assert triage.queue([issue(1, ["triage", "bug", label])]) == []
+
+
+@pytest.mark.parametrize("label", ["triaged", "needs-decision", "retro", "notify", "in-progress"])
+def test_a_routed_note_or_started_issue_is_out_unless_labelled_triage(label):
+    assert triage.queue([issue(1, ["bug", label])]) == []
+    assert [i["number"] for i in triage.queue([issue(2, ["triage", "bug", label])])] == [2]
 
 
 def test_waiting_lists_needs_info_only():
