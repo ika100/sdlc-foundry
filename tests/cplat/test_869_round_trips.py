@@ -43,19 +43,21 @@ def test_unit_rules_are_the_unit_s_row_and_the_rules_for_every_unit(unit, key):
 
 def test_a_green_quiet_ci_in_a_run_records_the_security_gate_and_the_ci_stage(tmp_path, monkeypatch, capsys):
     seen = []
+    monkeypatch.setattr(runs, "build_run", lambda repo: "r1")          # spec 211: the active build run is the one recorded
     monkeypatch.setattr(runs, "record_gate", lambda repo, gate, result: seen.append((gate, result)) or True)
     import budget
     monkeypatch.setattr(budget, "record_stage", lambda repo, name, result: seen.append((name, result)))
-    quiet._record_ci(tmp_path, "passed")
+    quiet._record_ci(tmp_path, 0)
     assert seen == [("security", "passed"), ("ci", "passed")]
-    assert "recorded: gate security passed, stage ci passed" in capsys.readouterr().out
+    assert "recorded for build run r1: gate security passed, budget stage ci passed" in capsys.readouterr().out
 
 
 def test_without_a_current_run_quiet_ci_records_nothing(tmp_path, monkeypatch, capsys):
-    monkeypatch.setattr(runs, "record_gate", lambda repo, gate, result: False)
+    monkeypatch.setattr(runs, "build_run", lambda repo: None)
+    monkeypatch.setattr(runs, "record_gate", lambda *a: pytest.fail("no gate without a run"))
     import budget
     monkeypatch.setattr(budget, "record_stage", lambda *a: pytest.fail("no stage without a run"))
-    quiet._record_ci(tmp_path, "failed")
+    quiet._record_ci(tmp_path, 1)
     assert capsys.readouterr().out == ""
 
 
