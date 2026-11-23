@@ -198,6 +198,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [213-library-releases-publish-their-package](specs/213-library-releases-publish-their-package/spec.md) — Library releases publish their package | P1 | done | 8 |  |
 | [214-a-typescript-service-shape](specs/214-a-typescript-service-shape/spec.md) — A TypeScript service shape | P1 | done | 11 | #716 |
 | [215-a-typescript-library-shape](specs/215-a-typescript-library-shape/spec.md) — A TypeScript library shape | P1 | done | 11 | #717 |
+| [219-website-specs-get-a-ux-design-step](specs/219-website-specs-get-a-ux-design-step/spec.md) — Website specs get a UX design step | P1 | done | 11 | #715 |
 | [005-report-a-platform-problem-without](specs/005-report-a-platform-problem-without/spec.md) — Report a platform problem without leaking secrets | P2 | done | 3 |  |
 | [026-guard-rails-before-merge-and-in-the](specs/026-guard-rails-before-merge-and-in-the/spec.md) — Guard rails before merge and in the cluster | P2 | done | 2 |  |
 | [036-plans-are-approved-before-they-are-built](specs/036-plans-are-approved-before-they-are-built/spec.md) — Plans are approved before they are built | P2 | superseded | 4 |  |

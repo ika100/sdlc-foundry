@@ -51,7 +51,7 @@ Before the first parallel batch, a probe Agent in a worktree reports `git rev-pa
 
 ### 2.3 Coder prompt (every task)
 
-- `<project-map>` and the **brief**, copied from `spec.md`, `plan.md` and `design.md`: `Criteria` (id and full text of each criterion in the task's `covers`), `Task` (`id`, prose section verbatim, `files`; touch nothing else, and report any new test helper), `Contract` (the `design.md` sections it touches, verbatim, or `none`), `Tests` (from `TRACE`), `Commands` (the line `cplat component build tests <id> <task>` prints, `cplat quiet quality`).
+- `<project-map>` and the **brief**, copied from `spec.md`, `plan.md` and `design.md`: `Criteria` (id and full text of each criterion in the task's `covers`), `Task` (`id`, prose section verbatim, `files`; touch nothing else, and report any new test helper), `Contract` (the `design.md` sections it touches, verbatim, or `none`), `UX` (`ux.md`'s screens and states of its criteria, verbatim, or `none`), `Tests` (from `TRACE`), `Commands` (the line `cplat component build tests <id> <task>` prints, `cplat quiet quality`).
 - **Done when:** the acceptance tests of its `covers` criteria pass (`cplat quiet test-fast -- <the task's test files>`).
 - "**Hard rule:** never edit, skip or weaken the acceptance tests, because they are the approved criteria. A linter false positive in one gets the linter's line suppression naming the rule, nothing else (spec 160); name the suppressed rules in the commit." A type-only change the type check needs (type annotation, cast or import; no assertion line touched) is allowed, since the build records it.
 - `git rm` of tracked files is allowed (never `-f`), because the allowlist refuses it.
