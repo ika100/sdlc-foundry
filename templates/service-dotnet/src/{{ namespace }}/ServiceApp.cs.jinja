@@ -1,0 +1,73 @@
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Logging.Console;
+{%- if needs_observability %}
+using Prometheus;
+{%- endif %}
+
+namespace {{ namespace }};
+
+/// <summary>Builds the service: configuration, logging, probes{% if needs_observability %}, metrics, tracing{% endif %}{% if needs_database %}, the database{% endif %} and the routes.</summary>
+public static class ServiceApp
+{
+    /// <summary>The tag of the health checks <c>/ready</c> runs; add one for every dependency the service needs.</summary>
+    public const string ReadyTag = "ready";
+
+    /// <summary>The configured app, not yet running.</summary>
+    public static WebApplication Build(string[] args)
+    {
+        var config = AppConfig.FromEnvironment();
+        var builder = WebApplication.CreateBuilder(args);
+
+        builder.WebHost.ConfigureKestrel(kestrel => kestrel.ListenAnyIP(config.Port));
+        builder.Logging.ClearProviders();
+        builder.Logging.AddConsole(options => options.FormatterName = JsonLineFormatter.FormatterName);
+        builder.Logging.AddConsoleFormatter<JsonLineFormatter, ConsoleFormatterOptions>();
+        builder.Logging.SetMinimumLevel(config.LogLevel);
+        builder.Logging.AddFilter("Microsoft.AspNetCore", config.LogLevel > LogLevel.Warning ? config.LogLevel : LogLevel.Warning);
+        // A failing readiness check answers 503 on every probe; the health check service would also log it as an error each time.
+        builder.Logging.AddFilter("Microsoft.Extensions.Diagnostics.HealthChecks", LogLevel.Critical);
+{%- if needs_database %}
+        // While the database starts, DatabaseMigrator logs each retry; EF Core's own connection error would repeat it.
+        builder.Logging.AddFilter("Microsoft.EntityFrameworkCore.Database.Connection", LogLevel.Critical);
+{%- endif %}
+
+        builder.Services.AddHealthChecks();
+{%- if needs_observability %}
+        builder.Services.AddServiceTelemetry(config);
+{%- endif %}
+{%- if needs_database %}
+        builder.Services.AddDatabase(DatabaseSettings.FromEnvironment());
+{%- endif %}
+
+        var app = builder.Build();
+{%- if needs_observability %}
+
+        app.UseRouting();
+        app.UseHttpRequestMetrics();
+{%- endif %}
+
+        // Liveness: the process is up and serving; it runs no check.
+        app.MapHealthChecks("/health", Probe(_ => false, "ok"));
+        // Readiness: the service can do its work (every check tagged ReadyTag passes).
+        app.MapHealthChecks("/ready", Probe(check => check.Tags.Contains(ReadyTag), "ready"));
+{%- if needs_observability %}
+        app.MapMetrics("/metrics");
+{%- endif %}
+
+        return app;
+    }
+
+    private static HealthCheckOptions Probe(Func<HealthCheckRegistration, bool> predicate, string healthy) => new()
+    {
+        Predicate = predicate,
+        ResultStatusCodes =
+        {
+            [HealthStatus.Healthy] = StatusCodes.Status200OK,
+            [HealthStatus.Degraded] = StatusCodes.Status200OK,
+            [HealthStatus.Unhealthy] = StatusCodes.Status503ServiceUnavailable,
+        },
+        ResponseWriter = (context, report) => context.Response.WriteAsJsonAsync(
+            new { status = report.Status == HealthStatus.Unhealthy ? "unavailable" : healthy }),
+    };
+}

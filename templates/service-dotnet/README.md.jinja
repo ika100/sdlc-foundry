@@ -1,0 +1,16 @@
+# {{ project_name }}
+
+{{ description }}
+
+.NET service (ASP.NET Core minimal APIs on .NET {{ dotnet_major }}) generated from the `service-dotnet` template of [`ika100/sdlc-foundry`](https://github.com/ika100/sdlc-foundry).
+
+```bash
+devbox shell
+devbox run install    # restore the locked packages
+devbox run dev        # http://localhost:{{ port }}/health
+devbox run quality    # dotnet format + build with the analyzers
+devbox run test       # xUnit with coverage
+devbox run image-build
+```
+
+See `CLAUDE.md` for conventions and the full recipe list. Skeleton updates: `/platform:update`.

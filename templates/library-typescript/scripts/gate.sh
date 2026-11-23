@@ -5,14 +5,15 @@
 #   gate.sh files <gate> <pathspec>...         exit 0 when git tracks at least one matching file
 #   gate.sh tests <gate> <runner> -- <command> [args...]
 #                                              run the command, count the tests that ran
-#                                              runner: pytest | maven | go | vitest
+#                                              runner: pytest | maven | go | vitest | dotnet
 #
 # The line: `<gate>: checked nothing: <what> - <fix>`. There is no setting, variable or argument that skips the decision.
-# `tests` also bounds one test: pytest 120 s (plugin), maven 120 s (JUnit property), go 5 m (-timeout), unless the repo sets its own.
+# `tests` also bounds one test: pytest 120 s (plugin), maven 120 s (JUnit property), go 5 m (-timeout), dotnet 120 s
+# (--blame-hang-timeout), unless the repo sets its own.
 # Same file in every template (scripts/sync-template-copies.py keeps the copies equal); keep it free of Jinja syntax.
 
 usage() {
-  echo "usage: gate.sh nothing <gate> <what> <fix> | files <gate> <pathspec>... | tests <gate> <pytest|maven|go|vitest> -- <command> [args...]" >&2
+  echo "usage: gate.sh nothing <gate> <what> <fix> | files <gate> <pathspec>... | tests <gate> <pytest|maven|go|vitest|dotnet> -- <command> [args...]" >&2
   exit 2
 }
 
@@ -38,6 +39,19 @@ EOF
   echo "$total"
 }
 
+# Sum of passed + failed over the <Counters ...> elements of the given TRX files; missing files count 0.
+trx_sum() {
+  local f tag p x total=0
+  for f in "$@"; do
+    [ -f "$f" ] || continue
+    tag=$(sed -e ':a' -e '$!{N;ba' -e '}' -e 's/\n/ /g' "$f" | grep -o '<Counters[[:space:]][^>]*>' | sed -n 1p)
+    p=$(printf '%s\n' "$tag" | grep -o '[[:space:]]passed="[0-9]*"' | sed 's/[^0-9]//g' | sed -n 1p)
+    x=$(printf '%s\n' "$tag" | grep -o '[[:space:]]failed="[0-9]*"' | sed 's/[^0-9]//g' | sed -n 1p)
+    total=$((total + ${p:-0} + ${x:-0}))
+  done
+  echo "$total"
+}
+
 # Sum of a numeric JSON key (pretty or compact) in a file; a missing file counts 0.
 json_sum() {
   local f="$1" key="$2" n total=0
@@ -52,7 +66,7 @@ cmd_tests() {
   [ "$#" -ge 2 ] || usage
   local gate="$1" runner="$2" rc ran no_tests=0 tmp
   shift 2
-  case "$runner" in pytest | maven | go | vitest) ;; *) usage ;; esac
+  case "$runner" in pytest | maven | go | vitest | dotnet) ;; *) usage ;; esac
   [ "${1:-}" = "--" ] || usage
   shift
   [ "$#" -ge 1 ] || usage
@@ -60,7 +74,7 @@ cmd_tests() {
   tmp=$(mktemp -d "${TMPDIR:-/tmp}/gate.XXXXXX") || exit 1
   trap 'rm -rf "$tmp"' EXIT
 
-  # Per-test limits (spec 197); the command's argv stays as given.
+  # Per-test limits (spec 197); the command's argv stays as given, except that dotnet gets the hang options appended.
   case "$runner" in
     pytest)
       if [ -f scripts/pytest_limit/platform_test_limit.py ]; then
@@ -78,6 +92,12 @@ cmd_tests() {
       case " ${GOFLAGS:-} " in
         *" -timeout"*) ;;
         *) export GOFLAGS="${GOFLAGS:+$GOFLAGS }-timeout=5m" ;;
+      esac
+      ;;
+    dotnet)
+      case " $* " in
+        *" --blame-hang"*) ;;
+        *) set -- "$@" --blame-hang-timeout 120s --blame-hang-dump-type none ;;
       esac
       ;;
   esac
@@ -100,6 +120,12 @@ cmd_tests() {
       "$@" | tee "$tmp/out"
       rc=${PIPESTATUS[0]}
       ran=$(grep -c -E '^[[:space:]]*--- (PASS|FAIL):' "$tmp/out")
+      [ "$rc" -eq 0 ] && no_tests=1
+      ;;
+    dotnet)
+      "$@" --logger "trx;LogFilePrefix=gate" --results-directory "$tmp/trx" 2>&1 | tee "$tmp/out"
+      rc=${PIPESTATUS[0]}
+      ran=$(trx_sum "$tmp"/trx/*.trx)
       [ "$rc" -eq 0 ] && no_tests=1
       ;;
     vitest)

@@ -1,0 +1,31 @@
+using Npgsql;
+
+namespace {{ namespace }}.Data;
+
+/// <summary>Connection settings from the platform's postgres resource (PG*, docs/env-vars.md); the defaults match <c>devbox run db-up</c>.</summary>
+public sealed record DatabaseSettings(string Host, int Port, string Database, string Username, string? Password)
+{
+    /// <summary>The settings from the given variables (the process environment when null).</summary>
+    public static DatabaseSettings FromEnvironment(IReadOnlyDictionary<string, string?>? env = null)
+    {
+        string? Get(string name) => env is null ? Environment.GetEnvironmentVariable(name) : env.GetValueOrDefault(name);
+
+        return new DatabaseSettings(
+            Get("PGHOST") ?? "localhost",
+            int.TryParse(Get("PGPORT"), out var port) ? port : 5432,
+            Get("PGDATABASE") ?? "{{ project_name | replace('-', '_') }}",
+            Get("PGUSER") ?? "app",
+            Get("PGPASSWORD"));
+    }
+
+    /// <summary>The Npgsql connection string; a short connect timeout keeps readiness answering while the database is down.</summary>
+    public string ConnectionString => new NpgsqlConnectionStringBuilder
+    {
+        Host = Host,
+        Port = Port,
+        Database = Database,
+        Username = Username,
+        Password = Password,
+        Timeout = 2,
+    }.ConnectionString;
+}

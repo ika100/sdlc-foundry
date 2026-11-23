@@ -1,0 +1,111 @@
+# Copier template: service-dotnet
+# C# HTTP service on ASP.NET Core minimal APIs: Kestrel, JSON console logging, xUnit + coverlet, dotnet format and the
+# .NET analyzers, the pinned .NET LTS SDK via devbox (ADR-005), optional PostgreSQL through EF Core, chiseled .NET image
+# (ADR-127), canonical devbox recipes, agentic setup.
+#
+# Usage:
+#   copier copy <platform-checkout>/templates/service-dotnet ./<project> --data project_name=<name>
+
+_min_copier_version: "9.0.0"
+
+# Only *.jinja files are rendered: GitHub Actions (${{ }}) shares Jinja's delimiters.
+_templates_suffix: .jinja
+
+_answers_file: .copier-answers.yml
+
+# Project-owned once generated: /platform:update must not overwrite these.
+_skip_if_exists:
+  - .secrets.baseline.json    # repo-owned once created: it records the repo's own false positives (seeded when missing)
+  - .claude/project-notes.md   # repo-owned notes, loaded by CLAUDE.md (spec 086)
+  - README.md                # project-owned after creation (spec 060)
+  - .github/ISSUE_TEMPLATE/**
+  - Directory.Packages.props
+  - "*.slnx"
+  - src/**
+  - tests/**
+  - docs/adr/**
+  - docs/backlog.md
+  - docs/plan/**
+  - docs/specs/**
+  - docs/env-vars.md
+
+_exclude:
+  - "copier.yml"
+  - ".git"
+  - "{% if not needs_observability %}**/HttpMetrics.cs{% endif %}"
+  - "{% if not needs_observability %}**/Telemetry.cs{% endif %}"
+  - "{% if not needs_observability %}**/MetricsTests.cs{% endif %}"
+  - "{% if not needs_database %}**/Data{% endif %}"
+  - "{% if not needs_database %}**/DatabaseTests.cs{% endif %}"
+  - "{% if not needs_database %}.config{% endif %}"
+
+_tasks:
+  - "git init -q -b main"
+  - "devbox install"
+  - "devbox run -- dotnet restore"
+  - "git add -A && git -c user.email=bootstrap@ika100 -c user.name=bootstrap commit -q -m 'chore: bootstrap from service-dotnet template'"
+  - "echo 'Bootstrap complete. Repo committed at HEAD. Run: cd {{ project_name }} && devbox run quality'"
+
+project_name:
+  type: str
+  help: "Project name (kebab-case, e.g. 'orders-api'). Used in directory, Docker tag labels; its PascalCase form is the C# namespace."
+  validator: >-
+    {%- if not (project_name | regex_search('^[a-z][a-z0-9-]{1,39}$')) -%}
+    project_name must match ^[a-z][a-z0-9-]{1,39}$
+    {%- endif -%}
+
+namespace:
+  type: str
+  when: false
+  default: "{{ project_name | replace('-', ' ') | title | replace(' ', '') }}"
+
+description:
+  type: str
+  help: "One-line description of the service."
+  default: "A .NET service"
+
+github_org:
+  type: str
+  help: "GitHub organization or user that will own the repo."
+  default: "ika100"
+
+owner_team:
+  type: str
+  help: "Owning team or individual (used in CODEOWNERS)."
+  default: "@{{ github_org }}"
+
+
+dotnet_major:
+  type: str
+  help: ".NET major version (LTS; the target framework net<major>.0, the devbox SDK and the Docker images; bumped via /platform:update — ADR-005)."
+  default: "10"
+
+dotnet_sdk_version:
+  type: str
+  when: false
+  default: "10.0.403"   # the devbox SDK of dotnet_major (scripts/bump_template_pins.py moves it)
+
+port:
+  type: int
+  help: "HTTP port the service listens on."
+  default: 8080
+
+needs_observability:
+  type: bool
+  help: "Include /metrics (prometheus-net) with HTTP request metrics and OpenTelemetry tracing (OTLP export when OTEL_EXPORTER_OTLP_ENDPOINT is set)?"
+  default: true
+
+needs_database:
+  type: bool
+  help: "Include PostgreSQL support (EF Core with Npgsql, migrations applied at startup, Testcontainers tests) wired to the platform's postgres resource?"
+  default: false
+
+docker_registry:
+  type: str
+  help: "Container registry namespace."
+  default: "ghcr.io/{{ github_org }}"
+
+platform_marketplace_ref:
+  type: str
+  help: "Git ref of ika100/sdlc-foundry to pin the plugin marketplace to (branch, tag, or commit)."
+  default: "main"
