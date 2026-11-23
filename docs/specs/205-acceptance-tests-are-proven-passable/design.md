@@ -135,11 +135,12 @@ cplat quiet [--raw] test-fast --red -- <test file or node id>...
 Plugin (`cplat_red_check`, pytest hooks only, no `cplat` imports):
 - The process without `workerinput` writes `{"kind": "start"}` at configure.
 - Every process, xdist workers included, appends one JSON line per record:
-  - `{"kind": "test", "nodeid", "file": <abs path>, "when": "setup"|"call"|"teardown", "outcome": "passed"|"failed"|"skipped", "xfail": bool, "smoke": bool, "exc": [MRO class names, innermost type first] | null, "message": str, "module": str | null, "module_file": str | null, "frames": [abs paths of traceback entries, outermost first]}`
+  - `{"kind": "test", "nodeid", "file": <abs path>, "when": "setup"|"call"|"teardown", "outcome": "passed"|"failed"|"skipped", "xfail": bool, "smoke": bool, "exc": [MRO class names, innermost type first] | null, "message": str, "module": str | null, "module_file": str | null, "top_file": str | null, "frames": [abs paths of traceback entries, outermost first]}`
     for each failed or skipped phase and for each passed `call`;
-  - `{"kind": "collect", "file", "exc", "message", "module", "module_file", "frames"}` for each collection error.
+  - `{"kind": "collect", "file", "exc", "message", "module", "module_file", "top_file", "frames"}` for each collection error.
 - `module` is `exc.name` for an `ImportError`; for an `AttributeError` whose `obj` is a module, it is that module's
-  `__name__`. `module_file` is the module's resolved file when it can be found, else null.
+  `__name__`. `module_file` is the module's resolved file when it can be found, else null; `top_file` is the same for
+  the module's top-level package (#956).
 - The plugin keeps its options in the environment, because xdist workers need them. The classifier ignores records
   whose `file` is not one of the files the run was given, so a pytest started inside a test (in a temp dir) changes
   nothing.
@@ -155,8 +156,11 @@ Classification (`quiet_red.classify`):
   2. Every phase passed → `passes`.
   3. Skipped with the smoke marker → `skipped (not judged)`. Skipped otherwise, or xfail → `test error`.
   4. `NotImplementedError` in any phase → `missing behaviour`.
-  5. `ImportError`, `ModuleNotFoundError` or `AttributeError` in any phase whose module is not a test module →
-     `missing behaviour`.
+  5. `ImportError`, `ModuleNotFoundError` or `AttributeError` in any phase whose module is not a test module: an
+     `AttributeError`, or an import error whose top-level package is **own code** (`top_file` is a repo frame, or a
+     directory or `.py` of that name sits under the root or `src/`, or it is the normalised `[project] name` of
+     `pyproject.toml`) → `missing behaviour`; any other import error → `test error`, with the line
+     `<pkg> is not installed: add it to the dev dependencies` when `top_file` is null (#956).
   6. Failure in setup or teardown → `test error`.
   7. Call phase `AssertionError` (or subclass) or pytest's `Failed` (`pytest.fail`, `pytest.raises` "DID NOT RAISE") →
      `missing behaviour`.
