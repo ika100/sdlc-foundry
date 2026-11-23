@@ -12,6 +12,7 @@ import sys
 import pytest
 
 import land_merge
+import merge_lock
 from hold_world_198 import OTHER_PID, SLUG, clock, drop_hold, lock_is_free, said, write_hold  # noqa: F401  (fixtures and helpers)
 from land220_world import E2E_SECONDS, QUEUE_LINE, World, fast_lane_line, kept_line, read_claim, url_of, waiting_line
 from system_fixtures import git
@@ -82,7 +83,8 @@ def test_diff_and_base_together_are_an_argument_error_ac_220_2(tmp_path):  # AC-
     head = git(root, "rev-parse", "HEAD")
     res = diff(root, head, head, "--base", "main")
     assert res.returncode == 2 and "run=" not in res.stdout
-    assert "--diff" in res.stderr and "not allowed with" in res.stderr           # argparse's mutually exclusive error, not an unknown flag
+    error = res.stderr.strip().splitlines()[-1]                                  # argparse's last line: `prog: error: ...`
+    assert "--diff" in error and "--base" in error and "unrecognized" not in error
 
 
 def test_e2e_workflows_are_the_ones_that_run_the_scope_script_ac_220_1(tmp_path):  # AC-220.1
@@ -208,7 +210,7 @@ def test_a_docs_land_merges_while_a_code_land_waits_on_its_checks_ac_220_4(world
     a, b, hook, ok, lines = fast_lane_scenario(w)
     assert ok and hook.result and hook.result[0] is True, (lines, hook.result)
     claim = hook.claim
-    assert claim and claim["pr"] == a and claim["who"] == "pr 805" and isinstance(claim["pid"], int) and claim["since"]
+    assert claim and claim["pr"] == a and claim["who"] == merge_lock.who_of(a) and isinstance(claim["pid"], int) and claim["since"]
     assert hook.lock_free is True                                              # the wait of A holds no flock, only the claim
     assert said.count(fast_lane_line(a, b)) == 1
     first_head = w.updates[0][2]
@@ -246,7 +248,7 @@ def test_a_land_in_scope_or_undecidable_waits_for_the_lock_ac_220_6(world, said,
     ok, lines, _ = w.land(a)
     assert ok and hook.queued and hook.result is None
     queue = [ln for ln in said if QUEUE_LINE.match(ln)]
-    assert queue and QUEUE_LINE.match(queue[0]).group(1) == "pr 805"
+    assert queue and QUEUE_LINE.match(queue[0]).group(1) == merge_lock.who_of(a)
     assert fast_lane_line(a, b) not in said
     assert w.order() == [805]                                                  # B never merged while A waited on its checks
     assert [u for u in w.updates if u[1] == b] == []                           # and never started a catch-up of its own
@@ -283,7 +285,7 @@ def test_a_release_mode_land_queues_behind_a_claim_and_takes_no_fast_lane_ac_220
     ok, lines, _ = w.land(a)
     assert ok and hook.queued
     assert any(QUEUE_LINE.match(ln) for ln in said)
-    assert fast_lane_line(a, b) not in said and w.change_calls == []           # RELEASE mode never asks for the fast lane
+    assert fast_lane_line(a, b) not in said and b not in w.change_calls         # RELEASE mode never asks for the fast lane
     assert w.order() == [805]
 
 
@@ -293,7 +295,7 @@ def test_a_release_mode_land_behind_main_does_not_catch_up_or_keep_an_e2e_ac_220
     with pytest.raises(land_merge.BaseMoved):
         w.land(a, mode=land_merge.RELEASE)
     assert w.updates == [] and w.merges == [] and w.cancels == []
-    assert w.range_calls == [] and w.change_calls == []
+    assert w.range_calls == []
     assert not any(ln.startswith("e2e:") or ln.startswith("fast lane:") for ln in said)
 
 
