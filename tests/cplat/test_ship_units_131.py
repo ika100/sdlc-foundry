@@ -149,10 +149,10 @@ def test_the_unit_command_tells_whether_the_unit_has_its_checkpoint(repo, capsys
     assert "not a unit session" in capsys.readouterr().out
     monkeypatch.setenv("CPLAT_UNIT", "task:t1")
     assert ship.main(["--repo", str(repo), "unit"]) == 0
-    assert capsys.readouterr().out.startswith("unit task:t1: open: ")
+    assert any(ln.startswith("unit task:t1: open: ") for ln in capsys.readouterr().out.splitlines())
     mark_done(repo, "t1")
     assert ship.main(["--repo", str(repo), "unit"]) == 0
-    assert capsys.readouterr().out.strip() == f"unit task:t1: done at {head(repo)[:7]}"
+    assert f"unit task:t1: done at {head(repo)[:7]}" in capsys.readouterr().out.splitlines()
 
 
 # ---------------- AC-131.14: rescale on phase build ----------------

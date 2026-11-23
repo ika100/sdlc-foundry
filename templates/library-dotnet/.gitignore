@@ -1,0 +1,19 @@
+bin/
+obj/
+TestResults/
+coverage/
+*.user
+*.suo
+.vs/
+.idea/
+.env
+.env.local
+.devbox/
+.DS_Store
+*.log
+
+# Claude Code: agent worktrees, local settings and locks are never committed
+.claude/scheduled_tasks.lock
+.claude/worktrees/
+.claude/settings.local.json
+artifacts/

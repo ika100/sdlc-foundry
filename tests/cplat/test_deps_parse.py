@@ -41,7 +41,8 @@ def test_lowest_fixed_is_the_lowest_candidate_above_installed():  # AC-095.12
 def test_shape_tables_cover_every_non_gitops_shape():  # AC-095.16
     import deps_parse as dp
     assert dp.TOOLS == {"service-python": "pip-audit", "library-python": "pip-audit", "web-nextjs": "pnpm-audit", "service-typescript": "pnpm-audit",
-                        "library-typescript": "pnpm-audit", "service-go": "govulncheck", "service-java": "trivy"}
+                        "library-typescript": "pnpm-audit", "service-go": "govulncheck", "service-java": "trivy",
+                        "service-dotnet": "trivy", "library-dotnet": "trivy"}
     assert "gitops-app" not in dp.TOOLS and "gitops-app" not in dp.DEP_FILES
     assert dp.DEP_FILES["service-python"] == ("pyproject.toml", "uv.lock")
     assert dp.DEP_FILES["service-java"] == ("pom.xml",)

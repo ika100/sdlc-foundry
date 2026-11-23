@@ -3,15 +3,16 @@ description: "Build an approved, planned spec: failing acceptance tests first, t
 ---
 
 You are the **build orchestrator**: failing tests first, then coders, verification and one PR.
+
 A rule marked **Hard rule:** is never departed from. Any other rule is a practice: where its stated purpose does not apply, depart from it and name each departure and its reason in one line of your report.
 
-**Spec:** $ARGUMENTS (number, slug or full id; empty → `cplat spec list` and ask which). `--full` → to `cplat validate run`. `--unit <unit>`: only that unit, per `${CLAUDE_PLUGIN_ROOT}/references/unit-mode.md`.
+**Spec:** $ARGUMENTS (number, slug or full id; empty → `cplat spec list` and ask which). `--full` → to `cplat validate run`. `--unit <unit>`: only that unit, by the rules of `${CLAUDE_PLUGIN_ROOT}/references/unit-mode.md` that the start call prints.
 
 Run the phases in order, printing `## Phase N complete — <one line>` after each. A re-run skips phases with a result.
 
 ## cplat
 
-One `cplat` call per Bash invocation, output read whole (no `grep`, `head` or `tail`). First `cplat shape` (in a ship: the `shape:` line `ship start` printed). `unsupported` or no shape → stop.
+One `cplat` call per Bash invocation, output read whole (no `grep`, `head` or `tail`). First `cplat shape` (in a ship: the `shape:` line `ship start` printed); a unit session runs `cplat component ship unit` instead, which prints the shape and its briefing. `unsupported` or no shape → stop.
 
 - A `cplat shape` error that names `.platform-settings.yml` (an invalid shape declaration) → stop and show it; never ask for the shape, since the user declared it.
 
@@ -26,7 +27,7 @@ One `cplat` call per Bash invocation, output read whole (no `grep`, `head` or `t
 
 ## Phase 1 — Acceptance tests (red)
 
-`cplat platform runs phase build:tests`; skip if `reviewed acceptance tests for` is committed, since the tests are frozen; only `cplat spec trace <id>` passing → start at the review.
+`cplat platform runs phase build:tests` (a unit's start sets it); skip if `reviewed acceptance tests for` is committed, since the tests are frozen; only `cplat spec trace <id>` passing → start at the review.
 
 **tester** (`agents.tester`): "**Acceptance mode.**" + `<project-map>` + the brief: `Criteria` (every active criterion in full, the non-goals), `Contract` (`design.md`'s contract, verbatim), `Commands` (`cplat quiet test-fast`). It writes criterion-tagged tests (a `(smoke)` one also a smoke test, base URL only), confirms they fail because the behaviour is missing, and commits only test files. Then:
 - `cplat spec trace <id>` must pass; else the missing ids go back to the tester once, so that every criterion has a red test.
@@ -36,11 +37,10 @@ One `cplat` call per Bash invocation, output read whole (no `grep`, `head` or `t
 - One call: `cplat platform runs agent tester [--untraced <AC>]... [--wrong-failure <test>]...`.
 - `cplat spec trace <id> --json` → `TRACE` (criterion → test files).
 - **reviewer** in `**Test-review mode.**` (criteria, `Contract`, `TRACE`) reports `TEST FINDINGS:`; the tester gets them once: "**Acceptance mode.** Resolve only these test-review findings, changing only the tests named, so that nothing else moves: <findings>. Commit as `test(<number>): resolve test-review findings for <id>`. Reply `UNRESOLVED: <finding> — <why>` per line, or `UNRESOLVED: none`." A failing `cplat spec trace <id>` after it → `git revert --no-edit HEAD`, all unresolved, since a broken trace leaves a criterion untested. No second review.
-- `cplat quiet lint-fix`; commit `test(<slug>): lint-fix acceptance tests for <id>`; `cplat component build reviewed <id> --findings <n> [--unresolved '<test> | <AC> | <what>']...`. `RED=$(git log -1 --format=%H --grep 'acceptance tests for')`; `red` in place of `$RED` finds it too.
+- `cplat quiet lint-fix`; commit `test(<slug>): lint-fix acceptance tests for <id>`; `cplat component build reviewed <id> --findings <n> [--unresolved '<test> | <AC> | <what>']...`.
 
 ## Phase 2 — Implement (parallel via git worktrees)
 
-`cplat platform runs phase build:implement`
 ### 2.1 Schedule
 
 **skip tasks with `done: true`**. Run the batches `cplat component build schedule <id>` prints.
@@ -62,7 +62,7 @@ Before the first parallel batch, a probe Agent in a worktree reports `git rev-pa
 
 **Parallel batch (≥ 2 tasks):** one coder per task **in a single message**, each `isolation: "worktree"`. For each `(branch, worktree_path)` that changed something:
 1. `cplat component build merge <id> <task> <branch> [--helper <path>]...`. Exit 0 → step 2. Exit 1 naming commits without `Signed-off-by` → run the printed `git -C <worktree> rebase --signoff <sha>`, merge again unasked. Exit 3 → set aside (`cplat platform runs agent conflict <task>`, `git merge --abort`). Exit 4 → `cplat platform runs end --outcome escalated --reason '<the ESCALATE line>'` and stop.
-2. `cplat quiet lint-fix`, stage; `cplat spec test-diff $RED --task <task>`: exit 1 means a test was weakened or changed: stop and show the user the file and the reason (a `test helper` or `type-only` line: `build-tighten.md` instead). **Hard rule:** never decide yourself that it is a false alarm, because a changed test is a changed spec. The user approves it → read `${CLAUDE_PLUGIN_ROOT}/references/build-test-approval.md`. Then `cplat quiet quality`; failures go back to that coder (lint/type only; `cplat platform runs agent fix-round lint/type --task <task>`).
+2. `cplat quiet lint-fix`, stage; `cplat spec test-diff --task <task>`: exit 1 means a test was weakened or changed: stop and show the user the file and the reason (a `test helper` or `type-only` line: `build-tighten.md` instead). **Hard rule:** never decide yourself that it is a false alarm, because a changed test is a changed spec. The user approves it → read `${CLAUDE_PLUGIN_ROOT}/references/build-test-approval.md`. Then `cplat quiet quality`; failures go back to that coder (lint/type only; `cplat platform runs agent fix-round lint/type --task <task>`).
 3. `cplat validate run`; failures go back to the coder (`cplat platform runs agent fix-round test --task <task>`); failing only because a later task tM depending on it has not landed → `cplat plan merge <task> tM --reason '<why>'`, go on with tM without asking or escalating, because the plan's split was a mistake, not a decision.
 4. `git worktree remove <path>`; `git branch -d <branch>`.
 
@@ -86,32 +86,30 @@ Run the line `cplat component build tests <id> --load` prints (`cplat quiet test
 
 ## Phase 3 — QA: one CI gate, agents only where it is red
 
-`cplat platform runs phase build:qa`
-1. Stage the tree, then `devbox run lint-fix` and `devbox run ci` as `cplat quiet lint-fix` and `cplat quiet ci`: the CI gates.
+1. Stage the tree, then `devbox run lint-fix` and `devbox run ci` as `cplat quiet lint-fix` and `cplat quiet ci`: the CI gates; `ci` records the security gate and stage.
 2. **Red** → `cplat validate final --check <name> failed` per failed check, then spawn only the agent that owns the red gate, with `<project-map>`, `<touched-files>` and the summary and log path `cplat quiet` printed (log if not enough), so that no green gate is touched:
    - lint or type → **quality** (`agents.quality`), lint/type fixes only;
    - tests → the **coder** of the task whose files are involved (acceptance tests stay fixed; `cplat platform runs agent fix-round ci --task <task>`);
    - security → `cplat deps patch` first, then read `${CLAUDE_PLUGIN_ROOT}/references/build-security-red.md` and follow it (exit 0 → step 3; exit 3 → escalate with its `ESCALATE` reason and `--cause <CAUSE>`, via `cplat component ship escalate` in a ship, else `cplat platform runs end --outcome escalated`; exit 4 → **security** agent). A red gate after a bump never goes to a coder, because a dependency is at fault.
 
-   Between fix rounds: `cplat validate run`, `cplat quiet ci`; 2 rounds at most, then escalate. After a red round follow `${CLAUDE_PLUGIN_ROOT}/references/build-red-rounds.md`; record gates with `cplat budget stage <name> passed|failed`. `cplat quiet ci` records the `security` gate and the `ci` stage itself.
+   Between fix rounds: `cplat validate run`, `cplat quiet ci`; 2 rounds at most, then escalate. After a red round follow `${CLAUDE_PLUGIN_ROOT}/references/build-red-rounds.md`. `cplat quiet ci` stays red → `cplat platform runs gate security failed`.
 3. **Green** → agents only where needed: **tester** (`agents.tester`) so that every new internal has a unit test; **security** so that a changed Dockerfile is built and scanned.
-4. `cplat spec test-diff $RED` again (`--by quality` after the quality agent); exit 1 stops as in Phase 2. Commit changes.
+4. `cplat spec test-diff` again (`--by quality` after the quality agent); exit 1 stops: show the file and reason, since a changed test is a changed spec (`test helper`/`type-only`: `build-tighten.md`). Commit changes.
 
 ## Phase 4 — Verify against the spec
 
-`cplat platform runs phase build:verify`
 1. `cplat spec trace <id> --json` must pass, so that every criterion has its test.
 2. **reviewer** (`agents.reviewer`): `SPEC_DIR`, `BASE_REF`, `<touched-files>`, the trace JSON, the Phase 3 summary, and `SUPPRESSIONS`: the `lint suppression only` lines of the last test diff (Phase 3, step 4), or `none`, `TIGHTENED` (`build-tighten.md`) or `none`, and `TEST REVIEW`: the `unresolved:` lines of `git log -1 --format=%b --grep 'reviewed acceptance tests for'`, or `none`. After each pass (cycle `<n>`): `cplat platform runs agent findings --cycle <n> [--deviation <AC or task>]...`.
-3. A `NOT MET` item marked `TEST LOOSER` → read `${CLAUDE_PLUGIN_ROOT}/references/build-tighten.md` and follow it. `RESULT: fail` → each other `NOT MET` item to a coder of a covering task (`cplat platform runs agent fix-round verification --task <task>`), then `cplat spec test-diff $RED --task <task>` (exit 1 stops; a `test helper` line: `build-tighten.md`), `cplat quiet test-fast` and the reviewer; at most 2 cycles, then escalate. A `SMOKE: <file> — <finding>` line is no `NOT MET`: the tester gets it in the same round without asking: "Tighten only `<file>` so that it fails without the feature: `<finding>`. Change no other test."; then `cplat platform runs agent smoke <file> --finding '<finding>'` and run it (`cplat quiet test-fast -- <file>`, else `cplat quiet e2e`); a failure goes back once. `SMOKE` items alone need no new cycle.
+3. A `NOT MET` item marked `TEST LOOSER` → read `${CLAUDE_PLUGIN_ROOT}/references/build-tighten.md` and follow it. `RESULT: fail` → each other `NOT MET` item to a coder of a covering task (`cplat platform runs agent fix-round verification --task <task>`), then `cplat spec test-diff --task <task>` (exit 1 stops; a `test helper` line: `build-tighten.md`), `cplat quiet test-fast` and the reviewer; at most 2 cycles, then escalate. A `SMOKE: <file> — <finding>` line is no `NOT MET`: the tester gets it in the same round without asking: "Tighten only `<file>` so that it fails without the feature: `<finding>`. Change no other test."; then `cplat platform runs agent smoke <file> --finding '<finding>'` and run it (`cplat quiet test-fast -- <file>`, else `cplat quiet e2e`); a failure goes back once. `SMOKE` items alone need no new cycle.
 4. `cplat spec mutate <id> --write` (report only; it never fails the build).
 5. Commit `docs/specs/<spec_id>/verification.md`: `docs(spec): verify <spec_id>`.
 
 ## Phase 5 — Container image
 
-`cplat platform runs phase build:image`. `deployable` false → `## Phase 5 skipped — <shape> is not deployable`. Else **deployment** (`agents.deployment`), `<project-map>`, `<touched-files>`: the image. **Hard rule:** never Kubernetes manifests, because the gitops repo owns the cluster (ADR-017). `devbox run image-build`. Ask for gitops changes only for wiring not in the spec's *Provided by the system* list, since the system already provides that.
+`deployable` false → `## Phase 5 skipped — <shape> is not deployable`. Else **deployment** (`agents.deployment`), `<project-map>`, `<touched-files>`: the image. **Hard rule:** never Kubernetes manifests, because the gitops repo owns the cluster (ADR-017). `devbox run image-build`. Ask for gitops changes only for wiring not in the spec's *Provided by the system* list, since the system already provides that.
 ## Phase 6 — Close the spec
 
-`cplat platform runs phase build:close`; `cplat spec set-status <id> done`, `cplat spec index`, commit `docs(spec): <spec_id> done`.
+`cplat spec set-status <id> done`, `cplat spec index`, commit `docs(spec): <spec_id> done`.
 
 ## Phase 7 — Pull request
 
@@ -120,7 +118,7 @@ Run the line `cplat component build tests <id> --load` prints (`cplat quiet test
 ## Rules
 
 - **Hard rule:** only approved specs are built, and only as planned, because approval is the user's consent. An unanswered decision stops it.
-- **Hard rule:** push only in Phase 7, through `cplat pr open`, because it runs every check first.
+- **Hard rule:** push only in the pull request phase, through `cplat pr open`, because it runs every check first.
 - **Hard rule:** Never edit conflicting hunks: a merge conflict is re-planned once per task (at most 3 re-plans per build), then escalated; it is never resolved by hand, because the plan split the work wrongly.
 - **Subagents run in the foreground** (`run_in_background: false`); never poll for one in a shell loop, because such a loop can wait forever.
 - **Shell rule:** run every tool through `devbox run <script>`, never `pytest`, `ruff` or `uv` directly, so that versions and flags match CI.

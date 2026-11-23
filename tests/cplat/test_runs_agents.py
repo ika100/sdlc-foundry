@@ -481,7 +481,7 @@ def test_a_failing_recording_never_changes_the_test_diff_result(repo, store, mon
 def test_the_prompt_passes_task_and_quality_to_test_diff():
     """AC-089.7: build.md adds `--task` in Phase 2 and `--by quality` in Phase 3."""
     text = (COMMANDS / "build.md").read_text()
-    assert "test-diff $RED --task" in text and "--by quality" in text
+    assert "test-diff --task" in text and "--by quality" in text
 
 
 # ---------------- AC-089.8 tester events ----------------

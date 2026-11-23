@@ -40,7 +40,7 @@ flowchart TB
 
 Four ideas carry everything:
 
-1. **Shapes.** Every repo has a *shape* (`service-python`, `web-nextjs`, `gitops-app`, `service-java`, `service-go`, `service-typescript`, `library-python`, `library-typescript`). The shape decides which template creates it and which agents work on it. You never pick agents; commands detect the shape.
+1. **Shapes.** Every repo has a *shape* (`service-python`, `web-nextjs`, `gitops-app`, `service-java`, `service-go`, `service-typescript`, `service-dotnet`, `library-python`, `library-typescript`, `library-dotnet`). The shape decides which template creates it and which agents work on it. You never pick agents; commands detect the shape.
 2. **`devbox run <recipe>` is the only way anything runs** (`test`, `quality`, `security`, `image-build`, …). Same recipes in every shape, so humans, CI and agents behave identically.
 3. **Specs drive the work.** A feature starts as a spec in `docs/specs/` with numbered acceptance criteria you approve; the build writes failing tests from them first, then the code, and verifies every criterion before the pull request. Small changes and bug fixes skip the spec.
 4. **Two update channels.** Agents and commands update with `/plugin marketplace update`; the project skeleton (CI, Dockerfile, devbox, CLAUDE.md) updates with `/platform:update`. Your own code is never touched by either.
@@ -288,7 +288,7 @@ Everything here is a declaration in the GitOps repo; `render.py` turns it into m
 Every generated repo has issue forms (bug report, feature request) that label new issues `triage`. In Claude Code, inside the repo:
 
 ```
-/issue:triage            # the queue: issues labelled triage, oldest first
+/issue:triage            # the queue: open issues without a decision, oldest first
 /issue:triage 42         # one issue
 /issue:triage --waiting  # issues parked as needs-info, after the reporter answered
 ```
