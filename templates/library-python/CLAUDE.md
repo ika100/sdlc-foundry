@@ -37,27 +37,7 @@ Canonical `devbox run` scripts:
 
 ## Claude Code agents
 
-Plugins enabled in `.claude/settings.json`:
-
-- `svc@sdlc-foundry` — coder, architect, tester, quality gate agents
-- `component@sdlc-foundry` — the commands: `/component:spec`, `plan`, `build`, `ship`, `fix`, `check`, `release`
-- `platform@sdlc-foundry`, `issue@sdlc-foundry` — `/platform:update`, `/issue:report`
-- `shared@sdlc-foundry` — quality + security agents, the `cplat` launcher
-
-Library repos don't need the `deployment` agent (no Dockerfile, no k8s) — leave those plugin commands unused.
-
-Common workflows:
-
-| Task | Command |
-|---|---|
-| Small change | `/component:fix <description>` |
-| Write a feature spec (first step) | `/component:spec <description>` |
-| Plan the approved spec | `/component:plan <NNN>` |
-| Build it: tests first, verified | `/component:build <NNN>` |
-| All of it unattended: build, PR, merge on green CI, dev | `/component:ship <NNN>` (headless: `cplat headless "/component:ship <NNN>"`) |
-| Where specs stand | `/component:spec --all` |
-| Release | `/component:release` |
-| Quality + security audit | `/component:check` |
+Agents and slash commands come from the [`ika100/sdlc-foundry`](https://github.com/ika100/sdlc-foundry) marketplace, enabled in `.claude/settings.json`; each command's description says what it does. Read the platform's `docs/AGENTS.md` for the full orchestration model.
 
 ### Spec first
 

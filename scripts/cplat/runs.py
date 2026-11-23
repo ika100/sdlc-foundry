@@ -64,6 +64,8 @@ GATES = ("acceptance", "security")
 GATE_RESULTS = ("passed", "failed")
 RERUN_REASONS = ("stale", "stuck", "transient")
 FILED_RESULTS = ("new", "+1", "suppressed", "pending")
+BUILD_MARKERS = ("build:tests", "build:implement", "build:qa", "build:verify", "build:image", "build:close", "build:pr")
+UNIT_MARKERS = {"red-tests": "build:tests", "batch": "build:implement", "task": "build:implement"}
 BUFFER_CAP = 1000
 BUDGET_SECONDS = 20.0
 SKIP_SECONDS = 180            # #848: after a timeout or network error the store is skipped this long, not waited on per record
@@ -548,6 +550,10 @@ def phase(run_id: str | None, name: str) -> None:
     """Open phase `name`. No-op when the open phase of the same level already has that name. Level = name.count(":").
     Opening a phase closes the open phase of its level and every deeper one."""
     def change(rec: dict) -> None:
+        if name in BUILD_MARKERS:   # spec 211: a build marker is set once and only forward
+            seen = {p["name"] for p in rec["phases"]}
+            if any(m in seen for m in BUILD_MARKERS[BUILD_MARKERS.index(name):]):
+                return
         level, now = str(name).count(":"), _iso(utcnow())
         open_ones = [p for p in rec["phases"] if p.get("ended_at") is None]
         if any(p["name"] == name and p["name"].count(":") == level for p in open_ones):
@@ -557,6 +563,53 @@ def phase(run_id: str | None, name: str) -> None:
                 p["ended_at"] = now
         rec["phases"].append({"name": str(name), "started_at": now, "ended_at": None})
     _mutate(run_id, change)
+
+
+def mark(repo_dir: Path, name: str) -> None:
+    """Set build marker `name` on the repo's current run. Never raises."""
+    try:
+        phase(current_run(Path(repo_dir)), name)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def unit_started(repo_dir: Path, unit: str | None) -> None:
+    """Set the marker of the unit kind `unit` (`red-tests`, `batch:..`, `task:..`) that starts. Never raises."""
+    try:
+        marker = UNIT_MARKERS.get(str(unit or "").split(":", 1)[0])
+        if marker:
+            mark(repo_dir, marker)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def build_run(repo_dir: Path) -> str | None:
+    """Run id of the repo's pointer run when it is an active `build` run (attached or not), else None."""
+    try:
+        pointer = _read_pointer(_pointer(Path(repo_dir))) or {}
+        rid = pointer.get("run_id")
+        rec = _read_active(rid) if rid else None
+        return rid if rec is not None and pointer.get("kind") == "build" else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def record_gate(repo_dir: Path, gate: str, result: str) -> bool:
+    """`runs gate <gate> <result>` as a function (#869, spec 211): set gates[gate] on the pointer's run and the budget stage
+    of the same name; mark the phase. False without a pointer run. Never raises."""
+    try:
+        current = _read_pointer(_pointer(Path(repo_dir)))
+        if not current:
+            return False
+        rid = current.get("run_id")
+        _mutate(rid, lambda rec: rec.setdefault("gates", {}).__setitem__(gate, result))
+        _record_stage(Path(repo_dir), gate, result)
+        marker = {"acceptance": "build:qa", "security": "build:verify"}.get(gate)
+        if marker:
+            phase(rid, marker)
+        return True
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def ci_round(run_id: str | None) -> None:
@@ -1156,20 +1209,6 @@ def _record_stage(repo_dir: Path, gate: str, result: str) -> None:
         pass
 
 
-def record_gate(repo_dir: Path, gate: str, result: str) -> bool:
-    """`runs gate <gate> <result>` for the current run, as a function (#869: `cplat quiet ci` records its own result,
-    so the model makes no extra call). False when no run is current. Never raises."""
-    try:
-        current = _read_pointer(_pointer(repo_dir))
-        if not current:
-            return False
-        _mutate(current.get("run_id"), lambda rec: rec.setdefault("gates", {}).__setitem__(gate, result))
-        _record_stage(repo_dir, gate, result)
-        return True
-    except Exception:  # noqa: BLE001
-        return False
-
-
 def _recording_command(ns: argparse.Namespace) -> None:
     repo_dir = Path(ns.dir)
     pointer = _pointer(repo_dir)
@@ -1181,7 +1220,18 @@ def _recording_command(ns: argparse.Namespace) -> None:
             _atomic_write(pointer, json.dumps({"run_id": rid, "kind": ns.kind, "attached": True}))
             _init_agents(ns.kind, rid)
             print(f"run {rid} (attached to ship {spec})")
+            unit_started(repo_dir, os.environ.get("CPLAT_UNIT"))
             return
+        if os.environ.get("CPLAT_UNIT") and current and not current.get("attached"):
+            cur = active(current.get("run_id")) or {}
+            if cur.get("kind") == "build" and ns.spec and cur.get("spec") == ns.spec:
+                _register_claim("build", cur["run_id"], cur.get("started_at") or _iso(utcnow()))
+                print(f"run {cur['run_id']} (continued)")
+                line = _limits_line(cur["run_id"])
+                if line:
+                    print(line)
+                unit_started(repo_dir, os.environ["CPLAT_UNIT"])
+                return
         if current and not current.get("attached"):
             finish(current.get("run_id"), "abandoned")
         opts = _budget_options(ns)
@@ -1194,13 +1244,12 @@ def _recording_command(ns: argparse.Namespace) -> None:
         line = _limits_line(rid)
         if line:
             print(line)
+        unit_started(repo_dir, os.environ.get("CPLAT_UNIT"))
     elif ns.cmd == "phase":
         if current:
             phase(current.get("run_id"), ns.name)
     elif ns.cmd == "gate":
-        if current:
-            _mutate(current.get("run_id"), lambda rec: rec.setdefault("gates", {}).__setitem__(ns.gate, ns.result))
-            _record_stage(repo_dir, ns.gate, ns.result)
+        record_gate(repo_dir, ns.gate, ns.result)
     elif ns.cmd == "end":
         if ns.outcome == "escalated" and os.environ.get("CPLAT_UNIT"):
             try:

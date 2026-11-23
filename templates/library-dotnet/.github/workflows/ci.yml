@@ -1,0 +1,125 @@
+name: ci
+
+on:
+  push:
+    paths-ignore: ['**.md', 'docs/**', '.claude/**']
+    # other branches get CI from their PR only: a push trigger on them too ran every job twice (sdlc-foundry #104)
+    branches: [main]
+    tags:
+      - 'v*.*.*'
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, edited]   # edited: a corrected PR title is checked again
+  workflow_dispatch:
+
+# The .NET SDK is provisioned by devbox (devbox.json pins dotnet-sdk_<major>, ADR-005) — no separate setup-dotnet.
+
+# Least privilege by default; jobs that publish packages declare what they need.
+permissions:
+  contents: read
+
+# A newer push to the same pull request cancels the older run (main and tags always run to completion).
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}${{ github.event.action == 'edited' && '-edited' || '' }}   # a title edit never cancels a running build
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  quality:
+    name: quality (dotnet format + analyzers)
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: jetify-com/devbox-install-action@8c6a66ed6273138b1915457069de78cb52fe3bd7 # v0.15.0
+        if: runner.environment == 'github-hosted'   # self-hosted runner images ship devbox (docs/self-hosted-runners.md)
+        with:
+          enable-cache: true
+      - run: devbox run install
+      - run: devbox run quality
+
+  test:
+    name: test (xunit + coverage)
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: jetify-com/devbox-install-action@8c6a66ed6273138b1915457069de78cb52fe3bd7 # v0.15.0
+        if: runner.environment == 'github-hosted'   # self-hosted runner images ship devbox (docs/self-hosted-runners.md)
+        with:
+          enable-cache: true
+      - run: devbox run install
+      - run: devbox run test
+
+  security:
+    name: security (trivy + detect-secrets)
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: jetify-com/devbox-install-action@8c6a66ed6273138b1915457069de78cb52fe3bd7 # v0.15.0
+        if: runner.environment == 'github-hosted'   # self-hosted runner images ship devbox (docs/self-hosted-runners.md)
+        with:
+          enable-cache: true
+      - run: devbox run install
+      - run: devbox run security
+
+  ci-extra:
+    name: ci-extra
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Is a ci-extra recipe defined?
+        id: recipe
+        run: |
+          if grep -qs '"ci-extra"[[:space:]]*:' devbox.json; then
+            echo "defined=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "defined=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::no ci-extra recipe is defined in devbox.json: nothing to run (spec 086)"
+          fi
+      - uses: jetify-com/devbox-install-action@8c6a66ed6273138b1915457069de78cb52fe3bd7 # v0.15.0
+        if: runner.environment == 'github-hosted' && steps.recipe.outputs.defined == 'true'   # self-hosted runner images ship devbox (docs/self-hosted-runners.md)
+        with:
+          enable-cache: true
+      - run: devbox run install
+        if: steps.recipe.outputs.defined == 'true'
+      - run: devbox run ci-extra
+        if: steps.recipe.outputs.defined == 'true'
+
+  publish:
+    name: publish (the package to GitHub Packages)
+    # Spec 221 / ADR-125: only a v* tag publishes, after every gate of the same run passed; scripts/publish.sh fails before
+    # any pack when the commit built is not the tagged one, and passes the tag's version to the pack only.
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: [quality, test, security, ci-extra]
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    permissions:
+      contents: read
+      packages: write   # push to nuget.pkg.github.com; the only write permission in this workflow
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0   # the tag must be in the checkout: the script checks that HEAD carries it
+      - uses: jetify-com/devbox-install-action@8c6a66ed6273138b1915457069de78cb52fe3bd7 # v0.15.0
+        if: runner.environment == 'github-hosted'   # self-hosted runner images ship devbox (docs/self-hosted-runners.md)
+        with:
+          enable-cache: true
+      - name: Pack, check the version and publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: devbox run publish "$GITHUB_REF_NAME"
+
+  pr-title:
+    name: pr-title (conventional commits)
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Validate PR title
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          pattern='^(feat|fix|docs|style|refactor|perf|test|chore|ci|build|revert)(\(.+\))?!?: .{1,72}$'
+          if ! echo "$PR_TITLE" | grep -qE "$pattern"; then
+            echo "ERROR: PR title does not follow Conventional Commits."
+            echo "  Got:     $PR_TITLE"
+            echo "  Pattern: type(scope): description (≤72 chars)"
+            exit 1
+          fi
+          echo "OK: PR title is valid."
