@@ -99,6 +99,16 @@ def no_real_milestone_comments(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def no_real_registry(monkeypatch):
+    """#1003: before a registry "not found" is RED, `system wait` asks the registry itself; tests never do. The image reads as
+    missing (the RED of #867/#925); the tests of #1003 replace `envwait.resolves`, those of the real request call `REAL_RESOLVES`."""
+    import envwait
+    if not hasattr(envwait, "REAL_RESOLVES"):
+        envwait.REAL_RESOLVES = envwait.resolves
+    monkeypatch.setattr(envwait, "resolves", lambda image: "missing")
+
+
+@pytest.fixture(autouse=True)
 def no_real_suite_times(monkeypatch):
     """Spec 185: the retro reads the suite times of `main` from GitHub; tests never do (no runs). Tests of the real fetch call
     the saved original, `retro_suite.REAL_FETCH`."""
