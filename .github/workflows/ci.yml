@@ -797,7 +797,9 @@ jobs:
           if docker run --rm --entrypoint sh smoke:dotnet -c true 2>/dev/null; then echo "the image has a shell"; exit 1; fi
           test "$(docker image inspect smoke:dotnet --format '{{.Config.User}}')" = "65532:65532" || { echo "not USER 65532:65532"; exit 1; }
           major=$(sed -n 's|^FROM mcr.microsoft.com/dotnet/aspnet:\([0-9]*\)\..*|\1|p' Dockerfile)
-          test -n "$major" && grep -q "<TargetFramework>net$major.0</TargetFramework>" Directory.Build.props || { echo "runtime image $major is not the target framework"; exit 1; }
+          if [ -z "$major" ] || ! grep -q "<TargetFramework>net$major.0</TargetFramework>" Directory.Build.props; then
+            echo "runtime image $major is not the target framework"; exit 1
+          fi
           # shellcheck disable=SC2086
           docker run -d --name smoke --read-only -p 8080:8080 $db_env smoke:dotnet
           for probe in health ready; do
