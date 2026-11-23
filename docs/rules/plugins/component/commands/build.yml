@@ -1,6 +1,6 @@
 rules:
   - id: R1
-    text: "only that unit, per `${CLAUDE_PLUGIN_ROOT}/references/unit-mode.md`"
+    text: "only that unit, by the rules of `${CLAUDE_PLUGIN_ROOT}/references/unit-mode.md` that the start call prints"
     class: not a rule
     source: spec 131
   - id: R2

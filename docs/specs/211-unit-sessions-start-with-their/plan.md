@@ -52,6 +52,7 @@ tasks:
     covers: [AC-211.6]
     parallel_safe: false
     depends_on: [t1, t2, t3, t4, t5]
+    done: true
 human_steps:
   - After the release carrying spec 211, run journey 23, measure it with `cplat platform runs journey measure --steps`, and record both rows and the per-step comparison with journey 22 in docs/PERFORMANCE.md as measurements.md describes (a second journey when tokens land within ±10 %).
 ---

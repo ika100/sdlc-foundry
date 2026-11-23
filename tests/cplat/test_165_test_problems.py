@@ -146,7 +146,7 @@ def test_the_build_tightens_a_looser_test_and_the_reviewer_marks_and_lists_it_ac
     build, ref, reviewer = (read("plugins/component/commands/build.md"), read("plugins/component/references/build-tighten.md"),
                             read("plugins/svc/agents/reviewer.md"))
     assert "`TEST LOOSER`" in build and "references/build-tighten.md" in build and "`TIGHTENED`" in build
-    assert "test-diff $RED --tighten" in ref and "Acceptance mode" in ref
+    assert "test-diff --tighten" in ref and "Acceptance mode" in ref
     assert "fix-round verification" in ref and "loosen" in ref
     assert "TEST LOOSER" in reviewer and "Tightened acceptance" in reviewer
 
