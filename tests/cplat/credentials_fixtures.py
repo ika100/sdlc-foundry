@@ -105,8 +105,8 @@ def pod_labels(owner: str, labels: dict) -> dict:
     return {"app.kubernetes.io/name": f"{owner}-credentials", **kept, "app.kubernetes.io/component": "credentials"}
 
 
-def expected_job(owner: str, name: str, labels: dict) -> dict:
-    return {"backoffLimit": 2, "activeDeadlineSeconds": 300, "ttlSecondsAfterFinished": 600,
+def expected_job(owner: str, name: str, labels: dict, deadline: int = 300) -> dict:
+    return {"backoffLimit": 2, "activeDeadlineSeconds": deadline, "ttlSecondsAfterFinished": 600,
             "template": {"metadata": {"labels": pod_labels(owner, labels)},
                          "spec": {"serviceAccountName": f"{owner}-credentials", "automountServiceAccountToken": True, "restartPolicy": "Never",
                                   "securityContext": {"runAsNonRoot": True, "runAsUser": 65534, "runAsGroup": 65534, "seccompProfile": {"type": "RuntimeDefault"}},
@@ -120,7 +120,7 @@ def expected_job(owner: str, name: str, labels: dict) -> dict:
                                   "volumes": [{"name": "credentials", "configMap": {"name": f"{owner}-credentials"}}]}}}
 
 
-def check_owner_files(g: dict, directory: str, owner: str, ns: str, labels: dict, secrets, retired_generators, pods=None):
+def check_owner_files(g: dict, directory: str, owner: str, ns: str, labels: dict, secrets, retired_generators, pods=None, deadline=300):
     """The five credentials files of one owner as the contract spells them."""
     docs = cred(g, directory)
     for f, (api, kind) in KINDS.items():
@@ -142,7 +142,7 @@ def check_owner_files(g: dict, directory: str, owner: str, ns: str, labels: dict
     assert cm["plan.json"] == json.dumps(json.loads(cm["plan.json"]), indent=2, sort_keys=True)
     job = docs["credentials-job.yaml"]
     assert job["metadata"]["name"] == job_name(owner, cm["plan.json"])
-    assert job["spec"] == expected_job(owner, job["metadata"]["name"], labels)
+    assert job["spec"] == expected_job(owner, job["metadata"]["name"], labels, deadline)
     kz = yaml.safe_load(files_in(g, directory)["kustomization.yaml"])
     assert all(f in kz["resources"] for f in CRED_FILES), kz["resources"]
     assert kz["resources"] == sorted(kz["resources"])

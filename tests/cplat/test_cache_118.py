@@ -720,7 +720,7 @@ def test_a_cache_name_clashing_with_its_password_object_fails_ac_118_22(tmp_path
 # byte-identical guarantee: digests of the trees the 5.x renderer wrote before spec 118 (full tree, sha256 of sorted path and content)
 BEFORE_118 = {"full5": ("7e06ba39ba0eb6bc2020a6edb3a5107eacaaa2349c0c71879d9d10318b2e60c6", 79),   # #926: the bucket's credentials Job waits for the SeaweedFS webhook; spec 182: the log tailer adds 12 files; spec 128: a generated component secret gets a credentials Job; #341: create.py is a literal block with the allowlist pragma
               "rich5": ("5f611e9176b850e8b46b82067faf016907131dec73cf2ad0542cf66e180f584d", 79),   # #926: the bucket's credentials Job waits for the SeaweedFS webhook; spec 182: the log tailer adds 12 files; spec 128: a generated component secret gets a credentials Job; #341: create.py is a literal block with the allowlist pragma
-              "db-bucket": ("4992aae745317cafb73bc0a01a307134c454cd8409082310af2c62a527111a52", 56)}   # #926: the bucket's credentials Job waits for the SeaweedFS webhook; spec 128: the credentials Job replaces the bucket's generators and ExternalSecret; #341: create.py is a literal block with the allowlist pragma; the bucket adopts an existing bucket (adoptExisting)
+              "db-bucket": ("4daa5f7c13e8f8dfad34699c902c6534070ef6dceadb4c0fc04cd3e311f6bf49", 56)}   # #1004: the webhook wait covers a slow operator install; #926: the bucket's credentials Job waits for the SeaweedFS webhook; spec 128: the credentials Job replaces the bucket's generators and ExternalSecret; #341: create.py is a literal block with the allowlist pragma; the bucket adopts an existing bucket (adoptExisting)
 
 
 def _before_docs():

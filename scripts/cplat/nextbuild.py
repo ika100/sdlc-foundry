@@ -311,11 +311,24 @@ def promote_item(slug: str, deploy: dict, since: str) -> dict | None:
     command = f"/instance:promote {name} --to staging" if step == "staging" else f"/instance:promote {name} --to prod --version {version}"
     first = bool(deploy.get("first_staging"))
     reason = f"{name} {shown} can go to {step}" + (": the first promotion to staging is manual" if first else "")
+    consequence = {"env": step, "first": first, "app": deploy.get("app"),
+                   "missing_backups": list(deploy.get("missing_backups") or [])}
+    if step == "prod":
+        consequence["staging_smoke"] = _staging_smoke(slug, version)
     return {"id": f"promote:{name}:{shown}", "kind": "promote", "stage": "Staging" if step == "staging" else "Prod",
             "object": needs._obj("component", slug, component=name, version=shown), "since": since,
             "reason": reason, "command": command, "cwd_repo": deploy.get("app") or slug,
-            "consequence": {"env": step, "first": first, "app": deploy.get("app"),
-                            "missing_backups": list(deploy.get("missing_backups") or [])}, "way_back": None}
+            "consequence": consequence, "way_back": None}
+
+
+def _staging_smoke(slug: str, version: str) -> str | None:
+    """The outcome of the staging smoke of release `version` ("none" without a record, #946); None when no run store is set,
+    so the question cannot tell."""
+    import runs
+    import status
+    if not runs.configured_repo():
+        return None
+    return str((status._smoke(slug, version, "staging") or {}).get("outcome") or "none")
 
 
 # ---------------- events ----------------

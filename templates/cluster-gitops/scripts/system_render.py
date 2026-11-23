@@ -435,6 +435,8 @@ OPERATORS = {
     # Spec 117: the Barman Cloud plugin (and its hard requirement cert-manager) for database backups, Velero for environment backups.
     "plugin-barman-cloud": {"repo_url": "https://cloudnative-pg.github.io/charts", "chart": "plugin-barman-cloud", "chart_version": "0.8.1",
                             "operator_version": "0.15.1", "namespace": "cnpg-system", "release": "barman-cloud",
+                            # #885: the chart's fixed Service (values service.name/port; its TLS certificate is issued for that name)
+                            "service": "barman-cloud", "service_port": 9090,
                             "crd": "objectstores.barmancloud.cnpg.io", "crds": _CRDS_PLUGIN_BARMAN_CLOUD, "retry": True},
     "cert-manager": {"repo_url": "https://charts.jetstack.io", "chart": "cert-manager", "chart_version": "v1.21.3",
                      "operator_version": "1.21.3", "namespace": "cert-manager", "release": "cert-manager",
@@ -2451,11 +2453,11 @@ if __name__ == "__main__":
 
 
 def plugin_wait_job(base: str, labels: dict) -> dict:
-    """The PreSync hook of a backed-up database (#864): it waits until the Barman Cloud plugin answers (its Service, named after the
-    operator's release, port 9090), so the Cluster that archives through the plugin is applied only once the plugin runs."""
+    """The PreSync hook of a backed-up database (#864): it waits until the Barman Cloud plugin answers (the chart's fixed Service
+    `service`, not named after the release, #885), so the Cluster that archives through the plugin is applied only once the plugin runs."""
     op = OPERATORS["plugin-barman-cloud"]
-    env = [{"name": "PYTHONDONTWRITEBYTECODE", "value": "1"}, {"name": "PLUGIN_HOST", "value": f"{op['release']}.{op['namespace']}.svc"},
-           {"name": "PLUGIN_PORT", "value": "9090"}, {"name": "PLUGIN_WAIT_SECONDS", "value": str(PLUGIN_WAIT_SECONDS)}]
+    env = [{"name": "PYTHONDONTWRITEBYTECODE", "value": "1"}, {"name": "PLUGIN_HOST", "value": f"{op['service']}.{op['namespace']}.svc"},
+           {"name": "PLUGIN_PORT", "value": str(op["service_port"])}, {"name": "PLUGIN_WAIT_SECONDS", "value": str(PLUGIN_WAIT_SECONDS)}]
     return wait_job(base, "plugin-wait", PLUGIN_WAIT_SCRIPT, env, labels, {"argocd.argoproj.io/hook": "PreSync"})
 
 
@@ -2533,7 +2535,8 @@ def bucket_files(app: str, name: str, env: str, conf: dict, target: bool = False
     return files
 
 
-WEBHOOK_WAIT_SECONDS = 200    # #926: the longest time a bucket's credentials Job waits for the SeaweedFS operator's webhook (its deadline is 300 s)
+WEBHOOK_WAIT_SECONDS = 600    # #926, #1004: the longest time a bucket's credentials Job waits for the SeaweedFS operator's webhook; the operator's
+                              # own install (its certgen PreSync Job) took 8 min in journey 27, and the Job's deadline grows with it
 WEBHOOK_SETTLE_SECONDS = 30   # #926: after the webhook first answers, the time the chart's PostSync job needs to patch its CA into the configuration
 
 
@@ -3250,6 +3253,12 @@ def credentials_pod_labels(owner: str, labels: dict) -> dict:
     return {"app.kubernetes.io/name": f"{owner}-credentials", **kept, "app.kubernetes.io/component": "credentials"}
 
 
+def credentials_deadline(plan: dict) -> int:
+    """The credentials Job's deadline: 300 s, or room for the plan's webhook wait and settle time plus writing the Secrets (#1004)."""
+    hook = plan.get("webhook")
+    return max(300, hook["seconds"] + hook["settle"] + 60) if hook else 300
+
+
 def credentials_files(app: str, env: str, owner: str, labels: dict, plan: dict) -> dict[str, dict]:
     """The five objects of an owner's credentials Job (spec 128): they write each generated credential once, in the PreSync hook.
 
@@ -3290,7 +3299,7 @@ def credentials_files(app: str, env: str, owner: str, labels: dict, plan: dict) 
         "credentials-job.yaml": {
             "apiVersion": "batch/v1", "kind": "Job",
             "metadata": meta(f"{owner[:42].rstrip('-')}-credentials-{digest}", "1", "BeforeHookCreation,HookSucceeded"),
-            "spec": {"backoffLimit": 2, "activeDeadlineSeconds": 300, "ttlSecondsAfterFinished": 600,
+            "spec": {"backoffLimit": 2, "activeDeadlineSeconds": credentials_deadline(plan), "ttlSecondsAfterFinished": 600,
                      # the pod must not match any workload's selector (a Service would send it traffic): only these labels
                      "template": {"metadata": {"labels": credentials_pod_labels(owner, labels)},
                                   "spec": {"serviceAccountName": name, "automountServiceAccountToken": True, "restartPolicy": "Never",

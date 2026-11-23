@@ -296,3 +296,16 @@ def test_done_spec_resumes_at_the_pr(repo):
     (s.dir / "verification.md").write_text(PASSING)
     spec.set_status(spec.find(repo, "7"), "done", None)
     assert ship.start(repo, "7", True)["phase"] == "pr"
+
+
+@pytest.mark.parametrize("env", ["CPLAT_UNIT", "CPLAT_HEADLESS"])
+def test_an_unattended_session_cannot_finish_a_run_before_it_is_done_827(repo, monkeypatch, capsys, env):  # #827
+    """A verification unit archived a run in phase pr (no PR opened) and headless reported it shipped; under `cplat headless`
+    `ship finish` refuses a run that is neither done nor escalated, and keeps the state for the pr and land units."""
+    ship.start(repo, "7", True)
+    ship.set_phase(repo, "pr")
+    monkeypatch.setenv(env, "verification" if env == "CPLAT_UNIT" else "1")
+    assert ship.main(["--repo", str(repo), "finish"]) == 1
+    assert "phase pr, not done" in capsys.readouterr().err and ship.load_state(repo)["phase"] == "pr"
+    monkeypatch.delenv(env)
+    assert ship.main(["--repo", str(repo), "finish"]) == 0 and ship.load_state(repo) is None      # a person may still end it

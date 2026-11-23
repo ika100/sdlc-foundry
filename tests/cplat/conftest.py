@@ -5,6 +5,19 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "cplat"))
 
+
+def _git_auto_maintenance_off() -> None:
+    """#916: no git of a test starts a detached `git maintenance`; it changes .git while a fixture copies the repo.
+    Set at import, before module-scoped fixtures build their repos (a monkeypatch would come too late)."""
+    count = int(os.environ.get("GIT_CONFIG_COUNT") or 0)
+    for i, (k, v) in enumerate([("maintenance.auto", "false"), ("gc.auto", "0")], start=count):
+        os.environ[f"GIT_CONFIG_KEY_{i}"] = k
+        os.environ[f"GIT_CONFIG_VALUE_{i}"] = v
+    os.environ["GIT_CONFIG_COUNT"] = str(count + 2)
+
+
+_git_auto_maintenance_off()
+
 import sleepguard
 
 sleepguard.install()  # spec 185: before any cplat module binds time.sleep
@@ -83,6 +96,16 @@ def no_real_milestone_comments(monkeypatch):
         milestones.REAL_GH = milestones.gh
     monkeypatch.setattr(milestones, "gh", lambda args, *, cwd, timeout: (127, "", "tests never call GitHub"))
     milestones.reset()
+
+
+@pytest.fixture(autouse=True)
+def no_real_registry(monkeypatch):
+    """#1003: before a registry "not found" is RED, `system wait` asks the registry itself; tests never do. The image reads as
+    missing (the RED of #867/#925); the tests of #1003 replace `envwait.resolves`, those of the real request call `REAL_RESOLVES`."""
+    import envwait
+    if not hasattr(envwait, "REAL_RESOLVES"):
+        envwait.REAL_RESOLVES = envwait.resolves
+    monkeypatch.setattr(envwait, "resolves", lambda image: "missing")
 
 
 @pytest.fixture(autouse=True)
