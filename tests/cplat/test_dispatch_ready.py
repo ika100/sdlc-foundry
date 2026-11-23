@@ -104,3 +104,19 @@ def test_a_spec_matches_a_label_of_a_tracked_issue(world):
     pol, vs = _judge(world, sources=["issues", "specs"], slots=3)
     ready = [v for v in vs if v.ready]
     assert [v.item for v in dispatch_ready.order(ready, ["label:bug", "spec-order"], [])] == ["spec-007", "spec-008"]
+
+
+def test_a_shared_issue_labelled_by_another_specs_escalation_holds_only_that_spec_832(world):
+    """#832: spec 7's unit escalated and labelled #568, which spec 8 tracks too; spec 8 is not held by spec 7's decision.
+    A label nobody's unit put there (the user's) still holds both."""
+    world.issue(568, labels=["triaged", "needs-decision"])
+    world.spec(7, "price-alerts", tracks=(568,))
+    world.spec(8, "alert-emails", tracks=(568,))
+    _, vs = _judge(world, sources=["specs"])
+    assert [v.reason for v in vs] == ["needs-decision", "needs-decision"]
+    units = [_unit("spec-007", status="escalated", ended_at="2000-01-01T00:00:00", tracks=[568], reason="AC-7.2 needs the user")]
+    _, vs = _judge(world, units=units, sources=["specs"])
+    by = {v.item: v for v in vs}
+    seven, eight = by["spec-007"], by["spec-008"]
+    assert seven.reason == "needs-decision" and "AC-7.2" in dispatch_ready.text(seven)
+    assert eight.reason != "needs-decision", dispatch_ready.text(eight)

@@ -380,7 +380,11 @@ def prepare(repo: Path, command: str, spec_id: str) -> dict:
             derived = "5.5"
     st = _ship_state(repo)
     skip_validity = bool(st and st.get("spec") == spec_id and (st.get("merge_sha") or st.get("phase") in {"deploy", "done"}))
+    # #984: an approved amendment sets plan.md aside (plan.v<k>.md): the done plan and what was built on it are stale
+    replan = not skip_validity and sp is not None and sp.plan is None and stored.get("plan", {}).get("status") == "done"
     for u in entries.values():
+        if replan and u["status"] == "done" and u["id"] not in ("red-tests", "land"):
+            u.update(status="open", commit=None, at=None)
         if u["status"] == "running":
             u["status"] = "open"
         if u["status"] == "done" and not skip_validity:

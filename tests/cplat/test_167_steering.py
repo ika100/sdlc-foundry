@@ -201,3 +201,45 @@ def test_report_since_limits_the_days_newest_first_ac_167_11(world):  # AC-167.1
     assert days[0]["delivered"][0]["pr"].endswith("/80") and days[0]["delivered"][0]["tokens"] == 100
     one = world.run("report", "--since", "1", "--json").json()
     assert [d["day"] for d in (one["days"] if isinstance(one, dict) else one)] == ["2026-11-10"]
+
+
+def test_a_skipped_items_paused_unit_stays_paused_after_resume_858(world):  # #858
+    """`skip` an item whose unit is paused: `resume` restarts the other paused unit, not that one, until `resume <item>`."""
+    _running(world, honor_stop=True)
+    world.run("pause")
+    world.run("start", "--once")
+    world.wait_ended("issue-1.1")
+    world.wait_ended("issue-2.1")
+    world.run("start", "--once")
+    assert world.run("skip", "#2", "--reason", "waiting for infra").rc == 0
+    assert world.run("resume").rc == 0
+    world.behave(mode="wait", honor_stop=False)
+    for _ in range(2):
+        assert world.run("start", "--once").rc == 0
+    world.wait_until(lambda: len(world.calls()) >= 3)
+    assert ("issue-2.1", 2) not in [(c["unit"], c["n"]) for c in world.calls()]
+    phases = {u["unit"]: u["phase"] for u in world.run("status", "--json").json()["slots"]["units"]}
+    assert phases["issue-2.1"] == "paused", phases
+    assert world.run("resume", "#2").rc == 0
+    world.run("start", "--once")
+    world.wait_until(lambda: ("issue-2.1", 2) in [(c["unit"], c["n"]) for c in world.calls()])
+
+
+def test_a_pause_during_the_agent_call_before_a_start_starts_nothing_858(world):  # #858
+    """`pause` lands while the cycle asks the agent about an item (premise for an issue, mode for a spec: seconds to minutes,
+    after the cycle read its pause state): the start re-reads the pause, so nothing starts."""
+    import dispatch_agent
+    import dispatch_state
+    world.policy(slots=2)
+    _issues(world, 2)
+    world.behave(mode="wait")
+    real = dispatch_agent.premise
+
+    def premise_then_pause(*a, **k):
+        res = real(*a, **k)
+        dispatch_state.pause(dispatch_state.slug_of(world.repo))
+        return res
+    world.mp.setattr(dispatch_agent, "premise", premise_then_pause)
+    r = world.run("start", "--once")
+    assert r.rc == 0 and "no starts: paused" in r.out, r
+    assert world.calls() == [] and not any(ln.startswith("started ") for ln in r.out.splitlines())

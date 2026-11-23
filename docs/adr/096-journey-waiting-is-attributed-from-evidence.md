@@ -24,7 +24,9 @@ repo sessions were working. The script also sat outside `cplat`, so it could nei
   `component ship wait`, `gh run watch`, sleep loops) mark the thread as waiting but never set a kind.
 - A waiting minute takes its kind from evidence, first match wins: an open repo session without a transcript
   (`no_transcript`); a kinded wait call or a run-store wait record or ship `deploy` phase; a GitHub Actions run of a journey
-  repo, queued or running (CI); else `unattributed`.
+  repo, queued or running (CI); else `unattributed`. Since #865 a land call's post-merge part is deploy evidence too (from the
+  GitHub merge time of a PR its output says it merged), a `verify` record spans its smoke's `duration_s`, and among the kinds
+  smoke wins, since a smoke runs inside a deploy wait.
 - With `--journey <run_id>` the per-stage split is written as a follow-up line of kind `journey_split` on the journey record
   (the record itself is written once and never changed); `runs report --benchmarks` shows its medians.
 
