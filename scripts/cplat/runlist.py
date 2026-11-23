@@ -140,10 +140,22 @@ def _failure(rec: dict, esc: dict | None, repo_dir: str | None) -> dict | None:
             "error": excerpt[-1] if excerpt else None, "excerpt": excerpt[-10:], "log": log, "diagnosis": diagnosis}
 
 
+_ledgers: list[list[dict]] = []      # the budget ledgers, read once while `shared_reads` is open (#859)
+
+
+def _all_ledgers() -> list[dict]:
+    import budget
+    if not _sharing:
+        return [data for _, data in budget._all()]
+    with _store_lock:
+        if not _ledgers:
+            _ledgers.append([data for _, data in budget._all()])
+        return _ledgers[0]
+
+
 def _ledger(rec: dict):
     try:
-        import budget
-        for _, data in budget._all():
+        for data in _all_ledgers():
             roots = data.get("roots") or []
             if rec["run_id"] in roots or (rec.get("parent") and rec["parent"] in roots):
                 return data
@@ -204,14 +216,15 @@ def _children(rec: dict) -> list[str]:
     return [c for c in rec.get("ships") or [] if isinstance(c, str)]
 
 
-_PR_LIST_LIMIT = 300
-_pr_lists: dict[str, list[dict] | None] = {}
+_PR_LIST_LIMIT = 1000      # #859: one call of ~4 s holds every PR of a repo below it
+_pr_lists: dict[str, dict | None] = {}
+_pr_answers: dict[tuple[str, str, str], dict | None] = {}
 _pr_lock = threading.Lock()
 
 
-def _listed_prs(repo: str) -> list[dict] | None:
-    """The newest pull requests of a repo from one `gh` call, kept while `shared_reads` is open; None when the list
-    may be incomplete or `gh` cannot say (the caller then asks per branch)."""
+def _listed_prs(repo: str) -> dict | None:
+    """`{prs, complete}`: the newest pull requests of a repo from one `gh` call, kept while `shared_reads` is open;
+    `complete` is false when the repo may have more (#859); None when `gh` cannot say (the caller then asks per branch)."""
     import json as _json
     from core import run
     with _pr_lock:
@@ -220,7 +233,7 @@ def _listed_prs(repo: str) -> list[dict] | None:
                 out = run(["gh", "pr", "list", "-R", repo, "--state", "all", "--json", "number,url,headRefName,state",
                            "--limit", str(_PR_LIST_LIMIT)], check=False, timeout=30).stdout
                 found = _json.loads(out or "[]")
-                _pr_lists[repo] = found if isinstance(found, list) and len(found) < _PR_LIST_LIMIT else None
+                _pr_lists[repo] = {"prs": found, "complete": len(found) < _PR_LIST_LIMIT} if isinstance(found, list) else None
             except Exception:  # noqa: BLE001
                 _pr_lists[repo] = None
         return _pr_lists[repo]
@@ -228,23 +241,34 @@ def _listed_prs(repo: str) -> list[dict] | None:
 
 def lookup_pr(repo: str, branch: str, state: str = "all") -> dict | None:
     """The open or merged PR of a branch through `gh` (tests replace this); None when `gh` cannot say. Inside
-    `shared_reads` the PRs of a repo are asked once and matched here, not one call per branch."""
+    `shared_reads` the PRs of a repo are asked once and matched here; only a branch the listing misses while the repo
+    has more PRs than it holds is asked on its own, once."""
     import json as _json
     from core import run
     listed = _listed_prs(repo) if _sharing else None
     if listed is not None:
-        for pr in listed:
+        for pr in listed["prs"]:
             if (isinstance(pr, dict) and pr.get("headRefName") == branch and pr.get("url")
                     and (state == "all" or str(pr.get("state") or "").lower() == state)):
                 return {"number": pr.get("number"), "url": pr["url"]}
-        return None
+        if listed["complete"]:
+            return None
+    key = (repo, branch, state)
+    if _sharing:
+        with _pr_lock:
+            if key in _pr_answers:
+                return _pr_answers[key]
     try:
         out = run(["gh", "pr", "list", "-R", repo, "--head", branch, "--state", state, "--json", "number,url", "--limit", "1"],
                   check=False, timeout=10).stdout
         found = _json.loads(out or "[]")
     except Exception:  # noqa: BLE001
         return None
-    return found[0] if found and isinstance(found[0], dict) and found[0].get("url") else None
+    answer = found[0] if found and isinstance(found[0], dict) and found[0].get("url") else None
+    if _sharing:
+        with _pr_lock:
+            _pr_answers[key] = answer
+    return answer
 
 
 def _as_pr(value) -> dict | None:
@@ -414,6 +438,7 @@ def _active_records() -> list[dict]:
 _store_lock = threading.Lock()
 _day_files: dict[tuple[str, str, datetime.date], list[tuple[str, str]]] = {}
 _sharing = 0
+_collected: dict[tuple, dict] = {}   # key -> {lock, doc}: the run list documents built while `shared_reads` is open
 
 
 @contextlib.contextmanager
@@ -432,6 +457,9 @@ def shared_reads() -> Iterator[None]:
             if not _sharing:
                 _day_files.clear()
                 _pr_lists.clear()
+                _pr_answers.clear()
+                _ledgers.clear()
+                _collected.clear()
 
 
 def read_days(store, slug: str, days: list[datetime.date]) -> list[tuple[str, str]]:
@@ -474,7 +502,21 @@ def _read_store(since: int) -> tuple[dict, list[dict]]:
 
 def collect(since_days: int = 30, repo: str | None = None, spec: str | None = None, repos=None) -> dict:
     """The run list document (schema 1); `since_days` 0 lists every run; `repos` keeps only the runs of those repos
-    (before their rows, which may ask `gh`, are built). Never raises for a missing store."""
+    (before their rows, which may ask `gh`, are built). Never raises for a missing store. Inside `shared_reads` a second
+    caller with the same arguments gets a copy of the first one's document (#859: `cplat next` built every row twice)."""
+    if not _sharing:
+        return _collect(since_days, repo, spec, repos)
+    key = (since_days, repo, spec, tuple(sorted(repos)) if repos is not None else None)
+    with _store_lock:
+        entry = _collected.setdefault(key, {"lock": threading.Lock()})
+    with entry["lock"]:
+        if "doc" not in entry:
+            entry["doc"] = _collect(since_days, repo, spec, repos)
+    doc = entry["doc"]
+    return {**doc, "runs": [dict(r) for r in doc["runs"]]}
+
+
+def _collect(since_days: int, repo: str | None, spec: str | None, repos) -> dict:
     now = runs.utcnow()
     store, stored = _store(since_days)
     chosen: dict[str, tuple[dict, bool]] = {}

@@ -108,3 +108,17 @@ def test_other_archiving_failures_stay_failing_864(kube, monkeypatch):  # noqa: 
     kube.healthy_database(windows={}, archiving="failing", archiving_since="2026-10-27T01:00:00Z")
     _at(monkeypatch, "2026-10-27T01:05:00Z")
     assert backupstate.database_state("shop", "orders-db", "dev", None, backup=True)["backup"]["state"] == "failing"
+
+
+def test_the_plugin_wait_targets_the_charts_fixed_service_not_the_release_885():
+    """#885: the chart names its Service from values `service.name` (default `barman-cloud`, fixed because the plugin's TLS
+    certificate is issued for it), not from the release. The wait job and the operator install share that constant, the
+    install does not override it, and renaming the release leaves the wait's host alone."""
+    r = platform_render_module("render_885")
+    op = r.OPERATORS["plugin-barman-cloud"]
+    assert (op["service"], op["service_port"]) == ("barman-cloud", 9090)
+    assert ((op.get("values") or {}).get("service") or {}).get("name") in (None, op["service"])
+    op["release"] = "plugin-barman-cloud"                    # the local cluster's release name (scripts/local-cluster.sh)
+    job = r.plugin_wait_job("orders-db", {})
+    env = {e["name"]: e.get("value") for e in job["spec"]["template"]["spec"]["containers"][0]["env"]}
+    assert env["PLUGIN_HOST"] == "barman-cloud.cnpg-system.svc" and env["PLUGIN_PORT"] == "9090"

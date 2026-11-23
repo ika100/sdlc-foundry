@@ -407,7 +407,7 @@ def mark_seen(slug: str, seq: int) -> None:
 
 
 def history_add(slug: str, entry: dict) -> None:
-    """`{unit, item, kind, outcome, pr, tokens, reason, started_at, ended_at}`."""
+    """`{unit, item, kind, outcome, pr, tokens, reason, started_at, ended_at, run_id}`."""
     update(slug, lambda st: st["history"].append(entry))
 
 

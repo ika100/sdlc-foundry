@@ -48,6 +48,15 @@ def rtype(name: str, conf) -> str:
     return str((conf or {}).get("type") or ("database" if name == "postgres" else "unknown"))
 
 
+def _same_cluster(env: str, eff: dict | None, resources) -> bool:
+    """#886: a prod backup whose bucket is in-cluster (new, or declared without `external`), the doctor's `backup location` case."""
+    if env != model.ENVIRONMENTS[-1] or not eff:
+        return False
+    conf = resources.get(eff["to"]) or {}
+    inst = ((conf.get("instances") or {}).get(env) or {}) if hasattr(conf, "get") else {}
+    return not (inst.get("external") is True or (hasattr(conf, "get") and conf.get("external") is True))
+
+
 def run(ns: argparse.Namespace) -> int:
     repo = Path(ns.repo_dir).resolve()
     app_dir = gitops.find_app(repo, ns.app)
@@ -104,6 +113,11 @@ def run(ns: argparse.Namespace) -> int:
         eff = {k: str(base[k]) for k in ("to", "schedule", "retention") if k in base}
         kept = None
     r = Report(title=f"resource backup: {db}/{env} ({app_dir.name})")
+    same = _same_cluster(env, eff, resources)
+    if same:   # #886: say it where the person decides, not only in the doctor's later warning
+        r.next_steps.append(f"note: {env} backups to {eff['to']} live in the same cluster as {env} (`cplat platform doctor` warns about it); "
+                            f"for backups outside the cluster declare an external bucket first (`cplat resource add <name> --type bucket "
+                            f"--external`) and pass it as --to")
     if new_bucket:
         r.will_do.append(f"declare bucket {new_bucket} in system.yaml (in-cluster, {NEW_BUCKET['storage']}), in the same change")
     if eff is None:
@@ -114,7 +128,7 @@ def run(ns: argparse.Namespace) -> int:
     if ns.pr:
         r.will_do.append("[outward] open a pull request (branch resource/backup-…)")
     if ns.dry_run:
-        r.data = {"backup": eff, "kept_in": kept, "new_bucket": new_bucket, "changed": [], "pr": None}
+        r.data = {"backup": eff, "kept_in": kept, "new_bucket": new_bucket, "same_cluster": same, "changed": [], "pr": None}
         r.emit(True, ns.json)
         return 0
 
@@ -168,6 +182,6 @@ def run(ns: argparse.Namespace) -> int:
     else:
         r.next_steps.append("review the diff, run `devbox run validate`, then commit (or re-run with --pr)")
     r.undo.append("discard the working-tree changes under applications and bootstrap")
-    r.data = {"backup": eff, "kept_in": kept, "new_bucket": new_bucket, "changed": changed, "pr": url}
+    r.data = {"backup": eff, "kept_in": kept, "new_bucket": new_bucket, "same_cluster": same, "changed": changed, "pr": url}
     r.emit(False, ns.json)
     return 0
