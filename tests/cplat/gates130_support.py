@@ -31,7 +31,8 @@ TEMPLATES = ROOT / "templates"
 GATE_SOURCE = TEMPLATES / "gitops-app" / "scripts" / "gate.sh"
 
 # AC-130.14: the coverage table. template -> covered gates (recipes). Keep equal to the templates of shapes.yml.
-TEST_TEMPLATES = ["service-python", "library-python", "service-go", "service-java", "web-nextjs", "service-typescript"]
+TEST_TEMPLATES = ["service-python", "library-python", "service-go", "service-java", "web-nextjs", "service-typescript",
+                  "library-typescript"]
 GITOPS_TEMPLATES = ["gitops-app", "cluster-gitops"]
 COVERED = {t: ["test", "test-fast", "secrets-scan"] for t in TEST_TEMPLATES}
 COVERED.update({t: ["test", "test-fast", "validate", "render-check", "secrets-scan"] for t in GITOPS_TEMPLATES})
@@ -48,9 +49,9 @@ SECRET_FLAGS = ("--baseline .secrets.baseline.json --exclude-files copier-answer
                 "--disable-filter detect_secrets.filters.gibberish.should_exclude_secret")
 # the pathspec of each template's secrets-scan and a file that pathspec excludes
 SECRET_PATHSPEC = {"service-python": "':!*.lock'", "library-python": "':!*.lock'", "service-go": "':!go.sum'",
-                   "web-nextjs": "':!pnpm-lock.yaml'", "service-typescript": "':!pnpm-lock.yaml'"}
+                   "web-nextjs": "':!pnpm-lock.yaml'", "service-typescript": "':!pnpm-lock.yaml'", "library-typescript": "':!pnpm-lock.yaml'"}
 EXCLUDED_FILE = {"service-python": "uv.lock", "library-python": "uv.lock", "service-go": "go.sum", "web-nextjs": "pnpm-lock.yaml",
-                 "service-typescript": "pnpm-lock.yaml"}
+                 "service-typescript": "pnpm-lock.yaml", "library-typescript": "pnpm-lock.yaml"}
 
 
 def line(gate: str, what: str, fix: str) -> str:

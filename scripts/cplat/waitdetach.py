@@ -31,7 +31,7 @@ STREAM_POLL = 0.2
 # argv after `cplat`, prefix match; `system ship next` only with `--wait` (see `wanted`)
 WAIT_COMMANDS: tuple[tuple[str, ...], ...] = (
     ("pr", "wait"), ("component", "ship", "land"), ("component", "ship", "wait"), ("system", "wait"), ("cluster", "wait"),
-    ("dispatch", "wait"), ("component", "release", "wait"), ("component", "release", "gates"),
+    ("dispatch", "wait"), ("component", "release", "wait"), ("component", "release", "gates"), ("system", "ship", "land"),
 )
 _NEXT = ("system", "ship", "next")
 

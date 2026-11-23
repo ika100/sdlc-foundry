@@ -610,7 +610,7 @@ def _end(repo: Path, slug: str, unit: dict, status: str, *, reason: str | None =
             escalation["run"] = run         # the escalated ship run this unit served: the needs list shows that run's item
         runs.finish(unit.get("run_id"), "escalated", escalation=escalation, fields=fields)
     ds.history_add(slug, {"unit": unit["unit"], "item": unit["item"], "kind": unit["kind"], "outcome": status, "pr": pr, "tokens": tokens,
-                          "reason": reason, "started_at": unit.get("started_at"), "ended_at": ended})
+                          "reason": reason, "started_at": unit.get("started_at"), "ended_at": ended, "run_id": unit.get("run_id")})
     ended_unit = update_unit(wt, lambda u: u.update(status=status, ended_at=ended, reason=reason, cause=cause, tokens=tokens, pr=pr))
     ds.events_add(slug, event or status, unit["unit"], unit["item"], reason, pr)
     return ended_unit

@@ -63,7 +63,7 @@ system.yaml (every value explicit and reviewable; the model is described in docs
   components:
     todo-api:
       type: service                  # service | website | library, required with lang
-      lang: python                   # python | java | go | typescript (service or website) | unknown (migrated 4.x entries)
+      lang: python                   # python | java | go | typescript (service, website or library) | unknown (migrated 4.x entries)
       repo: org/todo-api             # where the image is built
       image: ghcr.io/org/todo-api    # no tag: the tag is pinned in the overlay (dev: latest)
       port: 8080
@@ -177,7 +177,8 @@ TOP_KEYS = ["system", "owner", "environments", "components", "apis", "resources"
 ENV_KEYS = ["host", "url", "policy", "promote", "observability", "operators", "backup", "autonomy", "cluster"]
 # Valid type/lang pairs (the languages of shapes.yml); service/unknown is what the migration writes for a 4.x entry without a known shape.
 VALID_PAIRS = [("service", "python"), ("service", "java"), ("service", "go"), ("service", "typescript"), ("website", "typescript"),
-               ("library", "python"), ("service", "unknown")]
+               ("library", "python"), ("library", "typescript"),
+               ("service", "unknown")]
 PAIR_TEXT = ", ".join(f"{t}/{lang}" for t, lang in VALID_PAIRS if lang != "unknown")
 COMMON_KEYS = ["type", "lang", "repo"]
 SERVICE_KEYS = [*COMMON_KEYS, "image", "port", "probes", "user", "volumes", "env", "secretRefs", "secrets", "replicas", "resources",
@@ -434,6 +435,8 @@ OPERATORS = {
     # Spec 117: the Barman Cloud plugin (and its hard requirement cert-manager) for database backups, Velero for environment backups.
     "plugin-barman-cloud": {"repo_url": "https://cloudnative-pg.github.io/charts", "chart": "plugin-barman-cloud", "chart_version": "0.8.1",
                             "operator_version": "0.15.1", "namespace": "cnpg-system", "release": "barman-cloud",
+                            # #885: the chart's fixed Service (values service.name/port; its TLS certificate is issued for that name)
+                            "service": "barman-cloud", "service_port": 9090,
                             "crd": "objectstores.barmancloud.cnpg.io", "crds": _CRDS_PLUGIN_BARMAN_CLOUD, "retry": True},
     "cert-manager": {"repo_url": "https://charts.jetstack.io", "chart": "cert-manager", "chart_version": "v1.21.3",
                      "operator_version": "1.21.3", "namespace": "cert-manager", "release": "cert-manager",
@@ -2450,11 +2453,11 @@ if __name__ == "__main__":
 
 
 def plugin_wait_job(base: str, labels: dict) -> dict:
-    """The PreSync hook of a backed-up database (#864): it waits until the Barman Cloud plugin answers (its Service, named after the
-    operator's release, port 9090), so the Cluster that archives through the plugin is applied only once the plugin runs."""
+    """The PreSync hook of a backed-up database (#864): it waits until the Barman Cloud plugin answers (the chart's fixed Service
+    `service`, not named after the release, #885), so the Cluster that archives through the plugin is applied only once the plugin runs."""
     op = OPERATORS["plugin-barman-cloud"]
-    env = [{"name": "PYTHONDONTWRITEBYTECODE", "value": "1"}, {"name": "PLUGIN_HOST", "value": f"{op['release']}.{op['namespace']}.svc"},
-           {"name": "PLUGIN_PORT", "value": "9090"}, {"name": "PLUGIN_WAIT_SECONDS", "value": str(PLUGIN_WAIT_SECONDS)}]
+    env = [{"name": "PYTHONDONTWRITEBYTECODE", "value": "1"}, {"name": "PLUGIN_HOST", "value": f"{op['service']}.{op['namespace']}.svc"},
+           {"name": "PLUGIN_PORT", "value": str(op["service_port"])}, {"name": "PLUGIN_WAIT_SECONDS", "value": str(PLUGIN_WAIT_SECONDS)}]
     return wait_job(base, "plugin-wait", PLUGIN_WAIT_SCRIPT, env, labels, {"argocd.argoproj.io/hook": "PreSync"})
 
 
@@ -2479,11 +2482,12 @@ def wait_job(base: str, what: str, script: str, env: list[dict], labels: dict, h
                                                                            "readOnlyRootFilesystem": True, "capabilities": {"drop": ["ALL"]}}}]}}}}
 
 
-def bucket_files(app: str, name: str, env: str, conf: dict, target: bool = False) -> dict[str, dict | str]:
+def bucket_files(app: str, name: str, env: str, conf: dict, target: bool = False, webhook: bool = False) -> dict[str, dict | str]:
     """The in-cluster bucket instance (ADR-059): its own SeaweedFS, a Bucket, an identity limited to it and a credentials Job.
 
     Argo CD never deletes any of it (`Delete=false`, `reclaimPolicy: Retain`). No credential value is rendered: the PreSync Job writes
-    the keys once to `<system>-<name>-app` (create if absent, otherwise keep); S3Credentials then reads that Secret (spec 128)."""
+    the keys once to `<system>-<name>-app` (create if absent, otherwise keep); S3Credentials then reads that Secret (spec 128).
+    `webhook` (#926): this repo installs the SeaweedFS operator, so the PreSync Job also waits for the operator's admission webhook."""
     n = f"{app}-{name}"
     labels = {"app.kubernetes.io/name": name, "app.kubernetes.io/part-of": app, "app.kubernetes.io/managed-by": "gitops-app"}
     keep = {"argocd.argoproj.io/sync-options": "Delete=false"}
@@ -2524,13 +2528,30 @@ def bucket_files(app: str, name: str, env: str, conf: dict, target: bool = False
                          "generate": {"accessKeyId": 20, "secretAccessKey": 40},  # pragma: allowlist secret
                          "data": {"endpoint": f"http://{n}-filer.{ns}.svc:8333", "bucket": n, "region": "us-east-1", "forcePathStyle": "true"}}],
             "retire": {"externalSecrets": [f"{n}-app"], "generators": [f"{n}-access-key", f"{n}-secret-key"]}}
+    if webhook:
+        plan["webhook"] = seaweedfs_webhook()
     files.update(credentials_files(app, env, n, labels, plan))
     files["kustomization.yaml"] = {"apiVersion": "kustomize.config.k8s.io/v1beta1", "kind": "Kustomization", "resources": sorted(files)}
     return files
 
 
+WEBHOOK_WAIT_SECONDS = 200    # #926: the longest time a bucket's credentials Job waits for the SeaweedFS operator's webhook (its deadline is 300 s)
+WEBHOOK_SETTLE_SECONDS = 30   # #926: after the webhook first answers, the time the chart's PostSync job needs to patch its CA into the configuration
+
+
+def seaweedfs_webhook() -> dict:
+    """The `webhook` step of an in-cluster bucket's credentials plan (#926). The first bucket of a system installs the SeaweedFS operator
+    in the same rollout; the Seaweed object (Sync phase) then hit the operator's mutating webhook before it ran and before the chart's
+    certgen job patched its caBundle (x509), and Argo CD retried with backoff for ~14 min. The PreSync Job waits until the webhook
+    Service accepts a connection and, when it did not at once, for the CA patch; then the Seaweed is applied."""
+    op = OPERATORS["seaweedfs"]
+    return {"host": f"{op['release']}-webhook.{op['namespace']}.svc", "port": 443,
+            "seconds": WEBHOOK_WAIT_SECONDS, "settle": WEBHOOK_SETTLE_SECONDS}
+
+
 CREDENTIALS_SCRIPT = r'''# The credentials Job (spec 128): writes each generated credential once (create if absent, otherwise keep what exists),
-# retires the 5.4 ExternalSecrets and Password generators, and restarts a server that refuses the password of its Secret.
+# retires the 5.4 ExternalSecrets and Password generators, and restarts a server that refuses the password of its Secret. A plan
+# with `webhook` (#926) then waits for an operator's admission webhook, so the owner's objects are applied once it answers.
 # Standard library only. No value is ever printed.
 import base64
 import json
@@ -2900,12 +2921,43 @@ def verify_servers(plan):
         log("verified " + name)
 
 
+def wait_webhook(plan):
+    """#926: waits until the webhook Service accepts a connection; when it did not at once (the operator was just installed), also
+    `settle` seconds for its CA to be patched into the webhook configuration. After `seconds` it goes on anyway."""
+    hook = plan.get("webhook")
+    if not hook:
+        return
+    host, port = hook["host"], int(hook["port"])
+    deadline = time.time() + float(hook["seconds"])
+    waited, last = False, None
+    while True:
+        try:
+            socket.create_connection((host, port), timeout=5).close()
+            break
+        except OSError as error:
+            why = type(error).__name__
+        if why != last:
+            log("waiting for the operator webhook %s:%d to start: %s" % (host, port, why))
+            last = why
+        if time.time() >= deadline:
+            log("operator webhook %s:%d still does not answer (%s); going on without it" % (host, port, why))
+            return
+        waited = True
+        time.sleep(float(hook.get("interval", 5)))
+    if waited:
+        log("operator webhook %s:%d answers; waiting %s s for its CA" % (host, port, hook["settle"]))
+        time.sleep(float(hook["settle"]))
+    else:
+        log("operator webhook %s:%d answers" % (host, port))
+
+
 def main():
     with open(sys.argv[1]) as handle:
         plan = json.load(handle)
     retire(plan)
     write_secrets(plan)
     verify_servers(plan)
+    wait_webhook(plan)
 
 
 try:
@@ -3567,7 +3619,7 @@ def addon_files(app: str, name: str, env: str, cfg: dict, services: list[dict], 
         return {fname: external_secret_doc(app, env, name, cfg),
                 "kustomization.yaml": {"apiVersion": "kustomize.config.k8s.io/v1beta1", "kind": "Kustomization", "resources": [fname]}}
     if res["type"] == "bucket":
-        return bucket_files(app, name, env, res["envs"][env], is_backup_target(cfg, env, name))
+        return bucket_files(app, name, env, res["envs"][env], is_backup_target(cfg, env, name), webhook=env not in cfg["operators"])
     if res["type"] == "cache":
         return cache_files(app, name, env, res["envs"][env])
     if res["type"] == "broker":

@@ -15,6 +15,7 @@ import datetime
 import glob
 import json
 import os
+import statistics
 import sys
 from pathlib import Path
 
@@ -24,6 +25,7 @@ import journey_timeline
 import runs
 import runs_journey
 import runs_usage
+import usage_cost
 from core import PlatformError
 
 LABELS = [("ci", "CI"), ("deploy", "deploy"), ("promotion", "promo"), ("restore", "restore"), ("cluster", "cluster"),
@@ -76,13 +78,22 @@ ACTORS = ("coordinator", "coordinator_subagents", "repo_sessions", "repo_subagen
 
 
 def tokens(groups: dict[str, list[str]], start: float, end: float) -> dict:
-    """Tokens of the assistant messages in [start, end], each message id once; `by_actor` splits the total per group."""
+    """Tokens of the assistant messages in [start, end], each message id once; `by_actor` splits the total per group.
+
+    `actors` adds per group the sessions (transcripts with a counted message), their calls, the median context of a
+    session's first call (what every later call of it reads again) and the estimated cost; `cost_usd` is None when a
+    model has no price."""
     seen: set[str] = set()
     tot: collections.Counter = collections.Counter()
     by_model: collections.Counter = collections.Counter()
     by_actor = {actor: 0 for actor in groups}
+    actors = {actor: {"sessions": 0, "calls": 0, "tokens": 0, "start_context_median": 0, "cost_usd": 0.0} for actor in groups}
+    prices = usage_cost.load_prices()
+    unpriced: set[str] = set()
     for actor, paths in groups.items():
+        firsts = []
         for path in paths:
+            first = None
             for e in _events(path):
                 t = _ts(e)
                 if e.get("type") != "assistant" or t is None or not start <= t <= end:
@@ -92,13 +103,33 @@ def tokens(groups: dict[str, list[str]], start: float, end: float) -> dict:
                     continue
                 seen.add(m["id"])
                 u = m.get("usage") or {}
-                for k in ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens", "output_tokens"):
-                    tot[k] += u.get(k) or 0
-                    by_actor[actor] += u.get(k) or 0
-                by_model[m.get("model", "?")] += u.get("output_tokens") or 0
+                n = {k: u.get(k) or 0 for k in ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens", "output_tokens")}
+                hour = ((u.get("cache_creation") or {}).get("ephemeral_1h_input_tokens") or 0)
+                for k, v in n.items():
+                    tot[k] += v
+                    by_actor[actor] += v
+                tot["cache_write_1h"] += hour
+                by_model[m.get("model", "?")] += n["output_tokens"]
+                actors[actor]["calls"] += 1
+                if first is None:
+                    first = n["input_tokens"] + n["cache_creation_input_tokens"] + n["cache_read_input_tokens"]
+                cost = usage_cost.model_cost(prices, m.get("model", "?"), n["input_tokens"], n["output_tokens"],
+                                             n["cache_read_input_tokens"], n["cache_creation_input_tokens"], hour)
+                if cost is not None:
+                    actors[actor]["cost_usd"] += cost
+                elif any(n.values()):           # a message without tokens (a failed call) costs nothing, priced or not
+                    unpriced.add(actor)
+            if first is not None:
+                firsts.append(first)
+        actors[actor].update(sessions=len(firsts), tokens=by_actor[actor],
+                             start_context_median=int(statistics.median(firsts)) if firsts else 0)
+    for actor, a in actors.items():
+        a["cost_usd"] = None if actor in unpriced else round(a["cost_usd"], 2)
+    total = ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens", "output_tokens")
     return {"api_calls": len(seen), "input": tot["input_tokens"], "cache_write": tot["cache_creation_input_tokens"],
-            "cache_read": tot["cache_read_input_tokens"], "output": tot["output_tokens"], "total": sum(tot.values()),
-            "output_by_model": dict(by_model), "by_actor": by_actor}
+            "cache_write_1h": tot["cache_write_1h"], "cache_read": tot["cache_read_input_tokens"], "output": tot["output_tokens"],
+            "total": sum(tot[k] for k in total), "output_by_model": dict(by_model), "by_actor": by_actor, "actors": actors,
+            "cost_usd": None if unpriced else round(sum(a["cost_usd"] for a in actors.values()), 2), "price_table": prices.taken}
 
 
 def questions(sessions: list[str], start: float, end: float) -> dict:
@@ -133,18 +164,34 @@ def inputs(sessions: list[str], start: float, end: float) -> int:
     return n
 
 
-def github(repos: list[str], runs_found: list[dict], start: datetime.datetime, end: datetime.datetime) -> dict:
-    merged = 0
+def merged_prs(repos: list[str]) -> list[dict]:
+    """Every merged PR of the repos: {url, created, merged} (epoch seconds; url and created may be None)."""
+    out = []
     for repo in repos:
-        done = core.run(["gh", "pr", "list", "-R", repo, "--state", "merged", "--limit", "500", "--json", "mergedAt"], check=False)
+        done = core.run(["gh", "pr", "list", "-R", repo, "--state", "merged", "--limit", "500", "--json", "mergedAt,createdAt,url"],
+                        check=False)
         try:
             data = json.loads(done.stdout or "[]") if done.returncode == 0 else []
         except ValueError:
             data = []
         for p in data if isinstance(data, list) else []:
             when = journey_sources.parse_ts(p.get("mergedAt")) if isinstance(p, dict) else None
-            if when and start <= when <= end:
-                merged += 1
+            if when:
+                created = journey_sources.parse_ts(p.get("createdAt"))
+                out.append({"url": p.get("url") if isinstance(p.get("url"), str) else None,
+                            "created": _epoch(created) if created else None, "merged": _epoch(when)})
+    return out
+
+
+def merged_at(repos: list[str]) -> list[float]:
+    """The merge times of every merged PR of the repos (epoch seconds)."""
+    return [p["merged"] for p in merged_prs(repos)]
+
+
+def github(repos: list[str], runs_found: list[dict], start: datetime.datetime, end: datetime.datetime,
+           merges: list[float] | None = None) -> dict:
+    merges = merged_at(repos) if merges is None else merges
+    merged = sum(_epoch(start) <= t <= _epoch(end) for t in merges)
     spans, queue = [], 0.0
     for r in runs_found:
         created = journey_sources.parse_ts(r.get("createdAt"))
@@ -219,14 +266,20 @@ def _print_text(result: dict) -> None:
     a = t["by_actor"]
     print(f"  coordinator {a['coordinator'] / 1e6:.1f} M, its subagents {a['coordinator_subagents'] / 1e6:.1f} M,"
           f" repo sessions {a['repo_sessions'] / 1e6:.1f} M, their subagents {a['repo_subagents'] / 1e6:.1f} M")
+    cost = "unknown (a model has no price)" if t["cost_usd"] is None else f"USD {t['cost_usd']:.2f}"
+    print(f"  est. cost {cost} (prices of {t['price_table']}; 1-hour cache writes {t['cache_write_1h']})")
+    for actor, d in t["actors"].items():
+        usd = "" if d["cost_usd"] is None else f", USD {d['cost_usd']:.2f}"
+        print(f"  {actor:22} {d['sessions']:>3} sessions {d['calls']:>4} calls, first-call context median "
+              f"{d['start_context_median'] / 1e3:.1f} k, {d['tokens'] / 1e6:.1f} M{usd}")
     print(f"github {g['merged_prs']} merged PRs, {g['runs']} runs ({g['failed_runs']} failed), {g['run_min']} min run,"
           f" {g['queue_min']} min queued, CI active {g['ci_active_min']} min")
     print(f"questions {q['questions']} in {q['rounds']} rounds")
     if "steps" in result:
         names = ["wall", "person", "agents", "coord", "child", *[label for _, label in LABELS]]
-        print(f"{'step':32} " + " ".join(f"{n:>7}" for n in names) + f" {'tokens':>8}")
+        print(f"{'step':32} " + " ".join(f"{n:>7}" for n in names) + f" {'tokens':>8} {'PRs':>4}")
         for r in result["steps"]:
-            print(_fmt_row(r["step"], r, r["tokens"]))
+            print(_fmt_row(r["step"], r, r["tokens"]) + f" {r['merged_prs']:>4}")
         print(_fmt_row("total", result["steps_total"], result["steps_total"]["tokens"]))
 
 
@@ -277,6 +330,8 @@ def main(argv: list[str]) -> int:
             paths["repo_subagents"].append(p)
             n_sub += 1
     kinds = [(_epoch(a), _epoch(b), k) for a, b, k in journey_sources.record_evidence(records, tree, ns.repos, start_dt, end_dt)]
+    prs = merged_prs(ns.repos)
+    kinds += journey_timeline.land_evidence(threads, {p["url"]: (p["created"], p["merged"]) for p in prs if p["url"]})
     runs_found, action_spans = journey_sources.actions(ns.repos, start_dt, end_dt)
     evidence = journey_timeline.Evidence(no_transcript=no_tr, kinds=kinds, actions=[(_epoch(a), _epoch(b)) for a, b in action_spans])
 
@@ -284,18 +339,20 @@ def main(argv: list[str]) -> int:
         print(line, file=sys.stderr)
 
     wall = journey_timeline.split(threads, evidence, start, end)
+    merges = [p["merged"] for p in prs]
     result: dict = {
         "window": {"started_at": _iso(start), "ended_at": _iso(end)},
         "wall": {**wall, "subagents": n_sub, "repo_sessions": len(repo_sess), "inputs": inputs(sessions, start, end)},
         "tokens": tokens(paths, start, end), "questions": questions(sessions, start, end),
-        "github": github(ns.repos, runs_found, start_dt, end_dt), "warnings": warnings}
+        "github": github(ns.repos, runs_found, start_dt, end_dt, merges), "warnings": warnings}
     if ns.steps:
         rows = []
         for label, a, b in _steps(ns.steps, start, end):
             tok = tokens(paths, a, b)
             rows.append({"step": label, "started_at": _iso(a), "ended_at": _iso(b),
                          **journey_timeline.split(threads, evidence, a, b), "tokens": tok["total"], "api_calls": tok["api_calls"],
-                         "tokens_by_actor": tok["by_actor"]})
+                         "tokens_by_actor": tok["by_actor"], "cost_usd": tok["cost_usd"],
+                         "merged_prs": sum(a <= t <= b for t in merges)})
         result["steps"] = rows
         if rows:
             first = rows[0]

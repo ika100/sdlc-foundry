@@ -277,23 +277,28 @@ def _deploy(repo_dir: Path, shape: str | None, items: list[dict], tags: list[tup
     found = staging._find(repo_dir, ship.gitops_apps(repo_dir), ship.service_name(repo_dir))
     if found is None:
         return False
-    _app, _dir, comp, model, me = found
+    import comprelease
+    app, _dir, comp, model, me = found
     name = comp.name
     promotion = "after-dev-smoke" if model.staging_promotion(comp) == "after-dev-smoke" else "manual"
     head = _head(repo_dir)
     step, version = None, None
-    if promotion == "manual":
-        inst = model.instance(name, "staging")
-        if inst is None or not head or staging.resolve(me, inst.tag, repo_dir) != head:
-            step, version = "staging", head[:7] or None
+    inst = model.instance(name, "staging")
+    first = inst is None    # `release target` refuses without staging (comprelease.no_staging); its first promotion is manual (#920)
+    if first or (promotion == "manual" and (not head or staging.resolve(me, inst.tag, repo_dir) != head)):
+        step, version = "staging", head[:7] or None
     if step is None and any(i.get("kind") == "release" for i in items):
-        step = "release"
+        # the release tags the commit staging runs: offered unless that commit is released already (`release target`, #920)
+        runs_now = head if promotion == "manual" else staging.resolve(me, inst.tag, repo_dir)
+        if not (runs_now and comprelease.released_as(repo_dir, runs_now)):
+            step = "release"
     if step is None and tags:
         prod = model.instance(name, "prod")
         newest = tags[0][0]
         if prod is None or str(prod.tag).lstrip("v") != newest.lstrip("v"):
             step, version = "prod", newest
-    return {"component": name, "staging": promotion, "step": step, "version": version, "head": head,
+    return {"component": name, "staging": promotion, "step": step, "version": version, "head": head, "app": app,
+            "first_staging": first and step == "staging",
             "missing_backups": needs.missing_prod_backups(model, [name]) if step == "prod" else []}
 
 
@@ -304,10 +309,26 @@ def promote_item(slug: str, deploy: dict, since: str) -> dict | None:
         return None
     shown = version if step == "staging" else version.lstrip("v")
     command = f"/instance:promote {name} --to staging" if step == "staging" else f"/instance:promote {name} --to prod --version {version}"
+    first = bool(deploy.get("first_staging"))
+    reason = f"{name} {shown} can go to {step}" + (": the first promotion to staging is manual" if first else "")
+    consequence = {"env": step, "first": first, "app": deploy.get("app"),
+                   "missing_backups": list(deploy.get("missing_backups") or [])}
+    if step == "prod":
+        consequence["staging_smoke"] = _staging_smoke(slug, version)
     return {"id": f"promote:{name}:{shown}", "kind": "promote", "stage": "Staging" if step == "staging" else "Prod",
             "object": needs._obj("component", slug, component=name, version=shown), "since": since,
-            "reason": f"{name} {shown} can go to {step}", "command": command, "cwd_repo": slug,
-            "consequence": {"env": step, "missing_backups": list(deploy.get("missing_backups") or [])}, "way_back": None}
+            "reason": reason, "command": command, "cwd_repo": deploy.get("app") or slug,
+            "consequence": consequence, "way_back": None}
+
+
+def _staging_smoke(slug: str, version: str) -> str | None:
+    """The outcome of the staging smoke of release `version` ("none" without a record, #946); None when no run store is set,
+    so the question cannot tell."""
+    import runs
+    import status
+    if not runs.configured_repo():
+        return None
+    return str((status._smoke(slug, version, "staging") or {}).get("outcome") or "none")
 
 
 # ---------------- events ----------------

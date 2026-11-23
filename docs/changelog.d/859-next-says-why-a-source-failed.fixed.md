@@ -1,0 +1,1 @@
+**`cplat next` says why it could not read a source (#859).** A source that failed for a reason other than a timeout showed only the fixed guess, such as "it may be missing a GitHub login", while `gh` worked. The line now adds `Error: <the error, shortened to 100 characters>`; a timeout keeps its "within 20 s" wording.

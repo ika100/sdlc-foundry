@@ -140,7 +140,8 @@ Before the spec, a person can run `/component:explore <topic | #issue>` (`/syste
                     ▼
                docs/specs/<NNN>-<slug>/spec.md   (criteria AC-<NNN>.<n>, non-goals)
 
-/component:plan   ──►  architect  ──►  design.md (contract) + plan.md (tasks covering every criterion; cplat spec check)
+/component:plan   ──►  [ux-designer] ──►  architect  ──►  design.md (contract) + plan.md (tasks covering every criterion; cplat spec check)
+                       (website specs that change what a user sees: ux.md)
 
 /component:build  ──►  tester (acceptance mode) ──► coders ║parallel║ ──► merge+quality ──► quality ‖ tester ‖ security ──► reviewer ──► deployment ──► PR
                        │                         │ (1 worktree per task)                │                              │              │
@@ -188,6 +189,8 @@ Before the spec, a person can run `/component:explore <topic | #issue>` (`/syste
 | `release` | sonnet | Semver, CHANGELOG, release branch + PR |
 | `deployment` | sonnet | Dockerfile and GHCR CI (image only — manifests live in the gitops-app repo, ADR-017) |
 
+**UX design step.** Between approval and the architect, `/component:plan` asks `cplat spec ux <id>`: only in a repo whose shape declares `ux_designer` in `shapes.yml` (today `web-nextjs`), and only for a spec whose criteria or stories name something a user sees (or whose front matter says `ux: needed`), it runs `web:ux-designer` (opus) once. It writes `docs/specs/<id>/ux.md` (flows, screens, states, accessibility; `cplat spec check` validates it and its `spec_hash`), the architect plans from it, the coder brief carries its `UX` field and the reviewer lists a screen or state the build lacks as a deviation. Service and library repos never route the agent.
+
 Orchestrators dispatch `coder`, `tester`, `deployment`, `observability` and `release` to the plugin that owns the repo's shape (`<plugin>:<role>`; `cplat shape` prints the routing); for `service-python` / `library-python` that is `svc`. `product-manager`, `architect`, `reviewer`, `quality` and `security` are shape-agnostic.
 
 The spec formats (`spec.md`, `design.md`, `plan.md`, `verification.md`, test tagging) live in one place, the `svc:spec-format` skill (`plugins/svc/skills/spec-format/`). Agents read its reference files through `${CLAUDE_PLUGIN_ROOT}` instead of restating them; testers in other plugins carry only their language's tagging idiom ([ADR-026](adr/026-feature-specs.md)).
@@ -196,11 +199,12 @@ The spec formats (`spec.md`, `design.md`, `plan.md`, `verification.md`, test tag
 
 | Agent | Model | Job |
 |---|---|---|
+| `ux-designer` | opus | `ux.md` (flows, screens, states, accessibility) before the architect, for specs that change what a user sees; a decision every later agent reads |
 | `coder` | sonnet | App Router + strict TypeScript; sonnet is enough for pattern-driven UI/route work |
 | `tester` | sonnet | Vitest + Testing Library, Playwright when enabled |
 | `deployment` | sonnet | Standalone-output Dockerfile and CI (image only) |
 | `observability` | sonnet | `/api/metrics`, OpenTelemetry instrumentation, alerts |
-| `release` | sonnet | `package.json` version, CHANGELOG, release PR |
+| `release` | sonnet | `package.json` version (a library: none, the tag is its version), CHANGELOG, release PR |
 
 ### `svc-java` plugin (`service-java`)
 
@@ -222,7 +226,7 @@ The spec formats (`spec.md`, `design.md`, `plan.md`, `verification.md`, test tag
 | `observability` | sonnet | slog + Prometheus client_golang |
 | `release` | sonnet | CHANGELOG + PR; version is the git tag |
 
-### `svc-ts` plugin (`service-typescript`)
+### `svc-ts` plugin (`service-typescript`, `library-typescript`)
 
 | Agent | Model | Job |
 |---|---|---|

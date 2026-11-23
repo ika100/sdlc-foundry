@@ -55,6 +55,16 @@ def _service(repo: Path) -> str:
     return ship.service_name(repo)
 
 
+def no_staging(service: str, apps: list[str]) -> str:
+    """The refusal of a deployable component that has no staging instance yet (`cplat next` keeps it from offering a release, #920)."""
+    return f"no staging instance of {service} in {', '.join(apps)}"
+
+
+def released_as(repo: Path, commit: str) -> str | None:
+    """The release tag on `commit`, or None: a commit already released is not released again (local git only)."""
+    return next((t for t in _git(repo, "tag", "--points-at", commit, "--list", RELEASE_TAG, check=False).splitlines() if t), None)
+
+
 def next_dev(version: str, shape: str, repo: Path) -> dict | None:
     """The version file and the next development version the follow-up PR writes after tag `version`, or None (Go, and a
     library that reads its version from the tag)."""
@@ -105,7 +115,7 @@ def target(repo: Path) -> dict:
         except Exception as e:  # noqa: BLE001  (an unreadable pin refuses; it never guesses a commit)
             return refuse(f"cannot read the staging pin of {service}: {e}", None)
         if not pin:
-            return refuse(f"no staging instance of {service} in {', '.join(apps)}", None)
+            return refuse(no_staging(service, apps), None)
         m = SHA_PIN.match(pin)
         if not m:
             return refuse(f"staging pins {pin}, not a sha-<40> build of main", pin)
@@ -115,9 +125,8 @@ def target(repo: Path) -> dict:
         if _git(repo, "cat-file", "-t", commit, check=False) != "commit" or \
                 run(["git", "merge-base", "--is-ancestor", commit, "origin/main"], cwd=repo, check=False).returncode != 0:
             return refuse(f"staging runs {commit}, which is not on main", commit)
-    tagged = [t for t in _git(repo, "tag", "--points-at", commit, "--list", RELEASE_TAG, check=False).splitlines() if t]
-    if tagged:
-        return refuse(f"{commit} is already released as {tagged[0]}", commit if source == "staging" else None)
+    if tagged := released_as(repo, commit):
+        return refuse(f"{commit} is already released as {tagged}", commit if source == "staging" else None)
     previous = _git(repo, "describe", "--tags", "--abbrev=0", "--match", RELEASE_TAG, commit, check=False) or None
     rng = f"{previous}..{commit}" if previous else commit
     subjects = [s for s in _git(repo, "log", "--no-merges", "--reverse", "--format=%s", rng).splitlines() if s]

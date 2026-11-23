@@ -16,6 +16,8 @@ Public API:
   `deploy.step` (staging promote, release, prod promote).
 - #891: a `ship` item (group `ship`, step Build, `/component:ship <n>`) per approved spec of a component repo that nothing
   runs, queues or stopped; a first-parent commit that changes only `docs/specs/` is no release change.
+- #921: in a gitops repo the `ship` item of an approved system spec recommends `/system:plan <n>` (no `docs/plan/<id>.md`)
+  or `/system:ship <n>` (planned, no system ship run, or a stopped one to resume).
 - `plain(text)`: the plain words of the screen (no dispatcher, slot, unit, claim, escalation or held).
 - `what(item)`, `size_of(criteria)`, `assumption_of(text)`: item descriptions the screen and the questions share.
 
@@ -459,8 +461,9 @@ def _with_build(items: list[dict], build: dict | None, slug: str, titles: dict[s
 def _ship_items(repo_dir: Path, slug: str, shape: str | None, local: dict, items: list[dict], running: list[dict],
                 build: dict | None, titles: dict[str, str]) -> list[dict]:
     """A `ship` item per approved spec of a component repo that nothing builds yet (#891): not running, not in the run queue,
-    not stopped. Its step is Build, its command `/component:ship <n>` (it plans, builds and lands the spec)."""
-    if not shape or shape in NOT_RELEASED_HERE or shape == "platform":
+    not stopped. Its step is Build, its command `/component:ship <n>` (it plans, builds and lands the spec). A gitops repo
+    gets the items of its system specs instead (`_system_items`, #921)."""
+    if not shape or shape == "cluster-gitops" or shape == "platform":
         return []
 
     def number(text: object) -> int | None:
@@ -471,20 +474,54 @@ def _ship_items(repo_dir: Path, slug: str, shape: str | None, local: dict, items
     b = build or {}
     taken |= {number(e.get("key")) for e in [*(b.get("queue") or []), *(b.get("running") or [])]
               if str(e.get("key") or "").startswith("spec-")}
+    if shape == "gitops-app":
+        return _system_items(repo_dir, slug, local, taken, number, titles)
     out = []
     for sid in sorted(local):
         s = local[sid]
         if s.status != "approved" or number(sid) in taken:
             continue
         n = str(number(sid))
-        since = _when(git(repo_dir, "log", "-1", "--format=%cI", "--", f"{SPEC_DOCS}{sid}/spec.md"))
-        item = {"id": f"ship:{slug}:{sid}", "kind": "ship", "stage": "Build",
-                "object": needs._obj("spec", slug, spec=sid), "group": "ship",
-                "since": since.astimezone(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ") if since else runs._iso(runs.utcnow()),
-                "reason": "approved, not built yet" if s.plan else "approved, not planned or built yet",
-                "command": f"/component:ship {n}", "plan_command": None if s.plan else f"/component:plan {n}",
-                "cwd_repo": slug, "consequence": None, "way_back": None}
-        out.append({**item, "what": _title_of(sid, titles)})
+        out.append(_ship_item(repo_dir, slug, sid, titles, "approved, not built yet" if s.plan else "approved, not planned or built yet",
+                              f"/component:ship {n}", None if s.plan else f"/component:plan {n}"))
+    return out
+
+
+def _ship_item(repo_dir: Path, slug: str, sid: str, titles: dict[str, str], reason: str, command: str,
+               plan_command: str | None) -> dict:
+    since = _when(git(repo_dir, "log", "-1", "--format=%cI", "--", f"{SPEC_DOCS}{sid}/spec.md"))
+    item = {"id": f"ship:{slug}:{sid}", "kind": "ship", "stage": "Build",
+            "object": needs._obj("spec", slug, spec=sid), "group": "ship",
+            "since": since.astimezone(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ") if since else runs._iso(runs.utcnow()),
+            "reason": reason, "command": command, "plan_command": plan_command,
+            "cwd_repo": slug, "consequence": None, "way_back": None}
+    return {**item, "what": _title_of(sid, titles)}
+
+
+def _system_items(repo_dir: Path, slug: str, local: dict, taken: set, number, titles: dict[str, str]) -> list[dict]:
+    """#921: the `ship` item of an approved system spec in a gitops repo. Without `docs/plan/<id>.md` it recommends
+    `/system:plan <n>`; with the plan and no system ship run `/system:ship <n>`, also to resume a stopped (escalated) run.
+    A running system ship (its local state file) or a done spec gives none. Local reads only."""
+    import appship_state
+    try:
+        st = appship_state.load_state(repo_dir) or {}
+    except Exception:  # noqa: BLE001 - an unreadable state file is no run
+        st = {}
+    out = []
+    for sid in sorted(local):
+        if local[sid].status not in ("approved", "building") or number(sid) in taken:
+            continue
+        n = str(number(sid))
+        run_ = st if st.get("spec") == sid else {}
+        if run_ and not run_.get("escalated"):
+            continue                      # a system ship runs it (or finished its phases)
+        if run_:
+            reason, command = f"its system ship stopped ({run_['escalated']}); resume it", f"/system:ship {n}"
+        elif appship_state.plan_path(repo_dir, sid).is_file():
+            reason, command = "approved and planned, not shipped yet", f"/system:ship {n}"
+        else:
+            reason, command = "approved, not planned yet", f"/system:plan {n}"
+        out.append({**_ship_item(repo_dir, slug, sid, titles, reason, command, None), "resume": bool(run_)})
     return out
 
 

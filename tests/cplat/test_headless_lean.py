@@ -65,3 +65,26 @@ def test_lean_off_keeps_everything(home, tmp_path, monkeypatch):
     monkeypatch.setenv("CPLAT_HEADLESS_LEAN", "0")
     cmd = headless.claude_cmd("/component:ship 1", "sonnet", repo=tmp_path)
     assert "--settings" not in cmd and "--strict-mcp-config" not in cmd
+
+
+def tools_of(cmd):
+    return cmd[cmd.index("--tools") + 1].split(",")
+
+
+def test_a_unit_session_gets_only_the_tools_unattended_sessions_use(home, tmp_path, monkeypatch):
+    monkeypatch.setattr(shapecmd, "route", web_route)
+    tools = tools_of(headless.claude_cmd("/component:ship 1 --unit task:t2", "sonnet", repo=tmp_path))
+    assert set(tools) == set(headless.SESSION_TOOLS)
+    assert {"Agent", "SendMessage", "Bash", "Edit"} <= set(tools) and "Skill" not in tools and "WebFetch" not in tools and "Glob" not in tools
+
+
+@pytest.mark.parametrize("prompt", ["/component:ship 1 --unit plan", "/component:fix the login fails"])
+def test_a_session_that_may_plan_keeps_the_architects_tools(home, tmp_path, monkeypatch, prompt):
+    monkeypatch.setattr(shapecmd, "route", web_route)
+    assert {"Glob", "Grep", "WebSearch", "WebFetch"} <= set(tools_of(headless.claude_cmd(prompt, "sonnet", repo=tmp_path)))
+
+
+def test_lean_off_keeps_the_default_tools(home, tmp_path, monkeypatch):
+    monkeypatch.setattr(shapecmd, "route", web_route)
+    monkeypatch.setenv("CPLAT_HEADLESS_LEAN", "0")
+    assert "--tools" not in headless.claude_cmd("/component:ship 1 --unit task:t1", "sonnet", repo=tmp_path)

@@ -206,6 +206,14 @@ def repo_rules(repo: Path) -> dict[str, list[str]]:
 
 KEEP_PLUGINS = ("component", "shared", "svc")   # every shape's ship: the commands, quality/security, PM/architect/reviewer
 NO_MCP = ["--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}']
+# The built-in tools an unattended session and its subagents use (journeys 22 and 23 called nothing else). `--tools`
+# bounds the subagents too: a subagent may name a tool in its frontmatter, but a call to one left out is denied. The rest
+# of the default set (skills, tool search, cron, monitor, worktrees, …) cost about 12 k tokens on every model call.
+# Glob and Grep stay out of the unit sessions: the default set has neither on macOS and Linux (search runs through Bash),
+# and naming them adds 1.6 k to every session and subagent. A session that may plan keeps them with the web tools: the
+# architect has no Bash, so without them it cannot search the repo (journey 25: each plan unit's Glob and Grep denied).
+SESSION_TOOLS = ("Bash", "Read", "Edit", "Write", "Agent", "SendMessage")
+PLAN_TOOLS = ("Glob", "Grep", "WebSearch", "WebFetch")
 
 
 def _enabled_plugins(repo: Path) -> dict[str, bool]:
@@ -240,13 +248,22 @@ def lean(repo: Path, prompt: str) -> tuple[dict[str, bool], list[str]]:
     return off, NO_MCP
 
 
+def session_tools(prompt: str) -> list[str]:
+    """The `--tools` of an unattended session: the architect's search and web tools only where it may plan (the `plan`
+    unit, or a session that runs the whole command). `CPLAT_HEADLESS_LEAN=0` keeps the default set."""
+    if os.environ.get("CPLAT_HEADLESS_LEAN") == "0":
+        return []
+    unit = m.group(1) if (m := re.search(r"--unit\s+(\S+)", prompt)) else None
+    return ["--tools", ",".join([*SESSION_TOOLS, *(PLAN_TOOLS if unit in (None, "plan") else ())])]
+
+
 def claude_cmd(prompt: str, model: str | None, plugin_dirs: list[str] | None = None,
                allow: list[str] | None = None, deny: list[str] | None = None, add_dirs: list[str] | None = None,
                rules: dict[str, list[str]] | None = None, repo: Path | None = None) -> list[str]:
     exe = os.environ.get("CPLAT_CLAUDE") or "claude"
     cmd = [exe, "-p", prompt, "--permission-mode", "acceptEdits", "--output-format", "text"]
     plugins_off, mcp = lean(repo, prompt) if repo is not None else ({}, [])
-    cmd += mcp
+    cmd += mcp + (session_tools(prompt) if repo is not None else [])
     for d in add_dirs or []:      # a system ship's clones next to the gitops repo (a session may work only where it may cd)
         cmd += ["--add-dir", d]
     if model:

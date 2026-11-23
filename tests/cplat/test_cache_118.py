@@ -718,9 +718,9 @@ def test_a_cache_name_clashing_with_its_password_object_fails_ac_118_22(tmp_path
 
 
 # byte-identical guarantee: digests of the trees the 5.x renderer wrote before spec 118 (full tree, sha256 of sorted path and content)
-BEFORE_118 = {"full5": ("3730affc78b57cf14061c4e92833c53e614ab7b652bf6775034b95d5689f3c89", 79),   # spec 182: the log tailer adds 12 files; spec 128: a generated component secret gets a credentials Job; #341: create.py is a literal block with the allowlist pragma
-              "rich5": ("f42760e4828c1738ac3b1578cc0a431940e0933f419744496420ac872dfc6522", 79),   # spec 182: the log tailer adds 12 files; spec 128: a generated component secret gets a credentials Job; #341: create.py is a literal block with the allowlist pragma
-              "db-bucket": ("8f7dfe6d6e378ae4e30e2b0c8e444e2a4174f06bd3ea9d9cc2dbc3b356bc9519", 56)}   # spec 128: the credentials Job replaces the bucket's generators and ExternalSecret; #341: create.py is a literal block with the allowlist pragma; the bucket adopts an existing bucket (adoptExisting)
+BEFORE_118 = {"full5": ("7e06ba39ba0eb6bc2020a6edb3a5107eacaaa2349c0c71879d9d10318b2e60c6", 79),   # #926: the bucket's credentials Job waits for the SeaweedFS webhook; spec 182: the log tailer adds 12 files; spec 128: a generated component secret gets a credentials Job; #341: create.py is a literal block with the allowlist pragma
+              "rich5": ("5f611e9176b850e8b46b82067faf016907131dec73cf2ad0542cf66e180f584d", 79),   # #926: the bucket's credentials Job waits for the SeaweedFS webhook; spec 182: the log tailer adds 12 files; spec 128: a generated component secret gets a credentials Job; #341: create.py is a literal block with the allowlist pragma
+              "db-bucket": ("4992aae745317cafb73bc0a01a307134c454cd8409082310af2c62a527111a52", 56)}   # #926: the bucket's credentials Job waits for the SeaweedFS webhook; spec 128: the credentials Job replaces the bucket's generators and ExternalSecret; #341: create.py is a literal block with the allowlist pragma; the bucket adopts an existing bucket (adoptExisting)
 
 
 def _before_docs():

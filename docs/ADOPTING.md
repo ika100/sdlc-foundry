@@ -22,6 +22,7 @@ One command: renders the template, commits, creates a **private** GitHub repo, p
 | Spring Boot service | `--lang java` | `service-java` | yes |
 | Go service | `--lang go` | `service-go` | yes |
 | TypeScript service (Fastify) | `--type service --lang typescript` | `service-typescript` | yes |
+| TypeScript library (npm package) | `--type library --lang typescript` | `library-typescript` | no |
 
 `--type` is `service`, `website` or `library`; `--lang` is `python`, `java`, `go` or `typescript`. Give one and the other follows from its first valid pair (`--lang typescript` alone is a website); give neither and you get `service` in Python. A system's GitOps repo is created by `/system:new`, never by `/component:new`.
 
@@ -111,7 +112,7 @@ Both commands route through the marketplace plugins.
 
 If you also want skeleton updates (CI workflow, devbox recipes, Dockerfile, CLAUDE.md) to flow from the platform template via `/platform:update`:
 
-1. Pick your shape's template under `templates/` (`service-python`, `library-python`, `web-nextjs`, `gitops-app`, `service-java`, `service-go`, `service-typescript`) and create `.copier-answers.yml` at the repo root recording the answers your repo *would* have given — the questions are the top-level keys of that template's `copier.yml`. For `service-python`:
+1. Pick your shape's template under `templates/` (`service-python`, `library-python`, `web-nextjs`, `gitops-app`, `service-java`, `service-go`, `service-typescript`, `library-typescript`) and create `.copier-answers.yml` at the repo root recording the answers your repo *would* have given — the questions are the top-level keys of that template's `copier.yml`. For `service-python`:
 
    ```yaml
    _src_path: gh:ika100/sdlc-foundry/templates/service-python

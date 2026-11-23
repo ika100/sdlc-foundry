@@ -6,6 +6,140 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+## [5.29.0] - 2026-11-22
+
+### Added
+
+**Website specs get a UX design step before the plan (#715).** A website feature went from the approved spec straight to the architect and the coders, so the screens, their states and their accessibility were decided while coding and the reviewer had no design to check against. Now `/component:plan` (and `/component:ship`) asks `cplat spec ux <id>` first: in a `web-nextjs` repo, for a spec whose criteria or stories name something a user sees (or that sets `ux: needed`), the new `web:ux-designer` agent writes `docs/specs/<id>/ux.md` (flows, screens, states, accessibility), which `cplat spec check` validates, the architect plans from, the coder brief carries and the reviewer checks the built screens against. Service and library repos run no extra agent; `ux: none` in a spec skips the step. Update the plugins (`/plugin marketplace update sdlc-foundry`).
+
+**A TypeScript library shape: `/component:new <name> <description> --type library --lang typescript` (#717).** Shared types and client code between a `web-nextjs` website and a `service-typescript` backend had no managed home. The new `library-typescript` shape creates an npm package `@<owner>/<repo>` (owner lowercased): ESM only, compiled with `tsc` to `dist/` with type declarations, the same tooling and gates as the TypeScript service (ESLint + `tsc`, Vitest with an 80 % coverage gate, `pnpm audit` + detect-secrets), no image and no deployment. A release tag publishes it to GitHub Packages (`npm.pkg.github.com`) through the `publish` CI job and `devbox run publish vX.Y.Z [--dry-run]` ([ADR-125](adr/125-library-releases-publish-to-github-on-the-tag.md)): the tag is the version (`package.json` keeps a development version and `/component:release` writes only the CHANGELOG), a commit that is not the tagged one publishes nothing, and a rerun of the same tag is a no-op. The library's `CLAUDE.md` says how another repo installs it (`.npmrc` and a `read:packages` token, `PACKAGES_READ_TOKEN` in CI). The `svc-ts` agents (0.2.0) serve both TypeScript shapes; a system's `system.yaml` accepts `type: library, lang: typescript`; a `package.json` without `next` or `fastify` (and no other manifest) is detected as a TypeScript library. Update the plugins (`/plugin marketplace update`) to get `svc-ts` 0.2.0 ([spec 215](specs/215-a-typescript-library-shape/spec.md)).
+
+- `devbox run cluster-up` takes `DOCKERHUB_MIRROR`, the URL of a Docker Hub pull-through cache. A new local cluster then pulls docker.io images through it, so a flaky network costs one pull instead of one per cluster. Unset, nothing changes.
+
+### Fixed
+
+**An ADR or spec number used on another unmerged branch no longer turns unrelated PRs' test shards red (#826).** `test_spec_check_stays_green_ac_180_4` ran `cplat spec check` against every pushed branch and open PR, so its verdict depended on which branches existed when it ran. The test now checks the commit's own rules only; `cplat spec check` still reports such a clash to the author.
+
+**An unattended session can no longer end a ship run before its PR is merged (#827).** A verification unit called `cplat component ship finish` while the run was in phase `pr` with no PR opened; the state was archived, headless stopped without the pr and land units, and the spec read as done. Under `cplat headless` (`CPLAT_HEADLESS` or `CPLAT_UNIT` set) `ship finish` now refuses a run that is neither done nor escalated and keeps its state, so the next unit goes on from that phase; a person can still end a run by hand.
+
+**Run records no longer wait on a run store that has just timed out (#848).** When the run store could not be reached, every run record waited up to its 20 s budget before it was buffered, and the next record in the same command, or the next command, tried and waited again; in journey 21 a flaky network cost minutes of agent time this way and printed one warning per record. Now the first timeout or network error leaves a marker in the run state directory that skips the store for 3 minutes: later records in that process and in later commands go straight to the local buffer without a network call, and each process says once that the store is skipped. When the marker has expired, the next record tries the store again and a store that answers clears the marker and writes the whole buffer; `cplat platform runs flush` ignores the marker and always tries.
+
+**`cplat system wait` says why an app stays OutOfSync while Argo CD retries a failed sync (#849).** The TIMEOUT line of such an app now names the last sync failure and the retry attempt instead of only `OutOfSync/Healthy`. A sync that has failed with no retry pending already ends the wait at once as RED.
+
+**`cplat next` reads GitHub and the run records in time in a repo with many pull requests (#859).** In the platform repo
+(over 600 pull requests, over 200 specs), `next` said "Could not read GitHub" and "Could not read the run records"
+although `gh` worked: the run list asked `gh` once per branch because one listing of 300 PRs was not complete, the drafts
+asked for every spec on its own, and the run list was built twice. Now one listing holds up to 1000 PRs and a branch it
+misses is asked once, the specs on `main` come from one GraphQL call, the escalations reuse those texts, and the run list
+and budget ledgers are read once per `next`. A source that answers too late is named as such: "Could not read GitHub
+within 20 s; it may be missing …".
+
+**`cplat platform runs journey measure` counts the wait after a land's merge as deploy and its smokes as smoke (#865).** The post-merge part of `cplat system ship land` and `cplat component ship land` (Argo CD sync, operator bootstrap, the dev smokes) had no kind and counted as unattributed waiting, and a `verify` record covered no time because it is written after its smoke ran. Now a land call's wait from the GitHub merge of a PR its output names until the call ends (or the next PR it merges is opened, or into the next call when it stopped on its budget after the merge) is deploy, a `verify` record spans its smoke's duration, and a smoke inside a deploy or promotion wait counts as smoke. On journey 25, unattributed waiting falls from 12.1 to 6.2 minutes, deploy rises from 21.8 to 28.9 and smoke from 0.9 to 1.7 ([ADR-096](adr/096-journey-waiting-is-attributed-from-evidence.md)).
+
+**`cplat platform doctor` no longer fails when Docker does not answer (#879).** A `docker info` that ran into its 15 s timeout stopped the whole doctor with an error; it is now a `docker daemon` warning ("no answer within 15 s"). The doctor tests no longer call the runner's real Docker, which made a CI shard red on a slow runner.
+
+**A RED `cplat pr wait` names the run of each red check and the command that reruns it (#880).** A push can start sibling runs of one workflow, so `gh run list --limit 1` could pick the wrong run for a manual rerun; the report now ends with `run <id> (<checks>): gh run rerun <id> -R <owner/repo> --failed`.
+
+**The deploy wait stops at a stuck pod of an external Helm entry's chart too (#883).** Since #867 the deploy wait (`cplat system wait`, `instance promote --smoke`, `system ship land` and the component ship's deploy and staging waits) ends RED once a pod of the new version stays in `ImagePullBackOff`, `ErrImagePull`, `InvalidImageName` or `CrashLoopBackOff` for over 60 s, but it read pods only in the namespaces of the app's own workloads. An external Helm entry's app manages only the child Application `<svc>-<env>-chart`, whose pods run in the child's destination namespace, so such a component still waited out the full timeout. The wait now also reads the pods in the destination namespace of each child Application the app manages and stops early, naming pod, reason, image and the last event.
+
+**The failure excerpt of a red CI check no longer ends in the runner's cleanup (#887).** The last lines of a failed job were mostly `actions/checkout`'s post-job `git config` cleanup, so the real error was cut off; the excerpt now leaves out the post-job steps and shows the failing step's last lines.
+
+**The cplat tests no longer fail when git's background maintenance runs while a fixture copies a repo (#916).** A detached `git maintenance` could remove `.git/objects/maintenance.lock` while `shutil.copytree` copied the repo; the test suite now turns git's auto-maintenance and auto-gc off for every git it runs.
+
+**An on-demand backup waits for a backup of the database that is still running (#927).** `/resource:backup <db> --env <env>` started seconds after the schedule's first backup failed with CloudNativePG's generic error, because a cluster takes one backup at a time, and finding the cause meant reading the backup status and the plugin logs. Now the command first looks for a backup of the active cluster that is still running (started in the last 30 minutes), prints `a backup is running (started by the schedule): waiting for Backup <name>`, waits for it and reports it as the result; when that backup fails, it takes its own. A backup that completed less than a minute ago is the result without a new one. When a backup fails anyway, the output gives the backup's own error and names a backup of the cluster it overlapped.
+
+**`cplat pr wait` no longer reports RED for a transient failure while its workflow run is still running (#931).** A job that failed on a transient error (now including the build cache's `failed to load cache key`) while sibling jobs of the same run were still queued ended the wait at once, because GitHub serves `--log-failed` and reruns only for a completed run. pr wait now reads the finished job's own log, waits for the run to complete, reruns its failed jobs once and judges the new attempt; a real failure is still RED at once.
+
+**The architect can search the repo again in an unattended plan session (#944).** Since the lean tool list (#918), each of the architect's `Glob` and `Grep` calls in a `plan` unit was denied, and the architect has no `Bash` to search with. The `plan` unit and a session that runs a whole command now keep `Glob` and `Grep` beside the web tools; the other unit sessions stay as lean as before.
+
+- `cplat next` in a component repo no longer calls a release "verified in staging" without a green staging smoke record, and then it recommends holding the prod promotion back instead of promoting (#946).
+
+- Starting an escalated `/system:ship` run again keeps a repo that escalated with questions escalated, with its questions, so `next` asks `answer` again and `repo resume --answer` takes the user's answer; before, the restart dropped the questions and the repo rebuilt without the answer (#957). System plugin 1.24.3.
+
+- `cplat spec test-diff --approve` refuses in an unattended session (`CPLAT_HEADLESS`, a ship unit). Only the user approves a change to an acceptance test, and no user reads an unattended session, so an answer relayed there can no longer be recorded as the user's approval (#983).
+
+- When an approved amendment sets a repo spec's `plan.md` aside, the ship units open the plan again, together with the done task and verification units built on it. Before, the next unit was `verification` with no plan (#984).
+
+**An escalation's suggested answer must decide the question (#987).** A `decision` escalation suggested "file /issue:report …" as its answer; the coordinator resumed with it, nothing was decided, and the same stop came back 12 minutes later. `cplat component ship escalate` now refuses (exit 2, nothing recorded) a `--question` whose suggested answer is only a side action (`/issue:report`, `cplat feedback`, filing or opening an issue) and asks for the decision itself; an alternative may still name one.
+
+**`cplat spec test-diff --tighten` judges a test against the version you approved, not the red tests (#987).** After an approved amendment had changed a criterion's test, tightening that test was refused with `criterion ids changed` because it was compared with the red commit. It is now compared with the newest committed version of the file whose content matches the recorded approval (or an earlier tightening); without one it uses the red commit as before. A test looser than the approved one is still refused.
+
+## [5.28.1] - 2026-11-22
+
+### Fixed
+
+**The Python audit checks what `uv.lock` pins, not the environment it runs in (#936).** `devbox run audit` and `devbox run deps-findings` in the Python service and library templates ran `uv run pip-audit` with no requirements, which audits the Python that runs it. When the venv lacked the dev extra (devbox's `uv sync` failing quietly on a bad network), devbox's own pip-audit audited its own Python and reported setuptools and urllib3 versions the repo never locks; no pin could clear that, and in journey 25 it held a ship for most of two hours. Both recipes now export the lock (`uv export --frozen --no-hashes --no-emit-project --all-extras`) and run `pip-audit -r <export> --no-deps --disable-pip` on it. **Action:** existing Python repos get it with `/platform:update`.
+
+**The deploy wait no longer reads READY over a pod that cannot start (#937).** A SeaweedFS bucket's `Seaweed` resource has no Argo CD health check, so its app read Synced/Healthy while its pod sat in `ImagePullBackOff`, and `cplat system wait` ended READY with no working backups (journey 25). A database or add-on app that reads Healthy now keeps the wait behind while one of its pods is stuck (pull failure or crash loop), named on its progress line from the first poll; a missing image is RED after 60 s as in #925. An environment with `observability: {ui: lgtm}` also looks at the cluster's shared Grafana app (`operator-lgtm`): a stuck Grafana pod never holds the wait, but READY is followed by `WARNING: operator-lgtm (shared by the cluster) is not ready: …` naming the pod and its pull error. `unexpected EOF` now counts as a network cause of a failing pull.
+
+**A repository's checks no longer see cplat's own Python environment (#941).** `cplat validate run` and `cplat quiet` ran a repo's `devbox run` commands with cplat's `VIRTUAL_ENV` and that environment's `bin` first on `PATH`, both set by `uv run` for cplat itself. Every Python check log began with uv's mismatch warning, and in journey 25 a headless ship's checks imported packages from outside the project venv. `core.repo_env()` now drops them when they are cplat's own environment; another active virtualenv is left alone.
+
+## [5.28.0] - 2026-11-21
+
+### Changed
+
+**`journey measure` shows per actor the first-call context, calls and estimated cost, and merged PRs per step (#914).** Journey token totals vary by about 30 % between runs, so a token change needs numbers that barely vary. Per actor (coordinator, its subagents, repo sessions, their subagents) the measure now prints the sessions, the calls, the median context of a session's first call (what every later call reads again) and the estimated cost; each step also shows its merged PRs. The price table now prices Sonnet 5.5 cache reads at $0.10 per million (was $0.20), lists Fable 5.2, and prices one-hour cache writes at twice the input price.
+
+**Unattended sessions load only the tools they use: about 12 k tokens less context on every model call (#918).** `cplat headless` sessions (unit sessions of a ship or build, a system ship's repo sessions, the dispatcher's fixes) loaded Claude Code's whole default tool set, although they and their subagents call only `Bash`, `Read`, `Edit`, `Write`, `Agent` and `SendMessage`. They now pass exactly those as `--tools`; the `plan` unit and a session that runs a whole command also keep `WebSearch` and `WebFetch` for the architect. On the build benchmark a unit session's first call went from 33 k to 21 k tokens of context and the plan session's from 28 k to 17 k; subagents are unchanged. `CPLAT_HEADLESS_LEAN=0` keeps the defaults.
+
+### Fixed
+
+**`cplat next` no longer offers "Release now" for a deployable component that has no staging instance (#920).** A fresh service
+repo whose system promotes staging after the dev smoke was asked "N changes since the start. Release now?", and
+`cplat component release target` then refused because nothing ran in staging; the next `cplat next` asked again. The release item of
+a deployable component now follows the release's own precondition: without a staging instance the next step is the first, manual
+promotion to staging (`/instance:promote <component> --to staging`, run in the gitops repo it names), and a staging commit that is
+already released offers no release. A library still releases from main. The staging promote question no longer asks "Promote it
+to prod?".
+
+**`cplat next` shows the next step of an approved system spec in a gitops repo (#921).** Right after a system spec was approved,
+`cplat next` in the gitops repo said "Nothing is waiting for you", although the spec still needed `/system:plan <n>` and then
+`/system:ship <n>`. An approved system spec now places the bar at Build and recommends `/system:plan <n>` while it has no
+`docs/plan/<id>.md`, and `/system:ship <n>` once it is planned and no system ship runs it, or to resume a stopped one. A running
+system ship or a done spec waits for nothing.
+
+**`cplat system ship land` ends each call within its budget, so no coordinator runs it in the background and waits on it with its own loop (#924).**
+A land that waited longer than Claude Code's 600 s Bash limit was moved to the background, and the coordinator waited with a
+`pgrep -f` loop that matched itself and ran its full 9.5 minutes. One call now stops its waits after `--budget` seconds (default 480)
+and exits 3 with a `WAIT:` line; the next call resumes where it stopped (checks, Argo CD, smokes, staging), and the checks' own
+`--timeout` still counts from the first call. A running land is a cplat wait the Stop hook sees (ADR-093) and detaches under
+`cplat headless`. `/system:ship` runs land in the foreground and calls it again on exit 3.
+
+**The deploy wait names a database pod that cannot pull its image, and cluster-up pre-pulls the Postgres image (#925).** `cplat system wait` watched only component pods, so a CloudNativePG initdb pod in `ErrImagePull`/`ImagePullBackOff` (journey 24: ghcr.io refused connections) left `addon-postgres-dev: Synced/Progressing` silent for 33 minutes. Now a pod of a database or other add-on app (its instance and initdb pods, a bucket's pods) waiting in `ErrImagePull`, `ImagePullBackOff`, `InvalidImageName` or `CrashLoopBackOff` for more than 60 s is named on the app's progress line with reason, image and last event: a pull failing on the network reads `image pull failing: <cause>` on every line and keeps waiting, a missing tag or manifest ends the wait RED as for a component. Each poll lists a namespace's pods once. `devbox run cluster-up` (system and cluster repos) pulls the pinned Postgres image into each node in the background with `crictl pull` when a database is rendered or the CloudNativePG operator is listed (`PREPULL_POSTGRES=0` turns it off); a failed pull is logged and never fails cluster-up. Update the gitops repos (`/platform:update`) to get the pre-pull.
+
+**The first in-cluster bucket no longer races the SeaweedFS operator's webhook (#926).** When a system's first bucket installed the SeaweedFS operator in the same rollout, the bucket's `Seaweed` resource reached the operator's mutating webhook before the chart's certificate job had given it a CA, so the bucket's sync failed with `x509: certificate signed by unknown authority` and Argo CD retried with backoff for up to about 14 minutes. The bucket's credentials Job (PreSync, before the `Seaweed`) now waits until the webhook service answers, and 30 s more when it had to wait, for the CA to be set (at most 200 s; then it goes on). It is rendered only where the system repo installs the operators itself. **Action:** existing systems get it with `/platform:update` and a re-render.
+
+## [5.27.0] - 2026-11-21
+
+### Added
+
+**A TypeScript service shape: `/component:new <name> <description> --type service --lang typescript` (#716).** A team whose website is a `web-nextjs` repo had to write its backend in Python, Java or Go. The new `service-typescript` shape creates a Fastify service on the pinned Node LTS with the same guarantees as the other services: the canonical `devbox` recipes and gates (ESLint + `tsc`, Vitest with an 80 % coverage gate, `pnpm audit` + detect-secrets), `/health`, `/ready` and `/metrics` (prom-client, HTTP request metrics by route), pino JSON logs that carry the trace ids, OpenTelemetry tracing when `OTEL_EXPORTER_OTLP_ENDPOINT` is set, Vitest smoke tests named `@smoke` (and `@writes`), a distroless non-root image and the hardened CI with `release-image` and `pin-dev`. `--data needs_database=true` adds PostgreSQL through Drizzle ORM: SQL migrations from `devbox run migrate-new` applied at startup, the `PG*` variables of the postgres resource, readiness that follows the database, Testcontainers tests. Its agents are in the new `svc-ts` plugin; a system's `system.yaml` accepts `type: service, lang: typescript`. `--lang typescript` alone still creates a website. Update the plugins (`/plugin marketplace update`) to get `svc-ts` ([ADR-124](adr/124-service-typescript-stack.md), [spec 214](specs/214-a-typescript-service-shape/spec.md)).
+
+**A library release publishes its package (#889).** A tag of a `library-python` repo used to repeat the gates and publish nothing, and its guide named an internal index that did not exist. Now the tag's CI run has a `publish` job: after every gate it runs `devbox run publish vX.Y.Z`, which builds the wheel and source archive, fails before any upload when their version is not the tag's, and attaches both to the GitHub release of the tag. `devbox run publish vX.Y.Z --dry-run` checks the same locally. Every library shape now declares `publish.registry` in `shapes.yml`, and `scripts/shapes.py check` holds its template to the convention of [ADR-125](adr/125-library-releases-publish-to-github-on-the-tag.md), which the TypeScript, Java and .NET libraries will follow. **Action:** library repos pick it up with `/platform:update`; the repo's `CLAUDE.md` says how other repos install a released version ([spec 213](specs/213-library-releases-publish-their-package/spec.md)).
+
+### Fixed
+
+**`cplat next` puts an approved spec that nothing builds at Build and no longer waits 20 s for the run queue (#891).** Right after
+`cplat spec land` of an approved spec without a plan or build, `cplat next` showed Build and Dev as done, placed "you are here" at
+Staging and recommended releasing the spec documents; it also reported the run queue unreadable after waiting 20 s. Now an approved
+spec of a component repo that is not running, queued or stopped places the bar at Build and recommends `/component:ship <n>` (or
+`/component:plan <n>` when it has no plan), a commit that changes only `docs/specs/` is no release change, and the run queue reads only
+this repo's runs (it built a row for every run of every repo in the run store, each of which may ask GitHub).
+
+**`cplat system wait` no longer ends RED on a missing image tag while the component's CI run builds it (#892).** The fail-fast of #867 stopped the wait after 60 s of `ImagePullBackOff` with "the image tag does not exist in the registry", also for a new component whose first CI run on main was still building and pushing that image. Now a pod whose tag is missing waits while the newest `ci` run on main of the component's repo is queued or running (one `gh run list` per repo, asked again at most once a minute while it runs), and for 5 more minutes after that run passed, for the kubelet's pull back-off. With no run building the image, or a failed run, the wait ends RED after 60 s as before.
+
+**The contract check of a Python service accepts FastAPI's `loc` path (#893).** A system plan whose contract names the error field `loc` could never pass a rejection case: `scripts/contract_pytest.py` compared the whole `loc` with the field name, and FastAPI sends `["body", "title"]`, not `"title"`. An error now names a field when its entry equals the field or is a path whose last parts are the field's dotted parts (`["body", "address", "city"]` names `address.city`). **Action:** existing service-python repos get the fix with `/platform:update`.
+
+**A new web repo's page owns its `<main>` landmark, so a page acceptance test finds it (#897).** The `web-nextjs` layout rendered `<main id="main-content">` around every page, so a test that rendered a page alone and queried role `main` failed, and adding a `<main>` to the page gave two. Now the layout keeps the skip link and a container `<div>`, and the start page, the 404 page and the error page each render `<main id="main-content">`, the skip link's target; the template's layout, page and e2e tests check it. **Action:** `/platform:update` does not change existing web repos here, because `app/` and `tests/` are project-owned: to adopt it, move `<main id="main-content">` from `app/layout.tsx` into your pages and adjust `tests/layout.test.tsx`.
+
+**The first prod promotion asks for the database backup first (#900).** A database has a prod instance in the model only once a component runs in prod, so before the first prod promotion `cplat next` saw no prod database and recommended the promotion without the backup question of #861; prod then went live without a backup. Now the in-cluster databases that the promoted components use count as prod databases without a backup, unless `system.yaml` sets prod's backup or declares prod's instance external.
+
+**`cplat next` recommends the release before a prod promotion, not a `sha-` build (#901).** A build verified in staging was offered for prod as `/instance:promote … --to prod --version sha-…`, although prod takes release tags only, and the offer stayed after prod ran the release. Now the prod item recommends `/component:release` while the staged build has no release tag, names the release tag of the staged build once it exists, and disappears when prod runs that release.
+
+**`cplat system wait` no longer ends RED while a new backup bucket is still starting (#902).** A `resource backup --to` change that declares an in-cluster bucket made the database's app Degraded (`ContinuousArchiving=False`, `barman-cloud-wal-archive: exit status 4`) until the SeaweedFS pods were Ready, and the wait stopped with `health Degraded` although archiving recovered a minute later. Now a database Degraded only because WAL archiving to its in-cluster backup bucket fails is pending while that bucket's app or pods are not Ready and for 5 minutes after the failure began or the bucket became Ready; the progress line names the bucket and the pod it waits for. After that, or when anything else in the app is Degraded, it is RED as before.
+
+**The cplat tests never call the real GitHub (#905).** Some tests reached the real `gh`; when the account's GitHub budget was used up they slept in the rate-limit retry for more than 300 s and failed on the test timeout, so a full local run got minutes slower and turned red for reasons outside the code. Every test now finds a `gh` first on `PATH` that fails at once with "tests never call GitHub"; tests that need `gh` install their own fake in front of it.
+
 ## [5.26.0] - 2026-11-21
 
 ### Added

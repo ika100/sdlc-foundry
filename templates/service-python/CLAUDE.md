@@ -28,7 +28,7 @@ Canonical `devbox run` scripts (configured in `devbox.json`):
 | `lint-fix` | `ruff check --fix` + `ruff format` |
 | `typecheck` | `mypy .` |
 | `quality` | `lint` then `typecheck` — the gate CI runs |
-| `audit` | `pip-audit --strict` |
+| `audit` | `pip-audit` on `uv.lock` |
 | `secrets-scan` | `detect-secrets-hook` against `.secrets.baseline.json` |
 | `bandit` | `bandit -r src/ -q` |
 | `security` | `audit` + `secrets-scan` + `bandit` |

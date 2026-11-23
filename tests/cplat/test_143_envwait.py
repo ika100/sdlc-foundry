@@ -420,3 +420,45 @@ def test_another_comparison_error_is_still_red_at_once_506(w):  # #506
                      "addon-postgres-dev": app(w.head)}]
     rc, out, _, _ = w.wait("--env", "dev")
     assert rc == 1 and w.t["slept"] == 0 and "kustomize build failed" in block(out, "RED:")[0]
+
+
+def test_the_timeout_names_the_failure_argo_retries_849(w):  # #849
+    op = {"phase": "Running", "message": "ImagePullBackOff: network down", "retryCount": 3, "syncResult": {"revision": w.head}}
+    w.argo.polls = [{"todo-api-dev": app(w.head, sync="OutOfSync", images=[w.image], op=op), "addon-postgres-dev": app(w.head)}]
+    rc, out, _, _ = w.wait("--env", "dev", "--timeout", "60")
+    assert rc == 2
+    line = next(ln for ln in block(out, "TIMEOUT:") if "todo-api-dev" in ln)
+    assert "ImagePullBackOff: network down" in line and "attempt 3" in line
+
+
+# ---------------- #987: the environment's cluster, and a root app with a ComparisonError ----------------
+
+def test_the_environments_cluster_context_wins_over_the_current_one_987(w, tmp_path):  # #987
+    """Another session switched the current context; the environment names its cluster and kube_contexts maps it, so the wait
+    reads that cluster without --context. Without the mapping the current context stays the fallback (and is refused)."""
+    sy = w.repo / "applications" / "shop" / "system.yaml"
+    sy.write_text(sy.read_text().replace("dev: {host: '{component}.localhost'}", "dev: {host: '{component}.localhost', cluster: local}"))
+    w.commit("sha-" + "4f2a91c" + "0" * 33)
+    w.head = git(w.repo, "rev-parse", "HEAD")
+    w.argo.current = "k3d-taskboard21-local"
+    w.argo.polls = [w.ready()]
+    cfg = tmp_path / "xdg" / "sdlc-foundry" / "settings.yml"
+    cfg.parent.mkdir(parents=True, exist_ok=True)
+    cfg.write_text(f"kube_contexts: {{local: {CTX}}}\n")
+    rc, out, err, _ = w.wait("--env", "dev", context=False)
+    assert rc == 0, (out, err)
+    assert {c[0] for c in w.argo.calls if "applications" in c and "get" in c} == {CTX}
+    cfg.write_text("{}\n")
+    w.argo.polls = [{}]
+    rc, _, err, _ = w.wait("--env", "dev", context=False)
+    assert rc != 0 and "k3d-taskboard21-local (the current context) is not the cluster of system shop" in err
+
+
+def test_a_root_app_with_a_comparison_error_marks_the_systems_cluster_987(w):  # #987
+    """Only the root app is there, with a ComparisonError (its apps are not generated yet): this is the system's cluster, so the
+    wait refreshes the root and goes on instead of saying "not the cluster of system"."""
+    errored = app(w.old, sync="Unknown", conditions=[{"type": "ComparisonError", "message": "rpc error: repository not accessible"}])
+    w.argo.polls = [{"shop-root": errored}, {"shop-root": errored}, {**w.ready(), "shop-root": app(w.head)}]
+    rc, out, err, _ = w.wait("--env", "dev", context=False)
+    assert "not the cluster of" not in err and rc == 0, (out, err)
+    assert "shop-root" in w.argo.refreshed

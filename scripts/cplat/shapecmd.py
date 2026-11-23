@@ -49,6 +49,8 @@ def route(repo: Path) -> dict:
                    "quality": "shared:quality", "security": "shared:security"})
     if shape == "service-python":
         agents["migrations"] = "svc:migrations"
+    if entry.get("ux_designer"):
+        agents["ux-designer"] = f"{plugin}:ux-designer"   # spec 219: the UX step of /component:plan
     out = {"shape": shape, "plugin": plugin, "deployable": entry["deployable"], "library": entry["library"], "agents": agents}
     if shape == "gitops-app":
         out["unsupported"] = "/component:* commands do not apply to a gitops-app repo; use /system:spec, /component:add or /instance:promote"
