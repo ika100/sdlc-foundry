@@ -181,6 +181,7 @@ def claude_trap(tmp_path, monkeypatch) -> Path:
 @pytest.fixture()
 def dw(tmp_path, monkeypatch, capsys):
     """The world of spec 097 with the repo preflight and Argo CD health passing (as spec 155's `w`)."""
+    monkeypatch.delenv("CPLAT_SYSTEM_DRIVER", raising=False)       # the driver is on unless a test says otherwise
     world = World(tmp_path, monkeypatch, capsys)
     monkeypatch.setattr(importlib.import_module("preflight"), "check_repo", lambda *a, **k: None)
     monkeypatch.setattr(ship, "argo_health", lambda *a, **k: "Synced/Healthy")

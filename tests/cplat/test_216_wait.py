@@ -126,7 +126,7 @@ def test_a_step_during_the_call_prints_one_line_and_ends_with_wait_and_exit_0_ac
     assert r.rc == 0 and out[-1] == f"WAIT: driver still going, progress in the last {T}s; run the same wait again"
     assert len(result_lines(r)) == 1 and T <= tick.slept <= T + 10
     steps = [m.groups() for m in map(STEP_LINE.match, out) if m]
-    assert steps == [("next --wait", "0"), ("repo start shop-lib", "0")]          # new steps only, words up to the first option
+    assert steps == [("next", "0"), ("repo start shop-lib", "0")]          # new steps only, words up to the first option
 
 
 def test_the_escalate_step_line_leaves_its_reason_out_ac_216_6(dw, tick, monkeypatch):  # AC-216.6

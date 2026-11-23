@@ -212,10 +212,20 @@ def test_a_preflight_failed_repo_is_escalated_and_the_other_repo_goes_on_ac_216_
 
 # ---------------- offline and fast ----------------
 
-def test_the_simulation_runs_offline_in_under_60_seconds_ac_216_11(dw, tick, monkeypatch):  # AC-216.11
+DURATIONS: list[float] = []
+
+
+@pytest.fixture(autouse=True)
+def _time_each_scenario():
     start = time.monotonic()
+    yield
+    DURATIONS.append(time.monotonic() - start)
+
+
+def test_the_simulation_runs_offline_in_under_60_seconds_ac_216_11(dw, tick, monkeypatch):  # AC-216.11
+    # every scenario of this file that ran in this process (all of them without a parallel run) took under 60 s together
     sim = Sim(dw, monkeypatch)
     assert two_dependent_repos(dw, sim, tick) == 0
-    assert time.monotonic() - start < 60
-    assert tick.slept > 0                                              # the waits ran on the scripted clock, not the real one
+    assert sum(DURATIONS) < 60
+    assert tick.slept > 0                                             # the waits ran on the scripted clock, not the real one
     assert all(c[0] in ("pr", "repo", "run", "api", "secret") for c in dw.calls())     # only the fake `gh` answered

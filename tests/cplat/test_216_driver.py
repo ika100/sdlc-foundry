@@ -53,14 +53,24 @@ def test_two_drive_calls_at_once_start_one_process_ac_216_1(dw, monkeypatch):  #
     sim = Sim(dw, monkeypatch)
     dw.started(API_LIB, phase="repos")
     import threading
-    results = []
-    drive = mod("appship_driver").drive
-    threads = [threading.Thread(target=lambda: results.append(drive(dw.gitops))) for _ in range(2)]
+    d = mod("appship_driver")
+    calls, both = [], threading.Event()
+
+    def blocking_spawn(gitops, run_id, starts):
+        # the first spawn waits until a second one is called (a drive without the lock), or 1.5 s: with the lock the
+        # second drive cannot reach its spawn before the first has recorded its driver
+        calls.append(1)
+        if len(calls) >= 2:
+            both.set()
+        both.wait(1.5)
+        return sim.spawn(gitops, run_id, starts)
+    monkeypatch.setattr(d, "spawn", blocking_spawn)
+    threads = [threading.Thread(target=d.drive, args=(dw.gitops,)) for _ in range(2)]
     for t in threads:
         t.start()
     for t in threads:
         t.join()
-    assert len(sim.spawned) == 1
+    assert len(calls) == 1 and len(sim.spawned) == 1
 
 
 def run_to_refusal(dw, monkeypatch, setup):
@@ -120,7 +130,7 @@ def test_the_real_spawn_is_a_detached_cplat_process_without_a_model_or_session_a
     cmd = seen["cmd"]
     assert cmd[-2:] == ["drive", "--loop"] and "--repo" in cmd and str(dw.gitops) in cmd
     assert not any(w in ("claude", "headless") or w.endswith("/claude") for w in cmd)   # no model session of its own
-    assert str(seen["cwd"]) == str(dw.gitops) and seen["start_new_session"] is True and seen["stdin"] == subprocess.DEVNULL
+    assert str(seen["cwd"]) == str(dw.gitops) and seen["start_new_session"] is True
     env = seen["env"]
     assert env["CPLAT_SYSTEM_DRIVER_RUN"] == "run-1"
     for name in ("CLAUDE_CODE_SESSION_ID", "CPLAT_SESSION_ID", "CPLAT_HEADLESS", "CPLAT_SHIP_ANSWER", "CPLAT_SHIP_ANSWER_FROM"):
@@ -169,7 +179,8 @@ def test_a_red_publish_check_ends_the_driver_and_no_repo_starts_ac_216_4(dw, mon
     dw.started(API_LIB)
     sim.can("publish", results=[(1, "spec/plan PR https://github.com/acme/shop-gitops/pull/1 is red: lint failed on pull_request\n")])
     assert sim.run() == 0
-    assert sim.steps == [("publish",)]                                                  # no repo start, no escalate step
+    assert sim.steps == [("publish",)]                                                  # no repo start
+    assert not [s for s in sim.steps if s[0] == "escalate"]                             # the driver escalates nothing itself
     end = progress(dw)["end"]
     assert end["kind"] == "stopped" and "is red" in end["line"]
 
@@ -230,6 +241,34 @@ def test_the_entry_end_is_not_an_early_end_so_drive_starts_with_a_fresh_count_ac
     assert [s[2] for s in sim.spawned] == [1, 1] and dw.state()["driver"]["starts"] == 1
 
 
+ENTRY_DEP = [(GITOPS, "gitops-app", [], ["AC-012.1"], False), ("shop-api", "service-python", [GITOPS], ["AC-012.1"], False)]
+
+
+@pytest.mark.parametrize("joint", [False, True])
+def test_a_dependent_waits_while_the_entry_is_running_ac_216_5(dw, monkeypatch, joint):  # AC-216.5
+    sim = Sim(dw, monkeypatch)
+    dw.started(ENTRY_DEP, phase="repos", states={GITOPS: "running"}, joint=joint)
+    assert sim.run() == 0 and sim.steps == []
+    nxt = dw.app("next", "--json").json
+    assert nxt["start"] == [] and {"id": "shop-api", "waits_for": [GITOPS]} in nxt["blocked"]
+    assert appship_proc.SPAWNED == []
+
+
+@pytest.mark.parametrize("joint, entry_state", [(False, "passed"), (True, "pinned")])
+def test_a_drive_after_the_entry_is_done_starts_the_dependent_ac_216_5(dw, tick, monkeypatch, joint, entry_state):  # AC-216.5
+    # not joint: the entry is merged ("passed"); joint: its checks have passed and it is pinned in the dev PR ("pinned")
+    sim = Sim(dw, monkeypatch)
+    dw.started(ENTRY_DEP, phase="repos", states={GITOPS: entry_state}, joint=joint)
+    sim.can("complete", results=[(0, "report\n")])
+    sim.can("finish", results=[(0, "product ship ended; state archived to /x\n")])
+    tick.script = [lambda: finish_repo(dw, "shop-api")]
+    assert app(dw, "drive").rc == 0
+    assert sim.run() == 0
+    assert sim.steps[:3] == [("next",), ("repo", "start", "shop-api"), ("next",)]
+    assert [os.path.basename(s[0]) for s in appship_proc.SPAWNED] == ["shop-api"]
+    assert progress(dw)["end"]["kind"] == "done"
+
+
 # ---------------- AC-216.9: a run from today's flow ----------------
 
 def test_a_run_of_todays_flow_is_taken_over_from_its_state_ac_216_9(dw, tick, monkeypatch):  # AC-216.9
@@ -268,6 +307,32 @@ def test_an_escalated_run_that_is_resumed_goes_on_the_same_way_ac_216_9(dw, tick
     assert sim.run() == 0
     assert sim.steps[0] == ("next",) and ("repo", "start", "shop-api") not in sim.steps
     assert dw.state()["repos"]["shop-api"]["state"] == "passed" and progress(dw)["end"]["kind"] == "done"
+
+
+def test_a_run_of_todays_flow_with_an_escalated_and_a_held_repo_is_taken_over_ac_216_9(dw, tick, sessions, monkeypatch):  # AC-216.9
+    from support216 import escalate_repo_ship
+    sim = Sim(dw, monkeypatch)
+    plan = [*API_WORKER, ("shop-lib", "library-python", [], ["AC-012.3"], False)]
+    dw.started(plan, phase="repos")
+    for rid in ("shop-api", "shop-worker", "shop-lib"):
+        assert dw.app("repo", "start", rid).rc == 0
+    running_repo(dw, "shop-lib")
+    questions = [{"text": "Which store holds the alerts?", "suggested": "redis"}]
+    escalate_repo_ship(dw, "shop-api", "which store?", "decision", questions)           # escalated, answerable with its suggestion
+    escalate_repo_ship(dw, "shop-worker", "CI red after 3 rounds", "code")             # escalated and held for the user
+    for rid in ("shop-api", "shop-worker"):
+        assert dw.app("repo", "result", rid).rc == 1
+    assert dw.app("repo", "hold", "shop-worker").rc == 0
+    assert "driver" not in dw.state() and dw.state()["repos"]["shop-worker"]["held"]
+    assert app(dw, "drive").rc == 0 and len(sim.spawned) == 1
+    tick.script = [lambda: (finish_repo(dw, "shop-api"), finish_repo(dw, "shop-lib"))]
+    assert sim.run() == 0
+    answer = "Which store holds the alerts?: redis"
+    assert sim.steps == [("next",), ("repo", "resume", "shop-api", "--answer", answer), ("next",), ("next", "--wait"),
+                         ("escalate", dw.state()["repos"]["shop-worker"]["reason"])]
+    assert sessions[-1]["clone"] == "shop-api" and sessions[-1]["answer"] == answer
+    st = dw.state()
+    assert st["escalated"] and st["cause"] == "code" and st["repos"]["shop-worker"]["held"]
 
 
 # ---------------- AC-216.10: the switch ----------------

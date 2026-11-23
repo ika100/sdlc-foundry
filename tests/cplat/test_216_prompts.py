@@ -16,7 +16,8 @@ from structure import headings, points_to
 SHIP = "plugins/system/commands/ship.md"
 LOOP = "plugins/system/references/ship-loop.md"
 ENTRY = "plugins/system/references/ship-entry.md"
-SHIP_BYTES_BEFORE = 7454              # bytes of ship.md at the merge base (`git merge-base main HEAD` = e54541c6), the size to end below
+SHIP_BYTES_BEFORE = 7452              # bytes of ship.md at the branch base (4a217287), the size to end below
+DRIVER_ONLY = re.compile(r"cplat system ship (next --json|repo start|repo resume|repo hold|land|phase complete|complete|finish)\b")
 VERB = re.compile(r"cplat system ship (start|phase publish|drive|wait|next --json|next --wait|publish|repo start|repo resume|repo hold|"
                   r"phase complete|complete|finish|land|escalate)\b")
 RESULTS = ("WAIT:", "TIMEOUT:", "ENTRY:", "ENDED:", "DONE:", "ESCALATED:", "STOPPED:")
@@ -58,6 +59,14 @@ def test_the_per_action_rules_moved_out_of_the_instructions_ac_216_7():  # AC-21
         assert old not in headings(SHIP) and old in headings(LOOP), old
 
 
+def test_the_session_is_not_told_to_run_the_drivers_verbs_ac_216_7():  # AC-216.7
+    assert (ROOT / LOOP).is_file()
+    units = [u for u in re.split(r"\n\s*\n|\n(?=\s*[-*] )", prompt(SHIP)) if DRIVER_ONLY.search(u)]
+    for unit in units:                                    # a driver-only verb may be named only with the driver and its reason
+        assert "driver" in unit.lower(), unit
+    assert len(units) <= 1                                # listed once, not once per action
+
+
 def test_the_instructions_read_at_the_start_end_shorter_than_before_ac_216_7():  # AC-216.7
     assert (ROOT / LOOP).is_file()
     assert len((ROOT / SHIP).read_bytes()) < SHIP_BYTES_BEFORE
@@ -97,8 +106,11 @@ def test_the_rule_register_checks_and_the_prompts_stay_within_their_size_ac_216_
 def test_the_instructions_read_the_loop_reference_after_the_off_line_ac_216_10():  # AC-216.10
     text = prompt(SHIP)
     assert "driver: off" in text and points_to(SHIP, "references/ship-loop.md")
-    head = collapsed(prompt(LOOP))[:600]
-    assert "driver: off" in head and "drive" in head                                  # the reference says when it is read
+    body = collapsed(text)
+    at = body.index("driver: off")
+    assert "ship-loop.md" in body[max(0, at - 400):at + 400]                          # named next to the off line
+    for heading in ("Phase `publish`", "Phase `repos`", "Phase `complete`"):
+        assert heading in headings(LOOP), heading
 
 
 def test_the_attended_answer_path_goes_through_the_switch_ac_216_10():  # AC-216.10
@@ -120,6 +132,7 @@ def test_the_adr_states_the_kill_rule_of_the_measure_ac_216_12():  # AC-216.12
 
 
 def test_the_changelog_fragment_names_the_switch_and_the_measure_ac_216_12():  # AC-216.12
-    (fragment,) = list((ROOT / "docs" / "changelog.d").glob("*system-ship-driver*.changed.md"))
+    folder = ROOT / "docs" / "changelog.d"
+    (fragment,) = [*folder.glob("216-*.added.md"), *folder.glob("216-*.changed.md")]
     text = collapsed(fragment.read_text())
-    assert "CPLAT_SYSTEM_DRIVER" in text and "journey" in text.lower()
+    assert "CPLAT_SYSTEM_DRIVER" in text and "measure" in text.lower()
