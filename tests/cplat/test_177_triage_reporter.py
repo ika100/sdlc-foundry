@@ -96,11 +96,13 @@ def test_form_of_finds_no_form_for_a_body_without_headings_ac_177_1(tmp_path):  
     ("AC-12 and ADR-25 apply", ["AC-12", "ADR-25"]),
     ("the label needs-info is set", ["needs-info"]),
     ("run /component:fix then cplat issue", ["/component:fix", "cplat"]),
+    ("we set `bug` and `wontfix` today", ["bug", "wontfix"]),
+    ("it is triaged and needs-decision", ["triaged", "needs-decision"]),
+    ("it is P0, or p1, maybe p2", ["p0", "p1", "p2"]),
 ])
 def test_internal_terms_finds_spec_numbers_labels_and_commands_ac_177_2(text, terms):  # AC-177.2
     got = reporter().internal_terms(text)
-    for t in terms:
-        assert any(t.lower() in g.lower() for g in got), (t, got)
+    assert [g.strip("`").lower() for g in got] == [t.lower() for t in terms], got
 
 
 def test_internal_terms_lets_the_public_commands_and_plain_words_through_ac_177_2():  # AC-177.2

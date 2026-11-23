@@ -289,7 +289,7 @@ def test_an_unconfirmed_row_is_never_closed_ac_177_3(w, cls, extra):  # AC-177.3
     assert [n for _, n, _ in calls(w, "close")] == [1]
 
 
-@pytest.mark.parametrize("cls", ["bug", "small-change"])
+@pytest.mark.parametrize("cls", ["bug", "small-change", "feature", "needs-exploring"])
 def test_the_other_classes_are_never_closed_ac_177_3(w, cls):  # AC-177.3
     w.issue(1, assoc="OWNER")
     w.issue(2, assoc="OWNER")
