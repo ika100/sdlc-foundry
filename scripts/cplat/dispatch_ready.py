@@ -137,6 +137,13 @@ def _issue_rows(c: Candidate, snap: Snapshot) -> list[dict]:
     return [r for r in snap.issues if int(r["number"]) in wanted]
 
 
+def _unit_issues(unit: dict) -> set[int]:
+    """The issues a unit's escalation labels: a fix unit's issue, a ship unit's tracked issues."""
+    if unit.get("kind") == "fix":
+        return {int(str(unit.get("item") or "").lstrip("#") or 0)} - {0}
+    return {int(n) for n in unit.get("tracks") or []}
+
+
 def _own_runs(units: list[dict], runs: list[dict]) -> set[str]:
     """The run ids that belong to a unit: the unit's dispatch run and every run below it (`parent` chain)."""
     own = {str(u["run_id"]) for u in units if u.get("run_id")}
@@ -150,7 +157,7 @@ def _own_runs(units: list[dict], runs: list[dict]) -> set[str]:
     return own
 
 
-def _claimed(c: Candidate, snap: Snapshot, units: list[dict], slug: str | None) -> str | None:
+def _claimed(c: Candidate, snap: Snapshot, units: list[dict], slug: str | None, history: list[dict] = ()) -> str | None:
     branch = _branch(c)
     for row in _issue_rows(c, snap):
         who, by_dispatch = claim.holder_by(row)
@@ -161,7 +168,8 @@ def _claimed(c: Candidate, snap: Snapshot, units: list[dict], slug: str | None) 
             return f"#{row['number']} is labelled {claim.LABEL} without a claim comment"
         if not (by_dispatch and who == branch):
             return f"#{row['number']} is claimed for {who}" + ("" if by_dispatch else " by a session")
-    own = _own_runs(units, snap.runs)
+    # #857: a worktree's unit file holds only its latest unit; an ended unit's run (and a child run it left open) is in history
+    own = _own_runs([*units, *(h for h in history if _key_of(h) == c.key)], snap.runs)
     issues = set(_issue_numbers(c))
     for r in snap.runs:
         if r.get("run_id") in own:
@@ -256,6 +264,10 @@ def _spec_hold(c: Candidate, state: dict, snap: Snapshot, units: list[dict]) -> 
             return "stuck", str((unit or {}).get("log") or hold.get("unit") or "")
         return "needs-decision", str((unit or {}).get("reason") or reason or "")
     labelled = [r for r in open_rows if "needs-decision" in {lb.get("name") if isinstance(lb, dict) else lb for lb in r.get("labels") or []}]
+    if not (last and last.get("status") in ("escalated", "stuck")):
+        # #832: the label another item's escalated unit put on a shared issue is that item's decision, not this one's
+        theirs = {n for u in units if _key_of(u) != c.key and u.get("status") in ("escalated", "stuck") for n in _unit_issues(u)}
+        labelled = [r for r in labelled if int(r["number"]) not in theirs]
     if not labelled:
         return None
     if last and last.get("status") == "stuck":
@@ -292,7 +304,7 @@ def judge(cands: list[Candidate], snap: Snapshot, state: dict, units: list[dict]
         if hold := _spec_hold(c, state, snap, units):
             out.append(_held(v, *hold))
             continue
-        if detail := _claimed(c, snap, units, slug):
+        if detail := _claimed(c, snap, units, slug, state.get("history") or []):
             out.append(_held(v, "claimed", detail))
             continue
         if detail := _blocked(c, snap):

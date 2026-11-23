@@ -122,11 +122,13 @@ class Recording:
         own.write_text(json.dumps({"buckets": self.rec.dump(), "failed": sorted(self.failed)}))
         if self.worker:
             return
-        if int(exitstatus) in RECORDED_STATUSES:
-            self.state["dirty"] |= dirty_files()
-            write_map(self.path, build_map(self.trace, self.state))
-            prune(self.path.parent)
-        shutil.rmtree(self.trace, ignore_errors=True)
+        try:
+            if int(exitstatus) in RECORDED_STATUSES:
+                self.state["dirty"] |= dirty_files()
+                write_map(self.path, build_map(self.trace, self.state))
+                prune(self.path.parent)
+        finally:                      # #988: the trace goes on every path, also when a write or prune fails
+            shutil.rmtree(self.trace, ignore_errors=True)
 
 
 def _merge(into: dict, bucket: dict) -> None:
@@ -172,11 +174,21 @@ def build_map(trace: Path, state: dict) -> dict:
 
 def write_map(path: Path, data: dict) -> None:
     tmp = path.with_name(path.name + f".{os.getpid()}.tmp")
-    tmp.write_text(json.dumps(data, separators=(",", ":")))
-    os.replace(tmp, path)
+    try:
+        tmp.write_text(json.dumps(data, separators=(",", ":")))
+        os.replace(tmp, path)
+    finally:
+        tmp.unlink(missing_ok=True)   # #988: a failed write leaves no temp file (after the replace it is gone already)
 
 
 def prune(store: Path, keep: int = KEEP_MAPS) -> None:
-    maps = sorted(store.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
-    for old in maps[keep:]:
+    """Keep the `keep` newest maps. #988: a recording running at the same time may replace or prune a map between the listing
+    and its stat; a map that is gone is skipped, never an error that would leave this run's trace behind."""
+    dated = []
+    for p in store.glob("*.json"):
+        try:
+            dated.append((p.stat().st_mtime, p))
+        except FileNotFoundError:
+            continue
+    for _, old in sorted(dated, reverse=True)[keep:]:
         old.unlink(missing_ok=True)

@@ -144,7 +144,8 @@ def test_the_screen_names_the_silent_source_and_exits_zero_ac_203_5(world, capsy
     hang(monkeypatch, gate, world)
     rc, out, elapsed = timed(world, capsys)
     assert rc == 0 and elapsed < LIMIT, f"{elapsed:.1f} s"
-    assert "Nothing is waiting" not in out and "Could not read" in out and "may be missing" in out
+    flat = " ".join(out.split())                                                # the screen wraps at any word
+    assert "Nothing is waiting" not in flat and "Could not read" in flat and "may be missing" in flat
 
 
 def test_the_sources_that_answered_are_shown_as_usual_ac_203_5(world, capsys, monkeypatch, gate, short, exits):  # AC-203.5

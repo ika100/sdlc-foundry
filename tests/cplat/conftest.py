@@ -5,6 +5,19 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "cplat"))
 
+
+def _git_auto_maintenance_off() -> None:
+    """#916: no git of a test starts a detached `git maintenance`; it changes .git while a fixture copies the repo.
+    Set at import, before module-scoped fixtures build their repos (a monkeypatch would come too late)."""
+    count = int(os.environ.get("GIT_CONFIG_COUNT") or 0)
+    for i, (k, v) in enumerate([("maintenance.auto", "false"), ("gc.auto", "0")], start=count):
+        os.environ[f"GIT_CONFIG_KEY_{i}"] = k
+        os.environ[f"GIT_CONFIG_VALUE_{i}"] = v
+    os.environ["GIT_CONFIG_COUNT"] = str(count + 2)
+
+
+_git_auto_maintenance_off()
+
 import sleepguard
 
 sleepguard.install()  # spec 185: before any cplat module binds time.sleep
