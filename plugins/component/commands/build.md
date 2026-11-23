@@ -76,7 +76,7 @@ Merge exit 3 or a task in `replans[]` → read `${CLAUDE_PLUGIN_ROOT}/references
 
 ### 2.5 All green
 
-`cplat quiet test-fast`: every acceptance test passes. A test with `test error` in `cplat quiet test-fast --red -- <failing tests>` (other repos: the summary's innermost frame is in a test file) goes to the tester as a harness fix (`${CLAUDE_PLUGIN_ROOT}/references/build-tighten.md`) unasked, since the test is wrong. Others go to a coder of a covering task (at most 2 rounds, each `cplat platform runs agent fix-round test --task <task>`), then escalate. All pass → `cplat platform runs gate acceptance passed`; failing → `... gate acceptance failed`.
+`cplat quiet test-fast`: every acceptance test passes. A test with `test error` in `cplat quiet test-fast --red -- <failing tests>` (pytest; others: the summary's innermost frame is in a test) goes to the tester as a harness fix (`${CLAUDE_PLUGIN_ROOT}/references/build-tighten.md`) unasked, since the test is wrong. Others go to a coder of a covering task (at most 2 rounds, each `cplat platform runs agent fix-round test --task <task>`), then escalate. All pass → `cplat platform runs gate acceptance passed`; failing → `... gate acceptance failed`.
 
 `TOUCHED_FILES=$(git diff --name-only $BASE_REF..HEAD)`.
 
