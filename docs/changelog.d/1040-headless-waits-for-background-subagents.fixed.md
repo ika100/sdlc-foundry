@@ -1,0 +1,1 @@
+**A headless run waits for its background subagents (#1040).** `claude -p` stopped a subagent 10 minutes after the coordinator's last turn, so a unit could end without a pull request while its work was still running. The run now sets `CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0`; the run timeout and the stop-loop guard still bound it.
