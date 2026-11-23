@@ -1,1 +1,0 @@
-- `cplat next` in a component repo no longer calls a release "verified in staging" without a green staging smoke record, and then it recommends holding the prod promotion back instead of promoting (#946).

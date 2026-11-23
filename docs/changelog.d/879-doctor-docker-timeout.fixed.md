@@ -1,1 +1,0 @@
-**`cplat platform doctor` no longer fails when Docker does not answer (#879).** A `docker info` that ran into its 15 s timeout stopped the whole doctor with an error; it is now a `docker daemon` warning ("no answer within 15 s"). The doctor tests no longer call the runner's real Docker, which made a CI shard red on a slow runner.

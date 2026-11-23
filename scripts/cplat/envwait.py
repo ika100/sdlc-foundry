@@ -219,11 +219,15 @@ def list_apps(ctx: str) -> dict[str, dict]:
         raise PlatformError(f"cannot read the Argo CD applications of context {ctx}: {e}") from None
 
 
-def resolve_context(repo: Path, explicit: str | None, known: set[str], what: str) -> tuple[str, dict[str, dict]]:
-    """(context, its applications). Without --context the configured or current context must hold one of `known`."""
+def resolve_context(repo: Path, explicit: str | None, known: set[str], what: str,
+                    own: tuple[str, str] | None = None) -> tuple[str, dict[str, dict]]:
+    """(context, its applications). Without --context the configured context, else `own` (the context, source of the
+    environment's cluster), else the current context, which must hold one of `known`."""
     ctx, source = explicit, "--context"
     if not ctx:
         ctx, source = settings.kube_context(repo)
+    if not ctx and own:
+        ctx, source = own                         # #987: the environment's cluster, not whatever context is current
     if not ctx:
         p = kubectl(["config", "current-context"])
         ctx, source = (p.stdout.strip() if p.returncode == 0 else ""), "the current context"
@@ -682,7 +686,12 @@ def system_wait(repo: Path, ns: argparse.Namespace, command: str) -> tuple[int, 
     wanted = wanted_revision(repo, ns.revision)
     system, targets, every = env_targets(repo, ns.system, wanted, ns.env, ns.components)
     m = model.load_dir(gitops.find_app(repo, ns.system))
-    ctx, items = resolve_context(repo, envcluster.env_context(repo, m, ns.env, ns.context), every, f"system {system}")
+    cluster = envcluster.cluster_of(m, ns.env)
+    mapped = settings.kube_contexts_with_source(repo).get(cluster) if cluster else None
+    own = (mapped[0], f"kube_contexts of cluster {cluster}, {mapped[1]}") if mapped else None
+    # #987: the root app counts as the system's: while it has a ComparisonError its apps are not generated, and the watch refreshes it
+    ctx, items = resolve_context(repo, envcluster.env_context(repo, m, ns.env, ns.context), every | {f"{system}-root"},
+                                 f"system {system}", own)
     return watch(repo, targets, wanted, ctx, items, f"in {ns.env}", command, ns.refresh, ns.timeout, ns.interval, system)
 
 
