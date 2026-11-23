@@ -35,7 +35,7 @@ STATUSES = {"draft", "in_progress", "completed", "abandoned"}
 ACTIVE = {"draft", "in_progress"}
 # Mirrors shapes.yml of the platform repo (ADR-015). Extend via PLAN_SHAPES=a,b when a new shape lands
 # before this template is updated.
-SHAPES = {"service-python", "library-python", "web-nextjs", "gitops-app", "service-java", "service-go", "service-typescript", "library-typescript"}
+SHAPES = {"service-python", "library-python", "web-nextjs", "gitops-app", "service-java", "service-go", "service-typescript", "library-typescript", "service-dotnet"}
 ENVS = {"dev", "staging", "prod"}
 FRONT = re.compile(r"\A---\n(.*?)\n---\n?(.*)\Z", re.S)
 AC_LINE = re.compile(r"^\s*[-*]\s+(~~)?\*\*(AC-\d{3,}\.\d+)\*\*")
@@ -396,7 +396,100 @@ def check_contract(meta: dict, body: str) -> list[str]:
             "here instead of in every repo)"
             for h, what in (("Errors", "the error format"), ("Timeouts", "the timeout per call"))
             if not re.search(rf"^### +{h}\b", contract, re.M)]
-    return late + contract_findings(contract, [r.get("id") for r in meta["repos"] if isinstance(r, dict)])[2]
+    rules, block, found = contract_findings(contract, [r.get("id") for r in meta["repos"] if isinstance(r, dict)])
+    return late + found + check_shown_message(meta, body, contract, rules, block)
+
+
+# ---------------- #985: a consumer decision the generated contract test cannot pass ----------------
+
+# The web-nextjs contract test (lib/contract/engine.ts, `responseCase`, AC-110.7) answers every rule of a consumer with the error
+# body of `### Errors` and expects `body.message` at the rule's field. A consumer that "shows its own fixed messages, never the
+# API's detail" can never pass it. The plan format holds that decision only as prose (a spec assumption, the contract text, the
+# repo's notes), so this is a text match per clause: the clause names the provider's error text and says it is held back.
+TESTED_CONSUMERS = {"web-nextjs"}   # the shapes whose generated contract test has the response case
+OTHER_OPTION = re.compile(r"\(\s*other options?\b(?:[^()]|\([^()]*\))*\)", re.I)
+HELD_BACK = re.compile(
+    r"\bnever\b|\b(?:not|n't|no longer)\s+(?:\w+\s+)?(?:show|display|render|surface|pass|forward|expose)\w*"
+    r"|\binstead of\b|\brather than\b|\bin place of\b|\breplac\w*|\bhid(?:e|es|den|ing)\b|\bignor\w*|\bswallow\w*|\bdiscard\w*"
+    r"|\blogs?\s+only\b|\bonly\s+(?:for|in)\s+(?:the\s+)?logs?\b"
+    r"|\b(?:own|fixed|generic|static|canned)\s+(?:\w+\s+){0,2}?(?:messages?|texts?|wording)\b", re.I)
+UNLISTED_CLAUSE = re.compile(r"unlisted|not list|n't list|\b5\d\d\b|\b5xx\b|unreachable|time ?outs?\b|timed out|is down", re.I)
+EXCEPT = re.compile(r"\bexcept\b|\bunless\b", re.I)   # "own messages, except that a 422 naming the field shows its `msg`"
+CLAUSE = re.compile(r";|(?<=[.!?])\s+(?=[A-Z\"`*])|\n")
+
+
+def _names_provider_text(clause: str, provider_ids: set[str], keys: set[str]) -> bool:
+    """The clause names the provider's error text: "the API's `detail` text", "<provider>'s message", or a backticked body key."""
+    who = "|".join(["API", "provider", "server", "backend"] + [re.escape(p) for p in sorted(provider_ids)])
+    noun = r"(?:texts?|messages?|details?|msg|wording|errors?|rejections?)"
+    if re.search(rf"\b(?:{who})(?:['’]s)?\s+(?:\S+\s+){{0,2}}?`?{noun}\b", clause, re.I):
+        return True
+    return any(f"`{k}`" in clause for k in keys)
+
+
+def _held_back(text: str, provider_ids: set[str], keys: set[str]) -> list[str]:
+    """The clauses of `text` (without its "(other option: …)" parts) that hold the provider's error text back."""
+    out = []
+    for clause in CLAUSE.split(OTHER_OPTION.sub("", text)):
+        clause = clause.strip(" -*")
+        shown = any(re.search(rf"\bshow\w*\s+(?:\S+\s+){{0,3}}?`{re.escape(k)}`", clause, re.I) for k in keys)
+        if clause and HELD_BACK.search(clause) and _names_provider_text(clause, provider_ids, keys) \
+                and not UNLISTED_CLAUSE.search(clause) and not EXCEPT.search(clause) and not shown:
+            out.append(clause)
+    return out
+
+
+def _assumptions(spec_id: str) -> list[tuple[str, str]]:
+    """(A<n>, text) of the unstruck `**A<n>**` bullets under `## Assumptions` of the spec."""
+    path = SPEC_DIR / spec_id / "spec.md"
+    if not path.is_file():
+        return []
+    part = section(re.sub(r"<!--.*?-->", "", path.read_text(), flags=re.S), "Assumptions") or ""
+    return [(m.group(1), m.group(2)) for m in re.finditer(r"^\s*[-*]\s+\*\*(A\d+)\*\*(.*)$", part, re.M)]
+
+
+def check_shown_message(meta: dict, body: str, contract: str, rules: list[dict] | None, block: dict | None) -> list[str]:
+    """#985: a web consumer of a rule may not decide to hold the provider's error message back from the field."""
+    if not rules or not isinstance(block, dict) or meta.get("status") in FINISHED:
+        return []
+    repos = {r.get("id"): r for r in meta["repos"] if isinstance(r, dict)}
+    mine: dict[str, list[str]] = {}
+    for r in rules:
+        cons = r.get("consumers") or []
+        for c in cons if isinstance(cons, list) else [cons]:
+            if (repos.get(c) or {}).get("shape") in TESTED_CONSUMERS and isinstance(r.get("id"), str):
+                mine.setdefault(c, []).append(r["id"])
+    if not mine:
+        return []
+    body_keys = block.get("body") if isinstance(block.get("body"), dict) else {}
+    message_key = body_keys.get("message") if isinstance(body_keys.get("message"), str) else "message"
+    keys = {k for k in (message_key, body_keys.get("list")) if isinstance(k, str) and k}
+    providers = {str(r.get("provider")) for r in rules if r.get("provider")}
+    status = block.get("status", 422)
+    prose = FENCE.sub("", contract)
+    errs: list[str] = []
+    for rid, ids in sorted(mine.items()):
+        repo = repos[rid]
+        acs = set(repo.get("acs") or [])
+        sources = [(f"assumption {a} of docs/specs/{meta['spec']}/spec.md", t) for a, t in _assumptions(str(meta["spec"]))
+                   if not AC_ID.search(t) or set(AC_ID.findall(t)) & acs]
+        part = re.search(rf"^## +{re.escape(rid)}\b[^\n]*\n(.*?)(?=^## |\Z)", body, re.M | re.S)
+        sources += [("the contract (`## Contract`)", prose), (f"the `## {rid}` section of the plan", part.group(1) if part else ""),
+                    ("its `arguments`", str(repo.get("arguments") or ""))]
+        sources += [("one of its criteria", str(c)) for c in repo.get("criteria") or []]
+        seen: set[str] = set()
+        for where, clause in ((w, c) for w, t in sources for c in _held_back(t, providers, keys)):
+            if clause in seen:
+                continue
+            seen.add(clause)
+            short = clause if len(clause) <= 120 else clause[:117] + "..."
+            errs.append(
+                f"repo {rid}: {where} holds the provider's error message back from the field (\"{short}\"), but {rid} consumes "
+                f"rule {', '.join(sorted(ids))} and its contract test (web-nextjs lib/contract/engine.ts, the response case of "
+                f"AC-110.7) answers `{status}` with `errors.body.{message_key}` and expects that message at the field: show the "
+                f"provider's `{message_key}` at the field (the board may still check before sending), or change the contract "
+                "(#985)")
+    return errs
 
 
 FINISHED = {"completed", "abandoned"}

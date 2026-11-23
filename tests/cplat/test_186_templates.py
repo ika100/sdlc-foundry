@@ -17,7 +17,7 @@ import yaml
 from waiting import with_prelude
 
 TEMPLATES = Path(__file__).resolve().parents[2] / "templates"
-IMAGE_TEMPLATES = ["service-python", "service-java", "service-go", "web-nextjs", "service-typescript"]
+IMAGE_TEMPLATES = ["service-python", "service-java", "service-go", "web-nextjs", "service-typescript", "service-dotnet"]
 GATES = ["quality", "test", "security", "ci-extra"]
 
 

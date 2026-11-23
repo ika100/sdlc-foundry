@@ -1,6 +1,59 @@
 {
   "lockfile_version": "1",
   "packages": {
+    "dotnet-sdk_10@10.0.403": {
+      "last_modified": "2026-11-19T13:46:25Z",
+      "resolved": "github:NixOS/nixpkgs/19cfded70b91ca0981373973c5b1efffdd4d6647#dotnet-sdk_10",
+      "source": "devbox-search",
+      "version": "10.0.403",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/48n7lkby8nk25aapjbin4q0a9jcb6p2l-dotnet-sdk-wrapped-10.0.403",
+              "default": true
+            },
+            {
+              "name": "man",
+              "path": "/nix/store/df4m49gi71mz48faxsv3ra8ny4v28blk-dotnet-sdk-wrapped-10.0.403-man",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/48n7lkby8nk25aapjbin4q0a9jcb6p2l-dotnet-sdk-wrapped-10.0.403"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/aqzvrdw67jxngcvdhrapayjjpl5b9bxv-dotnet-sdk-wrapped-10.0.403",
+              "default": true
+            },
+            {
+              "name": "man",
+              "path": "/nix/store/a5bhr2wdaap9qyxl54qzrbkk0hd2wdn8-dotnet-sdk-wrapped-10.0.403-man",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/aqzvrdw67jxngcvdhrapayjjpl5b9bxv-dotnet-sdk-wrapped-10.0.403"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/3h13g5n48x01kh3qmchq5drb1x2zxbr8-dotnet-sdk-wrapped-10.0.403",
+              "default": true
+            },
+            {
+              "name": "man",
+              "path": "/nix/store/jnmjg094f4savb09xv34l3023f44l167-dotnet-sdk-wrapped-10.0.403-man",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/3h13g5n48x01kh3qmchq5drb1x2zxbr8-dotnet-sdk-wrapped-10.0.403"
+        }
+      }
+    },
     "gh@latest": {
       "last_modified": "2026-05-01T13:14:57Z",
       "resolved": "github:NixOS/nixpkgs/c6d65881c5624c9cae5ea6cedef24699b0c0a4c0#gh",

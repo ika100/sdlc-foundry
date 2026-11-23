@@ -1,0 +1,25 @@
+namespace {{ namespace }};
+
+/// <summary>Service configuration, read exclusively from environment variables (docs/env-vars.md).</summary>
+public sealed record AppConfig(int Port, LogLevel LogLevel, string ServiceName)
+{
+    /// <summary>The configuration from the given variables (the process environment when null).</summary>
+    public static AppConfig FromEnvironment(IReadOnlyDictionary<string, string?>? env = null)
+    {
+        string? Get(string name) => env is null ? Environment.GetEnvironmentVariable(name) : env.GetValueOrDefault(name);
+
+        var port = int.TryParse(Get("PORT"), out var p) && p is > 0 and < 65536 ? p : {{ port }};
+        return new AppConfig(port, ParseLogLevel(Get("LOG_LEVEL")), Get("OTEL_SERVICE_NAME") ?? "{{ project_name }}");
+    }
+
+    /// <summary>LOG_LEVEL accepts any case (`INFO`, `debug`, `warn`); an unknown value falls back to Information.</summary>
+    public static LogLevel ParseLogLevel(string? value) => (value ?? string.Empty).Trim().ToUpperInvariant() switch
+    {
+        "TRACE" => LogLevel.Trace,
+        "DEBUG" => LogLevel.Debug,
+        "WARN" or "WARNING" => LogLevel.Warning,
+        "ERROR" => LogLevel.Error,
+        "FATAL" or "CRITICAL" => LogLevel.Critical,
+        _ => LogLevel.Information,
+    };
+}

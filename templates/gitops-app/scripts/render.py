@@ -176,8 +176,8 @@ MANAGED_PREFIXES = ("externalsecret-", "credentials-")
 TOP_KEYS = ["system", "owner", "environments", "components", "apis", "resources", "gateway", "secretStore", "registries", "autonomy"]
 ENV_KEYS = ["host", "url", "policy", "promote", "observability", "operators", "backup", "autonomy", "cluster"]
 # Valid type/lang pairs (the languages of shapes.yml); service/unknown is what the migration writes for a 4.x entry without a known shape.
-VALID_PAIRS = [("service", "python"), ("service", "java"), ("service", "go"), ("service", "typescript"), ("website", "typescript"),
-               ("library", "python"), ("library", "typescript"),
+VALID_PAIRS = [("service", "python"), ("service", "java"), ("service", "go"), ("service", "typescript"), ("service", "csharp"),
+               ("website", "typescript"), ("library", "python"), ("library", "typescript"),
                ("service", "unknown")]
 PAIR_TEXT = ", ".join(f"{t}/{lang}" for t, lang in VALID_PAIRS if lang != "unknown")
 COMMON_KEYS = ["type", "lang", "repo"]

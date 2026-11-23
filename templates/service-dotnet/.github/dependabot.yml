@@ -1,0 +1,35 @@
+# Monthly, grouped dependency PRs (security updates still arrive immediately and separately): the language ecosystem, the
+# GitHub Actions used by CI (pinned by commit SHA; Dependabot updates the SHA and the version comment), and Docker base images.
+# The .NET major is a platform decision (ADR-005: one pinned LTS, bumped through `/platform:update`), so Dependabot must not
+# move the SDK and runtime images, or the packages versioned with the framework (Microsoft.*, Npgsql EF Core), to another
+# major on its own.
+version: 2
+updates:
+  - package-ecosystem: nuget
+    directory: "/"
+    schedule: {interval: monthly}
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    ignore:
+      - dependency-name: "Microsoft.*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "Npgsql*"
+        update-types: ["version-update:semver-major"]
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule: {interval: monthly}
+    groups:
+      all:
+        patterns: ["*"]
+  - package-ecosystem: docker
+    directory: "/"
+    schedule: {interval: monthly}
+    groups:
+      all:
+        patterns: ["*"]
+    ignore:
+      - dependency-name: "dotnet/*"
+        update-types: ["version-update:semver-major"]

@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 TEMPLATES = Path(__file__).resolve().parents[2] / "templates"
-IMAGE_TEMPLATES = ["service-python", "service-java", "service-go", "web-nextjs", "service-typescript"]
+IMAGE_TEMPLATES = ["service-python", "service-java", "service-go", "web-nextjs", "service-typescript", "service-dotnet"]
 
 
 def trivy_steps(template: str) -> list[str]:
@@ -158,7 +158,8 @@ def test_the_plan_contract_never_fails_the_scan_958(template, tmp_path):
 
 # ---------------- spec 064: self-hosted CI runners through repository variables ----------------
 
-ALL_TEMPLATES = ["service-python", "library-python", "service-java", "service-go", "web-nextjs", "service-typescript", "gitops-app"]
+ALL_TEMPLATES = ["service-python", "library-python", "service-java", "service-go", "web-nextjs", "service-typescript", "service-dotnet",
+                 "gitops-app"]
 RUNNER = re.compile(r"runs-on: \$\{\{ ('\{\{' \}\} )?vars\.CI_RUNNER \|\| 'ubuntu-latest' ")
 
 

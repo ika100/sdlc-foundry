@@ -17,7 +17,7 @@ from structure import points_to
 
 ROOT = core.PLATFORM_ROOT
 TEMPLATES = ROOT / "templates"
-SHAPES = ["service-python", "library-python", "service-java", "service-go", "web-nextjs", "service-typescript"]
+SHAPES = ["service-python", "library-python", "service-java", "service-go", "web-nextjs", "service-typescript", "service-dotnet"]
 FINDINGS = r'"deps-findings":\s*"bash scripts/deps\.sh findings \\"\$@\\""'
 BUMP = r'"deps-bump":\s*"bash scripts/deps\.sh bump \\"\$@\\""'
 

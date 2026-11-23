@@ -7,7 +7,7 @@ in the rendered repo, with stub tools first on PATH. The stubs are small POSIX s
   uv          `uv run python -m pytest ...` / `uv run pytest ...` -> a JUnit XML at --junitxml=; `uv run <script>.py` -> the platform's own
               interpreter (so scripts/render.py, plan.py ... run for real); anything else exits 0.
               STUB_RENDER_EMPTY=1 runs `scripts/render.py --check` with render_files() patched to return {} (a render that compares 0 files).
-  go, mvn, pnpm   report tests per STUB_GO / STUB_MVN / STUB_VITEST (see each script).
+  go, mvn, pnpm, dotnet   report tests per STUB_GO / STUB_MVN / STUB_VITEST / STUB_DOTNET (see each script).
   kustomize, kubeconform   print STUB_KUSTOMIZE / the STUB_KUBECONFORM summary (default: nothing / 0 resources).
   detect-secrets-hook, kyverno   exit 0; the first one is logged so a test can see that it never ran.
   devbox      `devbox run <name>`: the gates and composites (test, test-fast, validate, render-check, secrets-scan, ci, quality, security)
@@ -32,7 +32,7 @@ GATE_SOURCE = TEMPLATES / "gitops-app" / "scripts" / "gate.sh"
 
 # AC-130.14: the coverage table. template -> covered gates (recipes). Keep equal to the templates of shapes.yml.
 TEST_TEMPLATES = ["service-python", "library-python", "service-go", "service-java", "web-nextjs", "service-typescript",
-                  "library-typescript"]
+                  "library-typescript", "service-dotnet"]
 GITOPS_TEMPLATES = ["gitops-app", "cluster-gitops"]
 COVERED = {t: ["test", "test-fast", "secrets-scan"] for t in TEST_TEMPLATES}
 COVERED.update({t: ["test", "test-fast", "validate", "render-check", "secrets-scan"] for t in GITOPS_TEMPLATES})
@@ -49,9 +49,11 @@ SECRET_FLAGS = ("--baseline .secrets.baseline.json --exclude-files 'copier-answe
                 "--disable-filter detect_secrets.filters.gibberish.should_exclude_secret")
 # the pathspec of each template's secrets-scan and a file that pathspec excludes
 SECRET_PATHSPEC = {"service-python": "':!*.lock'", "library-python": "':!*.lock'", "service-go": "':!go.sum'",
-                   "web-nextjs": "':!pnpm-lock.yaml'", "service-typescript": "':!pnpm-lock.yaml'", "library-typescript": "':!pnpm-lock.yaml'"}
+                   "web-nextjs": "':!pnpm-lock.yaml'", "service-typescript": "':!pnpm-lock.yaml'", "library-typescript": "':!pnpm-lock.yaml'",
+                   "service-dotnet": "':!**/packages.lock.json'"}
 EXCLUDED_FILE = {"service-python": "uv.lock", "library-python": "uv.lock", "service-go": "go.sum", "web-nextjs": "pnpm-lock.yaml",
-                 "service-typescript": "pnpm-lock.yaml", "library-typescript": "pnpm-lock.yaml"}
+                 "service-typescript": "pnpm-lock.yaml", "library-typescript": "pnpm-lock.yaml",
+                 "service-dotnet": "src/DemoApp/packages.lock.json"}
 
 
 def line(gate: str, what: str, fix: str) -> str:
@@ -178,6 +180,29 @@ case "${STUB_VITEST:-nofiles}" in
 esac
 '''
 
+DOTNET = _COMMON + '''
+[ "$1" = test ] || exit 0
+log "dotnet $*"
+dir=""
+while [ $# -gt 0 ]; do
+  case "$1" in --results-directory) dir="$2"; shift;; esac
+  shift
+done
+trx() {   # passed failed notExecuted
+  [ -n "$dir" ] || { echo "stub dotnet: no --results-directory" >&2; exit 97; }
+  mkdir -p "$dir"
+  printf '<TestRun><ResultSummary outcome="Completed"><Counters total="%s" executed="%s" passed="%s" failed="%s" notExecuted="%s" /></ResultSummary></TestRun>\\n' \\
+    $(($1 + $2 + $3)) $(($1 + $2)) "$1" "$2" "$3" > "$dir/gate_net10.0.trx"
+}
+case "${STUB_DOTNET:-empty}" in
+  empty)   trx 0 0 0; echo "No test is available in DemoApp.Tests.dll."; exit 0;;
+  skipped) trx 0 0 3; echo "Passed!  - Failed:     0, Passed:     0, Skipped:     3, Total:     3"; exit 0;;
+  pass)    trx 2 0 0; echo "Passed!  - Failed:     0, Passed:     2, Skipped:     0, Total:     2"; exit 0;;
+  fail)    trx 1 1 0; echo "Failed!  - Failed:     1, Passed:     1, Skipped:     0, Total:     2"; exit "${STUB_FAIL_EXIT:-1}";;
+  broken)  echo "src/DemoApp/X.cs(1,1): error CS1002: ; expected"; exit "${STUB_BROKEN_EXIT:-1}";;
+esac
+'''
+
 KUSTOMIZE = _COMMON + '''
 [ "$1" = build ] || exit 0
 log "kustomize $*"
@@ -213,7 +238,7 @@ log "devbox run $name"
 exec sh -c "$recipe"
 '''
 
-STUBS = {"uv": UV, "go": GO, "mvn": MVN, "pnpm": PNPM, "kustomize": KUSTOMIZE, "kubeconform": KUBECONFORM,
+STUBS = {"uv": UV, "go": GO, "mvn": MVN, "pnpm": PNPM, "dotnet": DOTNET, "kustomize": KUSTOMIZE, "kubeconform": KUBECONFORM,
          "detect-secrets-hook": DETECT, "kyverno": KYVERNO, "devbox": DEVBOX}
 
 

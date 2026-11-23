@@ -127,3 +127,43 @@ def test_wait_reports_an_event_once_then_idle_then_a_timeout(home):
     ticks = iter(range(0, 100))
     code, lines = dv.wait_result(SLUG, 3, sleep=lambda s: None, clock=lambda: next(ticks))
     assert code == 2 and lines[0] == "TIMEOUT: 1 unit(s) running after 3s" and lines[1] == "  issue-2.1 #2 running since 09:05"
+
+
+# ---------------- landing units hold no build slot (#1033) ----------------
+
+def _running_rows(*statuses):
+    return [dict(slot=i, status=s, kind="fix") for i, s in enumerate(statuses, 1)]
+
+
+def test_three_landing_units_leave_every_slot_to_a_ready_issue():
+    import dispatch_cycle
+    assert dispatch_cycle.free_numbers(_running_rows("landing", "landing", "landing"), 3) == [4, 5, 6]
+
+
+def test_three_landing_and_three_building_units_start_nothing_more():
+    import dispatch_cycle
+    assert dispatch_cycle.free_numbers(_running_rows("landing", "landing", "landing", "running", "running", "running"), 3) == []
+
+
+def test_landing_units_beyond_slots_take_build_slots_again():
+    import dispatch_cycle
+    assert dispatch_cycle.free_numbers(_running_rows("landing", "landing", "landing", "landing"), 3) == [5, 6]
+    assert dispatch_cycle.free_numbers(_running_rows("landing", "landing", "landing", "landing", "running"), 3) == [6]
+
+
+def test_a_ship_unit_in_its_land_phase_holds_no_build_slot(home, monkeypatch):
+    import dispatch_cycle
+    unit = _unit(home, "spec-007", kind="ship", mode="team")
+    monkeypatch.setattr(dispatch_units, "_ship_state", lambda wt: dict(phase="land"))
+    assert dispatch_cycle.free_numbers([unit], 1) == [2]
+    monkeypatch.setattr(dispatch_units, "_ship_state", lambda wt: dict(phase="build"))
+    assert dispatch_cycle.free_numbers([unit], 1) == []
+
+
+def test_status_shows_building_and_landing_apart(home):
+    _unit(home, "issue-1")
+    _unit(home, "issue-2", slot=2, status="landing")
+    _unit(home, "issue-3", slot=3, status="landing")
+    doc = dv.status_doc(home, SLUG, _policy(home, slots=3, budget=dict(tokens_per_day=20_000_000)))
+    assert dv.render_status(doc).splitlines()[1] == "slots: 1 of 3 building, 2 landing"
+    assert dv.slots_doc(SLUG, _policy(home, slots=3))["free"] == 2

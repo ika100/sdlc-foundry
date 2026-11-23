@@ -23,8 +23,9 @@ One command: renders the template, commits, creates a **private** GitHub repo, p
 | Go service | `--lang go` | `service-go` | yes |
 | TypeScript service (Fastify) | `--type service --lang typescript` | `service-typescript` | yes |
 | TypeScript library (npm package) | `--type library --lang typescript` | `library-typescript` | no |
+| .NET service (ASP.NET Core) | `--lang csharp` | `service-dotnet` | yes |
 
-`--type` is `service`, `website` or `library`; `--lang` is `python`, `java`, `go` or `typescript`. Give one and the other follows from its first valid pair (`--lang typescript` alone is a website); give neither and you get `service` in Python. A system's GitOps repo is created by `/system:new`, never by `/component:new`.
+`--type` is `service`, `website` or `library`; `--lang` is `python`, `java`, `go`, `typescript` or `csharp`. Give one and the other follows from its first valid pair (`--lang typescript` alone is a website); give neither and you get `service` in Python. A system's GitOps repo is created by `/system:new`, never by `/component:new`.
 
 Other options: `--org <org>` (default: your `gh` login), `--python 3.12|3.13` (Python types), `--ref <tag>` (pin the platform version), `--system <org>/<gitops-app-repo>` (service types: writes `.platform-app.yml` so `/instance:promote` finds the system's repo).
 
@@ -112,7 +113,7 @@ Both commands route through the marketplace plugins.
 
 If you also want skeleton updates (CI workflow, devbox recipes, Dockerfile, CLAUDE.md) to flow from the platform template via `/platform:update`:
 
-1. Pick your shape's template under `templates/` (`service-python`, `library-python`, `web-nextjs`, `gitops-app`, `service-java`, `service-go`, `service-typescript`, `library-typescript`) and create `.copier-answers.yml` at the repo root recording the answers your repo *would* have given — the questions are the top-level keys of that template's `copier.yml`. For `service-python`:
+1. Pick your shape's template under `templates/` (`service-python`, `library-python`, `web-nextjs`, `gitops-app`, `service-java`, `service-go`, `service-typescript`, `library-typescript`, `service-dotnet`) and create `.copier-answers.yml` at the repo root recording the answers your repo *would* have given — the questions are the top-level keys of that template's `copier.yml`. For `service-python`:
 
    ```yaml
    _src_path: gh:ika100/sdlc-foundry/templates/service-python
@@ -160,7 +161,7 @@ For a system's GitOps repo (Kustomize + Argo) that is not on the platform yet:
 
 ## Migrating a Java or Go repo
 
-Provide the canonical devbox recipes (`lint`, `lint-fix`, `quality`, `test`, `test-fast`, `security`, `image-build`, `image-scan`; see `templates/service-java` / `templates/service-go`), enable `svc-java`, `svc-go` or `svc-ts` plus `component`, `svc` and `shared`, tag the repo `deployable-service`, and write `.copier-answers.yml` (Step 5).
+Provide the canonical devbox recipes (`lint`, `lint-fix`, `quality`, `test`, `test-fast`, `security`, `image-build`, `image-scan`; see `templates/service-java` / `templates/service-go`), enable `svc-java`, `svc-go`, `svc-ts` or `svc-dotnet` plus `component`, `svc` and `shared`, tag the repo `deployable-service`, and write `.copier-answers.yml` (Step 5).
 
 ---
 

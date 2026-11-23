@@ -14,7 +14,8 @@ def test_bar_release_shapes(shape):  # AC-192.2
     assert tuple(stages.bar(shape)) == PLATFORM_BAR
 
 
-@pytest.mark.parametrize("shape", ["service-python", "service-java", "service-go", "service-typescript", "web-nextjs", "gitops-app"])
+@pytest.mark.parametrize("shape", ["service-python", "service-java", "service-go", "service-typescript", "service-dotnet", "web-nextjs",
+                                   "gitops-app"])
 def test_bar_service_shapes(shape):  # AC-192.2
     assert tuple(stages.bar(shape)) == SERVICE_BAR
 
