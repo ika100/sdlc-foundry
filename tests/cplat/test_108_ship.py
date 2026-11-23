@@ -264,6 +264,25 @@ def test_a_job_log_with_escape_sequences_is_read_and_stripped_825(repo, running)
     assert not ok and "\x1b" not in log.read_text() and "log: none" not in "\n".join(lines)
 
 
+def test_a_gh_without_the_escape_flag_reads_the_log_without_it_1038(repo, running, monkeypatch):
+    running.job_log = "".join("\x1b[31m" + ln.split("\t", 2)[2] + "\x1b[0m\n" for ln in ci_log(1).splitlines() if ln.startswith("test\t"))
+    scripted = ship.gh
+
+    def old_gh(args, *, cwd, check=True):
+        if args[:1] == ["api"] and "--allow-escape-sequences" in args:
+            running.calls.append(args)
+            ship.GH_ERRORS[f"api {args[1]}"] = "unknown flag: --allow-escape-sequences"
+            return ""
+        return scripted(args, cwd=cwd, check=check)
+    monkeypatch.setattr(ship, "gh", old_gh)
+    to_land(repo, running.gh)
+    running.gh.checks = [[job_check("e2e"), check("quality", "pass")]]
+    ok, lines = ship.land(repo, timeout=600, interval=10)
+    (log,) = saved(running, "ci-e2e")
+    assert not ok and running.calls[-1] == ["api", "repos/acme/shop-api/actions/jobs/777/logs"]
+    assert "\x1b" not in log.read_text() and "log: none" not in "\n".join(lines)
+
+
 def test_a_failed_job_without_any_log_says_why_not_that_it_is_no_actions_run_399(repo, running):
     to_land(repo, running.gh)
     running.gh.checks = [[job_check("e2e"), check("quality", "pass")]]

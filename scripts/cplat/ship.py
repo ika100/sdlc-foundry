@@ -1350,7 +1350,10 @@ def _job_log(repo: Path, slug: str, c: dict, why: str) -> tuple[str, str]:
         return "", why
     path = f"repos/{slug}/actions/jobs/{m.group(1)}/logs"
     # #825: `gh run view --log-failed` refuses a log with terminal escape sequences; `gh api` prints it on request
-    raw = ANSI.sub("", gh(["api", path, "--allow-escape-sequences"], cwd=repo, check=False))
+    raw = gh(["api", path, "--allow-escape-sequences"], cwd=repo, check=False)
+    if "unknown flag" in GH_ERRORS.get(f"api {path}", ""):   # #1038: a gh before the flag prints the log without it
+        raw = gh(["api", path], cwd=repo, check=False)
+    raw = ANSI.sub("", raw)
     text = "".join(f"{c['name']}\t\t{ln}" for ln in raw.splitlines(keepends=True) if ln.strip())
     return text, GH_ERRORS.get(f"api {path}", "") or why
 

@@ -25,10 +25,14 @@ COPIES: list[tuple[Path, Path]] = [
 ] + [
     (APP / "gate.sh", TEMPLATES / t / "scripts" / "gate.sh")
     for t in ("cluster-gitops", "service-python", "library-python", "service-go", "service-java", "web-nextjs", "service-typescript", "library-typescript", "service-dotnet",
-              "library-dotnet")
+              "library-dotnet",
+              "library-java")
 ] + [
     (TEMPLATES / "service-dotnet" / name, TEMPLATES / "library-dotnet" / name)   # spec 221: one .NET deps recipe and style
     for name in ("scripts/deps.sh", ".editorconfig")
+] + [
+    (TEMPLATES / "service-java" / "scripts" / name, TEMPLATES / "library-java" / "scripts" / name)   # spec 217: one Maven deps recipe
+    for name in ("deps.sh", "PomDeps.java")
 ]
 
 

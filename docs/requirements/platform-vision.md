@@ -48,6 +48,7 @@ The platform supports the following shapes. New shapes are added per §4.1.
 | `library-typescript` | `svc-ts` | `library-typescript` | Node LTS, pnpm, ESM npm package on GitHub Packages (ADR-125) | stable |
 | `service-dotnet` | `svc-dotnet` | `service-dotnet` | .NET 10 LTS, ASP.NET Core minimal APIs, optional EF Core on PostgreSQL (ADR-127) | stable |
 | `library-dotnet` | `svc-dotnet` | `library-dotnet` | .NET 10 LTS, NuGet package on GitHub Packages (ADR-125, ADR-127) | stable |
+| `library-java` | `svc-java` | `library-java` | JDK 21 LTS, Maven, a plain jar on GitHub Packages (ADR-125) | stable |
 
 `gitops-app` is distinct from the single platform-wide GitOps repo we already have. The platform-wide repo discovers all `deployable-service` repos via topic. A `gitops-app` repo is system-scoped — it pins which services, which versions, which environments make up one SaaS system. A user with N SaaS systems has N `gitops-app` repos.
 

@@ -206,15 +206,15 @@ The spec formats (`spec.md`, `design.md`, `plan.md`, `verification.md`, test tag
 | `observability` | sonnet | `/api/metrics`, OpenTelemetry instrumentation, alerts |
 | `release` | sonnet | `package.json` version (a library: none, the tag is its version), CHANGELOG, release PR |
 
-### `svc-java` plugin (`service-java`)
+### `svc-java` plugin (`service-java`, `library-java`)
 
 | Agent | Model | Job |
 |---|---|---|
-| `coder` | sonnet | Spring Boot 4 / Java 21 implementation |
+| `coder` | sonnet | Spring Boot 4 / Java 21 implementation (a library: plain Java) |
 | `tester` | sonnet | JUnit 5 + Spring Boot Test, JaCoCo gate |
 | `deployment` | sonnet | Distroless Java image, JVM-aware probes |
 | `observability` | sonnet | Actuator + Micrometer + OTel agent |
-| `release` | sonnet | `pom.xml` version via `versions:set` |
+| `release` | sonnet | `pom.xml` version via `versions:set` (a library: none, the tag is its version) |
 
 ### `svc-go` plugin (`service-go`)
 
