@@ -297,7 +297,7 @@ def test_type_lang_pairs_come_from_the_registry_plus_service_unknown_ac_114_58(t
     model = mod("model")
     assert set(model.TYPE_LANGS) == {("service", "python"), ("service", "java"), ("service", "go"), ("service", "typescript"),
                                      ("service", "csharp"), ("website", "typescript"), ("library", "python"), ("library", "typescript"),
-                                     ("service", "unknown")}
+                                     ("library", "csharp"), ("service", "unknown")}
 
 
 @pytest.mark.parametrize("shape, pair", [("service-python", ("service", "python")), ("service-java", ("service", "java")),

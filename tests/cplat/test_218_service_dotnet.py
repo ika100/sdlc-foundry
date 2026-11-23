@@ -122,7 +122,7 @@ def test_detection_by_answers_and_by_a_project_with_a_dockerfile_ac_218_2(tmp_pa
     lib = tmp_path / "lib"
     lib.mkdir()
     (lib / "Orders.csproj").write_text("")
-    assert _detect(lib) == ""
+    assert _detect(lib) == "library-dotnet"   # without a Dockerfile a .NET project is a library (spec 221)
 
 
 def test_a_fresh_render_is_detected_ac_218_2(default):  # AC-218.2
