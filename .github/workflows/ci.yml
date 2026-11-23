@@ -29,6 +29,7 @@ jobs:
       go: ${{ steps.diff.outputs.go }}
       ts: ${{ steps.diff.outputs.ts }}
       dotnet: ${{ steps.diff.outputs.dotnet }}
+      dotnetlib: ${{ steps.diff.outputs.dotnetlib }}
       tslib: ${{ steps.diff.outputs.tslib }}
       java: ${{ steps.diff.outputs.java }}
       site: ${{ steps.diff.outputs.site }}
@@ -68,6 +69,7 @@ jobs:
             echo "ts=$(t '^templates/service-typescript/')"
             echo "tslib=$(t '^templates/library-typescript/')"
             echo "dotnet=$(t '^templates/service-dotnet/')"
+            echo "dotnetlib=$(t '^templates/(library|service)-dotnet/')"   # library-dotnet syncs deps.sh and .editorconfig from the service
             echo "java=$(t '^templates/service-java/')"
             echo "site=$(has '^(site/|docs/|plugins/|shapes\.yml$|scripts/cplat/|templates/gitops-app/scripts/(render\.py|local-cluster\.sh)$|[A-Z_]+\.md$|\.github/workflows/(ci|pages)\.yml$)')"
           } | tee -a "$GITHUB_OUTPUT"
@@ -137,7 +139,7 @@ jobs:
       - name: workflows (platform + every generated repo) pass actionlint
         run: |
           uv tool install copier
-          for t in service-python library-python service-java service-go service-typescript library-typescript service-dotnet web-nextjs gitops-app cluster-gitops; do
+          for t in service-python library-python service-java service-go service-typescript library-typescript service-dotnet library-dotnet web-nextjs gitops-app cluster-gitops; do
             copier copy ./templates/$t /tmp/lint-$t --defaults --trust --skip-tasks --data project_name=lint-test
           done
           uv tool run --from actionlint-py actionlint .github/workflows/*.yml scripts/cplat/assets/workflows/*.yml /tmp/lint-*/.github/workflows/*.yml
@@ -899,6 +901,70 @@ jobs:
           cat /tmp/neg.err
           grep -Fx "test-fast: checked nothing: 0 tests ran - add at least one test" /tmp/neg.err
 
+  smoke-test-library-dotnet:
+    name: smoke-test library-dotnet template
+    needs: changes
+    if: needs.changes.outputs.dotnetlib == 'true'
+    runs-on: ubuntu-latest
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+      DOTNET_NOLOGO: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x   # = templates/library-dotnet/copier.yml dotnet_major
+      - name: Install copier
+        run: uv tool install copier
+      - name: Generate test project
+        run: |
+          copier copy ./templates/library-dotnet /tmp/test-dotnetlib --defaults --trust --skip-tasks \
+            --data project_name=test-dotnetlib --data description="Smoke test"
+      - name: Confirm key files exist
+        run: |
+          for f in devbox.json global.json Directory.Build.props Directory.Packages.props .editorconfig TestDotnetlib.slnx \
+                   .claude/settings.json .github/workflows/ci.yml src/TestDotnetlib/TestDotnetlib.csproj src/TestDotnetlib/Greetings.cs \
+                   tests/TestDotnetlib.Tests/TestDotnetlib.Tests.csproj tests/TestDotnetlib.Tests/GreetingsTests.cs; do
+            test -f /tmp/test-dotnetlib/$f || { echo "missing $f"; exit 1; }
+          done
+          test -x /tmp/test-dotnetlib/scripts/publish.sh || { echo "the publish script is missing or not executable"; exit 1; }
+          test ! -e /tmp/test-dotnetlib/Dockerfile || { echo "a library ships no image"; exit 1; }
+      - name: Shape is detected as library-dotnet
+        run: test "$(bash scripts/detect-shape.sh /tmp/test-dotnetlib)" = "library-dotnet"
+      - name: Install, lint, build, test (coverage gate), audit
+        working-directory: /tmp/test-dotnetlib
+        run: |
+          git init -q
+          sh -c "$(jq -r '.shell.scripts["install"]' devbox.json)"
+          ls src/TestDotnetlib/packages.lock.json tests/TestDotnetlib.Tests/packages.lock.json
+          python3 "$GITHUB_WORKSPACE/scripts/template-lint.py" library-dotnet .   # spec 184: file, line and rule of a violation
+          sh -c "$(jq -r '.shell.scripts["typecheck"]' devbox.json)"
+          sh -c "$(jq -r '.shell.scripts["test"]' devbox.json)"   # spec 130: gate.sh around dotnet test with coverlet
+      # Spec 221: the publish recipe packs the tag's version, and refuses a tag on another commit
+      - name: Publish dry run packs the tagged version
+        working-directory: /tmp/test-dotnetlib
+        env:
+          GIT_AUTHOR_NAME: ci
+          GIT_AUTHOR_EMAIL: ci@example.invalid
+          GIT_COMMITTER_NAME: ci
+          GIT_COMMITTER_EMAIL: ci@example.invalid
+        run: |
+          cp -r . /tmp/publish-dotnetlib
+          cd /tmp/publish-dotnetlib
+          git add -A && git commit -qm init
+          git update-ref refs/tags/v1.2.3 HEAD   # a lightweight tag: the platform CI creates no tag objects (AC-121.24)
+          bash scripts/publish.sh v1.2.3 --dry-run | tee /tmp/publish.out
+          grep -F "as TestDotnetlib 1.2.3 to https://nuget.pkg.github.com/ika100/index.json" /tmp/publish.out
+          unzip -p artifacts/TestDotnetlib.1.2.3.nupkg TestDotnetlib.nuspec | grep -F "<version>1.2.3</version>"
+          unzip -l artifacts/TestDotnetlib.1.2.3.nupkg | grep -F "lib/net10.0/TestDotnetlib.dll"
+          git diff --exit-code   # the tag's version is in the package only
+          echo next >> README.md && git commit -qam next
+          if bash scripts/publish.sh v1.2.3 --dry-run 2>/tmp/publish.err; then
+            echo "publish: a tag on another commit was published"; exit 1
+          fi
+          grep -F "the built version is 0.0.0-dev but the tag is v1.2.3 (1.2.3)" /tmp/publish.err
+
   smoke-test-service-java:
     name: smoke-test service-java template (obs=${{ matrix.observability }}, db=${{ matrix.database }})
     needs: changes
@@ -1125,7 +1191,7 @@ jobs:
   ci-success:
     name: ci-success
     if: always()
-    needs: [changes, validate-manifests, validate-shapes, release-check, platform-tests, platform-tests-cover, smoke-test-templates, smoke-test-gitops-app, smoke-test-cluster-gitops, smoke-test-web-nextjs, smoke-test-service-go, smoke-test-service-typescript, smoke-test-library-typescript, smoke-test-service-dotnet, smoke-test-service-java, smoke-test-service-java-update, site, dco, spec-required, pr-title]
+    needs: [changes, validate-manifests, validate-shapes, release-check, platform-tests, platform-tests-cover, smoke-test-templates, smoke-test-gitops-app, smoke-test-cluster-gitops, smoke-test-web-nextjs, smoke-test-service-go, smoke-test-service-typescript, smoke-test-library-typescript, smoke-test-service-dotnet, smoke-test-library-dotnet, smoke-test-service-java, smoke-test-service-java-update, site, dco, spec-required, pr-title]
     runs-on: ubuntu-latest
     steps:
       - name: every needed job passed or was skipped

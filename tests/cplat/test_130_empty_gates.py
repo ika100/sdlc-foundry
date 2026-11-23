@@ -58,7 +58,7 @@ def empty_env(template: str) -> dict:
         return {"STUB_PYTEST": "empty", "STUB_PYTEST_EXIT": "5"}
     return {"service-go": {"STUB_GO": "empty"}, "service-java": {"STUB_MVN": "empty"},
             "web-nextjs": {"STUB_VITEST": "nofiles"}, "service-typescript": {"STUB_VITEST": "nofiles"}, "library-typescript": {"STUB_VITEST": "nofiles"},
-            "service-dotnet": {"STUB_DOTNET": "empty"}}.get(template, {})
+            "service-dotnet": {"STUB_DOTNET": "empty"}, "library-dotnet": {"STUB_DOTNET": "empty"}}.get(template, {})
 
 
 def drop_system(repo):
@@ -219,7 +219,7 @@ def test_vitest_config_writes_the_json_report_only_under_the_gate_ac_130_5():  #
 SKIPPED = {"service-python": {"STUB_PYTEST": "skipped"}, "library-python": {"STUB_PYTEST": "skipped"},
            "service-go": {"STUB_GO": "skipped"}, "service-java": {"STUB_MVN": "skipped"}, "web-nextjs": {"STUB_VITEST": "skipped"},
            "service-typescript": {"STUB_VITEST": "skipped"}, "library-typescript": {"STUB_VITEST": "skipped"},
-           "service-dotnet": {"STUB_DOTNET": "skipped"}}
+           "service-dotnet": {"STUB_DOTNET": "skipped"}, "library-dotnet": {"STUB_DOTNET": "skipped"}}
 
 
 @pytest.mark.parametrize("template", TEST_TEMPLATES)
@@ -402,7 +402,7 @@ def test_composites_chain_their_gates_with_and_and_nothing_swallows_a_failure_ac
 
 PASSING = {"service-python": {"STUB_PYTEST": "pass"}, "library-python": {"STUB_PYTEST": "pass"}, "service-go": {"STUB_GO": "pass"},
            "service-java": {"STUB_MVN": "pass"}, "web-nextjs": {"STUB_VITEST": "pass"}, "service-typescript": {"STUB_VITEST": "pass"}, "library-typescript": {"STUB_VITEST": "pass"},
-           "service-dotnet": {"STUB_DOTNET": "pass"},
+           "service-dotnet": {"STUB_DOTNET": "pass"}, "library-dotnet": {"STUB_DOTNET": "pass"},
            "gitops-app": {"STUB_KUSTOMIZE": "kind: Deployment",
                           "STUB_KUBECONFORM": "Summary: 1 resource found in 1 file - Valid: 1, Invalid: 0, Errors: 0, Skipped: 0"},
            "cluster-gitops": {"STUB_KUSTOMIZE": "kind: Namespace",
@@ -425,22 +425,22 @@ def test_the_vitest_report_is_read_whatever_its_json_layout_ac_130_12(world, fmt
 
 
 @pytest.mark.parametrize("template", PYTHON + ["service-go", "service-java", "web-nextjs", "service-typescript", "library-typescript",
-                                      "service-dotnet"])
+                                      "service-dotnet", "library-dotnet"])
 def test_a_failing_test_keeps_failing_without_the_empty_line_ac_130_12(world, template):  # AC-130.12
     stub = {"service-python": "STUB_PYTEST", "library-python": "STUB_PYTEST", "service-go": "STUB_GO", "service-java": "STUB_MVN",
             "web-nextjs": "STUB_VITEST", "service-typescript": "STUB_VITEST", "library-typescript": "STUB_VITEST",
-            "service-dotnet": "STUB_DOTNET"}[template]
+            "service-dotnet": "STUB_DOTNET", "library-dotnet": "STUB_DOTNET"}[template]
     repo, e = world(template, **{stub: "fail", "STUB_FAIL_EXIT": "1"})
     proc = run_sh(recipe_of(repo, "test"), repo, e)
     assert proc.returncode == 1 and "checked nothing" not in proc.stderr, proc.stderr
 
 
 @pytest.mark.parametrize("template", PYTHON + ["service-go", "service-java", "web-nextjs", "service-typescript", "library-typescript",
-                                      "service-dotnet"])
+                                      "service-dotnet", "library-dotnet"])
 def test_a_broken_runner_is_not_reported_as_add_a_test_ac_130_12(world, template):  # AC-130.12
     stub = {"service-python": "STUB_PYTEST", "library-python": "STUB_PYTEST", "service-go": "STUB_GO", "service-java": "STUB_MVN",
             "web-nextjs": "STUB_VITEST", "service-typescript": "STUB_VITEST", "library-typescript": "STUB_VITEST",
-            "service-dotnet": "STUB_DOTNET"}[template]
+            "service-dotnet": "STUB_DOTNET", "library-dotnet": "STUB_DOTNET"}[template]
     repo, e = world(template, **{stub: "broken", "STUB_BROKEN_EXIT": "3"})
     proc = run_sh(recipe_of(repo, "test"), repo, e)
     assert proc.returncode == 3 and "checked nothing" not in proc.stderr, proc.stderr
@@ -458,7 +458,7 @@ def _test_files(template: str) -> list:
     pats = {"service-python": ["tests/test_*.py"], "library-python": ["tests/test_*.py"], "service-go": ["**/*_test.go*"],
             "service-java": ["src/test/**/*Test.java*"], "web-nextjs": ["tests/*.test.ts*"],
             "service-typescript": ["tests/*.test.ts*"], "library-typescript": ["tests/*.test.ts*"],
-            "service-dotnet": ["tests/*/*Tests.cs*"]}[template]
+            "service-dotnet": ["tests/*/*Tests.cs*"], "library-dotnet": ["tests/*/*Tests.cs*"]}[template]
     return [p for pat in pats for p in root.glob(pat)]
 
 
@@ -466,7 +466,7 @@ def _test_files(template: str) -> list:
 def test_each_test_running_template_ships_at_least_one_test_ac_130_12(template):  # AC-130.12
     marker = {"service-python": r"def test_", "library-python": r"def test_", "service-go": r"func Test\w*\(", "service-java": r"@Test",
               "web-nextjs": r"\b(it|test)\(", "service-typescript": r"\b(it|test)\(", "library-typescript": r"\b(it|test)\(",
-              "service-dotnet": r"\[(Fact|Theory)\]"}[template]
+              "service-dotnet": r"\[(Fact|Theory)\]", "library-dotnet": r"\[(Fact|Theory)\]"}[template]
     assert any(re.search(marker, p.read_text()) for p in _test_files(template)), f"{template} ships no test"
 
 
@@ -497,7 +497,7 @@ def test_no_recipe_argument_makes_an_empty_gate_pass_ac_130_13(world, template, 
 
 
 @pytest.mark.parametrize("template", PYTHON + ["service-go", "service-java", "web-nextjs", "service-typescript", "library-typescript",
-                                      "service-dotnet"])
+                                      "service-dotnet", "library-dotnet"])
 def test_no_recipe_contains_a_switch_that_skips_the_check_ac_130_13(template):  # AC-130.13
     for gate in GATES:
         text = _template_recipe(template, gate)
@@ -536,6 +536,9 @@ EXPECTED_TEST_RECIPES = {
     "service-dotnet": ("SMOKE_BASE_URL= bash scripts/gate.sh tests test dotnet -- dotnet test -p:CollectCoverage=true -p:Threshold=80 "
                        "-p:ThresholdType=line -p:CoverletOutputFormat=cobertura -p:CoverletOutput=../../coverage/ \"$@\"",
                        "SMOKE_BASE_URL= bash scripts/gate.sh tests test-fast dotnet -- dotnet test \"$@\""),
+    "library-dotnet": ("bash scripts/gate.sh tests test dotnet -- dotnet test -p:CollectCoverage=true -p:Threshold=80 "   # no smoke tests
+                       "-p:ThresholdType=line -p:CoverletOutputFormat=cobertura -p:CoverletOutput=../../coverage/ \"$@\"",
+                       "bash scripts/gate.sh tests test-fast dotnet -- dotnet test \"$@\""),
 }
 
 
@@ -548,13 +551,13 @@ def test_test_and_test_fast_run_through_the_gate_helper_as_the_contract_says_ac_
 
 PASS_ENV = {"service-python": {"STUB_PYTEST": "pass"}, "library-python": {"STUB_PYTEST": "pass"}, "service-go": {"STUB_GO": "pass"},
             "service-java": {"STUB_MVN": "pass"}, "web-nextjs": {"STUB_VITEST": "pass"}, "service-typescript": {"STUB_VITEST": "pass"}, "library-typescript": {"STUB_VITEST": "pass"},
-            "service-dotnet": {"STUB_DOTNET": "pass"}}
+            "service-dotnet": {"STUB_DOTNET": "pass"}, "library-dotnet": {"STUB_DOTNET": "pass"}}
 TARGETS = {"service-python": ["tests/test_a.py", "tests/test_b.py"], "library-python": ["tests/test_a.py"],
            "service-go": ["-run", "TestA"], "service-java": ["-Dtest=DemoTest"], "web-nextjs": ["tests/a.test.ts"],
            "service-typescript": ["tests/a.test.ts"], "library-typescript": ["tests/a.test.ts"],
-           "service-dotnet": ["--filter", "FullyQualifiedName~.ATests."]}
+           "service-dotnet": ["--filter", "FullyQualifiedName~.ATests."], "library-dotnet": ["--filter", "FullyQualifiedName~.ATests."]}
 RUNNER = {"service-python": "pytest ", "library-python": "pytest ", "service-go": "go test ", "service-java": "mvn ", "web-nextjs": "pnpm ",
-          "service-typescript": "pnpm ", "library-typescript": "pnpm ", "service-dotnet": "dotnet test "}
+          "service-typescript": "pnpm ", "library-typescript": "pnpm ", "service-dotnet": "dotnet test ", "library-dotnet": "dotnet test "}
 
 
 @pytest.mark.parametrize("gate", GATES)
