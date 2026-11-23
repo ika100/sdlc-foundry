@@ -995,7 +995,28 @@ class CheckWatch:
         if head:
             cs = [c for c, sha in zip(cs, shas) if sha in (None, head)]
         self.head_runs = self._list_head_runs()
-        return self._newest_runs(cs)
+        return self._newest_runs(self._without_idle_foreign(cs))
+
+    def _without_idle_foreign(self, cs: list[dict]) -> list[dict]:
+        """#999: a check suite of another app with no check run (Dependabot's `.github/dependabot.yml`, queued) never
+        completes; `gh pr checks` lists it as a pending check without an Actions run. Only as many such pending checks
+        as the head has idle foreign suites are not waited for (said once)."""
+        loose = [c for c in cs if c.get("bucket") == "pending" and not run_of(c)]
+        if not loose or not self.head:
+            return cs
+        out = gh(["api", f"repos/{{owner}}/{{repo}}/commits/{self.head}/check-suites", "--jq",
+                  '[.check_suites[] | select(.app.slug != "github-actions" and .check_runs_count == 0 '
+                  'and .status != "completed")] | length'], cwd=self.repo, check=False)
+        try:
+            idle = int(out.strip() or 0)
+        except ValueError:
+            return cs
+        skipped = loose[:idle]
+        for c in skipped:
+            if c["name"] not in self.reported:
+                self.reported[c["name"]] = "ignored"
+                say(f"  {c['name']}: a check suite of another app without check runs, not waited for")
+        return [c for c in cs if not any(c is s for s in skipped)]
 
     def _slug(self) -> str | None:
         m = re.match(r"https://github\.com/([^/]+/[^/]+)/pull/", self.pr)
