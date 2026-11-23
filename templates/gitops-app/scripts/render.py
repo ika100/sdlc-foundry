@@ -2535,7 +2535,8 @@ def bucket_files(app: str, name: str, env: str, conf: dict, target: bool = False
     return files
 
 
-WEBHOOK_WAIT_SECONDS = 200    # #926: the longest time a bucket's credentials Job waits for the SeaweedFS operator's webhook (its deadline is 300 s)
+WEBHOOK_WAIT_SECONDS = 600    # #926, #1004: the longest time a bucket's credentials Job waits for the SeaweedFS operator's webhook; the operator's
+                              # own install (its certgen PreSync Job) took 8 min in journey 27, and the Job's deadline grows with it
 WEBHOOK_SETTLE_SECONDS = 30   # #926: after the webhook first answers, the time the chart's PostSync job needs to patch its CA into the configuration
 
 
@@ -3252,6 +3253,12 @@ def credentials_pod_labels(owner: str, labels: dict) -> dict:
     return {"app.kubernetes.io/name": f"{owner}-credentials", **kept, "app.kubernetes.io/component": "credentials"}
 
 
+def credentials_deadline(plan: dict) -> int:
+    """The credentials Job's deadline: 300 s, or room for the plan's webhook wait and settle time plus writing the Secrets (#1004)."""
+    hook = plan.get("webhook")
+    return max(300, hook["seconds"] + hook["settle"] + 60) if hook else 300
+
+
 def credentials_files(app: str, env: str, owner: str, labels: dict, plan: dict) -> dict[str, dict]:
     """The five objects of an owner's credentials Job (spec 128): they write each generated credential once, in the PreSync hook.
 
@@ -3292,7 +3299,7 @@ def credentials_files(app: str, env: str, owner: str, labels: dict, plan: dict) 
         "credentials-job.yaml": {
             "apiVersion": "batch/v1", "kind": "Job",
             "metadata": meta(f"{owner[:42].rstrip('-')}-credentials-{digest}", "1", "BeforeHookCreation,HookSucceeded"),
-            "spec": {"backoffLimit": 2, "activeDeadlineSeconds": 300, "ttlSecondsAfterFinished": 600,
+            "spec": {"backoffLimit": 2, "activeDeadlineSeconds": credentials_deadline(plan), "ttlSecondsAfterFinished": 600,
                      # the pod must not match any workload's selector (a Service would send it traffic): only these labels
                      "template": {"metadata": {"labels": credentials_pod_labels(owner, labels)},
                                   "spec": {"serviceAccountName": name, "automountServiceAccountToken": True, "restartPolicy": "Never",

@@ -14,7 +14,8 @@ def test_update_service_moves_a_legacy_repo_to_the_new_marketplace(tmp_path, new
     repo = tmp_path / "legacy-go"
     # make it look like a v2.x repository
     settings = repo / ".claude" / "settings.json"
-    settings.write_text(settings.read_text().replace("sdlc-foundry", "ika100-claude").replace("ika100/sdlc-foundry", "ika100/claude-platform"))
+    settings.write_text(settings.read_text().replace("sdlc-foundry", "ika100-claude").replace("ika100/sdlc-foundry", "ika100/claude-platform")
+                        .replace("~/.cache/ika100-claude/", "~/.cache/sdlc-foundry/"))   # the log folder is not a marketplace name (#954)
     answers = repo / ".copier-answers.yml"
     answers.write_text(answers.read_text().replace("ika100/sdlc-foundry", "ika100/claude-platform"))
     git(repo, "add", "-A")
