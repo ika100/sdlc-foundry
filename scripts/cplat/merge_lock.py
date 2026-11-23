@@ -25,6 +25,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import core
 import dispatch_state
 import release_hold
 import ship
@@ -80,7 +81,8 @@ def held(slug: str, who: str, timeout: float, interval: float = 5) -> Iterator[N
     path.parent.mkdir(parents=True, exist_ok=True)
     begin = queued = time.monotonic()
     said = begin
-    with open(path, "a") as lock:
+    def take(lock) -> None:
+        nonlocal begin, said
         while True:
             try:
                 fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -102,10 +104,29 @@ def held(slug: str, who: str, timeout: float, interval: float = 5) -> Iterator[N
             fcntl.flock(lock, fcntl.LOCK_UN)        # wait outside the lock: the release itself must be able to merge
             begin += release_hold.wait_clear(slug, hold)
             said = time.monotonic()
+        dispatch_state.write_json(info, {"who": who, "pid": os.getpid(), "since": dispatch_state.now().strftime("%H:%M:%S")})
+
+    with open(path, "a") as lock:
+        take(lock)
+
+        @contextlib.contextmanager
+        def paused() -> Iterator[None]:
+            """A GitHub rate-limit wait (#1028) never holds the lock: let go, wait, queue again. The head check of the merge
+            (`catch_up`, `land_merge`) runs inside the lock, so a head or base that moved meanwhile is seen."""
+            nonlocal begin, queued, said
+            info.unlink(missing_ok=True)
+            fcntl.flock(lock, fcntl.LOCK_UN)
+            try:
+                yield
+            finally:
+                begin = queued = said = time.monotonic()
+                take(lock)
+
+        core.RATE_WAIT_HOOKS.append(paused)
         try:
-            dispatch_state.write_json(info, {"who": who, "pid": os.getpid(), "since": dispatch_state.now().strftime("%H:%M:%S")})
             yield
         finally:
+            core.RATE_WAIT_HOOKS.remove(paused)
             info.unlink(missing_ok=True)
             fcntl.flock(lock, fcntl.LOCK_UN)
 

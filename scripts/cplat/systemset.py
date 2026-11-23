@@ -97,6 +97,22 @@ def add_key(conf, key: str, value) -> None:
         tail[2] = None
 
 
+def add_nested_key(conf, key: str, child: str, value) -> None:
+    """Set `conf[key][child]`. When `key:` is empty but holds comment lines (ruamel keeps them on `key`, above anything added),
+    the comments move below the new child, so none sits above a key it does not describe (#960)."""
+    block = conf.get(key)
+    own = conf.ca.items.get(key) if hasattr(conf, "ca") else None
+    tail = own[2] if block is None and own and len(own) > 2 else None
+    if block is None:
+        add_key(conf, key, CommentedMap())
+        block = conf[key]
+        if tail is not None:
+            own[2] = None
+    add_key(block, child, value)
+    if tail is not None:
+        block.ca.items[child] = [None, None, tail, None]
+
+
 def snapshot(repo: Path) -> dict[Path, bytes]:
     return {p: p.read_bytes() for t in TREES for p in sorted((repo / t).rglob("*")) if p.is_file()}
 
@@ -185,9 +201,7 @@ def main(argv: list[str]) -> int:
             if v == "off":
                 conf.pop("observability", None)
                 continue
-            if conf.get("observability") is None:
-                add_key(conf, "observability", CommentedMap())
-            add_key(conf["observability"], "ui", v)
+            add_nested_key(conf, "observability", "ui", v)
             continue
         add_key(conf, k, DoubleQuotedScalarString(v) if k == "policy" and v == "off" else v)    # a bare off is false in YAML 1.1
     gitops.save(app_dir, y, data)

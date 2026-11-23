@@ -288,7 +288,7 @@ Everything here is a declaration in the GitOps repo; `render.py` turns it into m
 Every generated repo has issue forms (bug report, feature request) that label new issues `triage`. In Claude Code, inside the repo:
 
 ```
-/issue:triage            # the queue: issues labelled triage, oldest first
+/issue:triage            # the queue: open issues without a decision, oldest first
 /issue:triage 42         # one issue
 /issue:triage --waiting  # issues parked as needs-info, after the reporter answered
 ```
