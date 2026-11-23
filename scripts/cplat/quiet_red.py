@@ -77,6 +77,24 @@ class _Code:
         rel = self.rel(path)
         return rel is not None and not self.ignored(rel) and "site-packages" not in rel.parts
 
+    def own_package(self, top: str, top_file: str | None) -> bool:
+        """The repo's own code: the project's package name, a module or package under the root or `src/`, or one the
+        test run found inside the repo."""
+        if top_file and self.is_repo_frame(top_file):
+            return True
+        for base in (self.root, self.root / "src"):
+            if (base / top).is_dir() or (base / f"{top}.py").is_file():
+                return True
+        return top in self.project_names()
+
+    def project_names(self) -> set[str]:
+        try:
+            import tomllib
+            name = tomllib.loads((self.root / "pyproject.toml").read_text()).get("project", {}).get("name")
+        except (OSError, ValueError, ImportError):
+            return set()
+        return {re.sub(r"[-.]+", "_", name).lower()} if isinstance(name, str) else set()
+
     def test_module(self, module: str, module_file: str | None) -> bool:
         if module_file:
             return self.is_test(module_file)
@@ -104,15 +122,28 @@ def _static_names(path: Path) -> list[str]:
     return sorted({m.group(m.lastindex) for m in spec._TEST_DEFS[0].finditer(text)})
 
 
-def _missing_import(rec: dict, code: _Code) -> bool:
+def _import_class(rec: dict, code: _Code) -> tuple[str, str] | None:
+    """An import or attribute error naming a non-test module: missing behaviour when the module is the repo's own code
+    (#956), a test error otherwise, with "<pkg> is not installed" when its top-level package cannot be found at all."""
     exc = set(rec.get("exc") or [])
     mod = rec.get("module")
-    return bool(exc & _IMPORT_ERRORS) and bool(mod) and not code.test_module(mod, rec.get("module_file"))
+    if not (exc & _IMPORT_ERRORS) or not mod or code.test_module(mod, rec.get("module_file")):
+        return None
+    line = _line(rec.get("exc"), rec.get("message", ""))
+    if "AttributeError" in exc and not exc & {"ImportError", "ModuleNotFoundError"}:
+        return MISSING, line
+    top = mod.split(".", 1)[0]
+    if code.own_package(top, rec.get("top_file")):
+        return MISSING, line
+    if not rec.get("top_file"):
+        return ERROR, f"{top} is not installed: add it to the dev dependencies"
+    return ERROR, line
 
 
 def _judge_collect(rec: dict, code: _Code) -> tuple[str, str]:
-    return (MISSING if "NotImplementedError" in (rec.get("exc") or []) or _missing_import(rec, code) else ERROR,
-            _line(rec.get("exc"), rec.get("message", "")))
+    if "NotImplementedError" in (rec.get("exc") or []):
+        return MISSING, _line(rec.get("exc"), rec.get("message", ""))
+    return _import_class(rec, code) or (ERROR, _line(rec.get("exc"), rec.get("message", "")))
 
 
 def _judge_test(recs: list[dict], code: _Code) -> tuple[str, str]:
@@ -132,8 +163,8 @@ def _judge_test(recs: list[dict], code: _Code) -> tuple[str, str]:
         if "NotImplementedError" in (r.get("exc") or []):
             return MISSING, _line(r.get("exc"), r.get("message", ""))
     for r in bad:                                                                       # 5
-        if _missing_import(r, code):
-            return MISSING, _line(r.get("exc"), r.get("message", ""))
+        if (judged := _import_class(r, code)) is not None:
+            return judged
     if first.get("when") != "call":                                                     # 6
         return ERROR, _line(first.get("exc"), first.get("message", ""))
     exc, text = first.get("exc") or [], _line(first.get("exc"), first.get("message", ""))

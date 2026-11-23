@@ -422,6 +422,20 @@ def _ship_state(worktree: str) -> dict | None:
         return None
 
 
+def is_landing(unit: dict) -> bool:
+    """A unit that only waits for or holds the merge lock: a fix unit in `landing`, a ship unit in its land phase (#1033)."""
+    if unit.get("status") == "landing":
+        return True
+    wt = unit.get("worktree")
+    return bool(unit.get("kind") == "ship" and unit.get("status") not in ENDED and wt and (_ship_state(wt) or {}).get("phase") == "land")
+
+
+def occupied(running: list[dict], total: int) -> int:
+    """The slots `running` takes: every unit but the landing ones, plus the landing ones beyond `total` (the queue stays bounded)."""
+    landing = sum(1 for u in running if is_landing(u))
+    return len(running) - landing + max(0, landing - total)
+
+
 def unit_pr(repo: Path, branch: str) -> dict | None:
     """The unit branch's pull request `{number, url, state, headRefOid}`: the open one, else the newest."""
     try:
