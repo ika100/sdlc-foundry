@@ -1115,7 +1115,8 @@ jobs:
           git update-ref refs/tags/v1.2.3 HEAD   # a lightweight tag: the platform CI creates no tag objects (AC-121.24)
           bash scripts/publish.sh v1.2.3 --dry-run | tee /tmp/publish.out
           grep -F "as io.github.ika100:test-javalib:1.2.3 to https://maven.pkg.github.com/ika100/test-javalib" /tmp/publish.out
-          test -f target/test-javalib-1.2.3.jar && test -f target/test-javalib-1.2.3-sources.jar
+          test -f target/test-javalib-1.2.3.jar && test -f target/test-javalib-1.2.3-sources.jar && test -f target/test-javalib-1.2.3-javadoc.jar
+          grep -F "target/test-javalib-1.2.3-javadoc.jar as" /tmp/publish.out
           git diff --exit-code pom.xml   # the tag's version is in the build only
           echo next >> README.md && git commit -qam next
           if bash scripts/publish.sh v1.2.3 --dry-run 2>/tmp/publish.err; then
