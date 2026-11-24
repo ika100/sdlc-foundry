@@ -10,18 +10,21 @@ tasks:
     covers: [AC-177.1, AC-177.2, AC-177.4]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: needs_info_close_days project setting
     files: [scripts/cplat/settings.py]
     covers: [AC-177.4]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t3
     title: close_one, reopen_one and the unattended close refusal
     files: [scripts/cplat/triage.py]
     covers: [AC-177.3, AC-177.4]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t4
     title: Batch carries forms, missing fields, silent and reopened needs-info issues
     files: [scripts/cplat/triage_batch.py]
