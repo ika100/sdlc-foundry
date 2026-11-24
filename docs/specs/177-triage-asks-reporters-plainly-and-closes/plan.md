@@ -45,6 +45,7 @@ tasks:
     covers: [AC-177.3, AC-177.4]
     parallel_safe: true
     depends_on: [t3, t5]
+    done: true
   - id: t7
     title: /issue:triage asks only what the user may know; changed hard rule, register, docs, versions, changelog
     files: [plugins/issue/commands/triage.md, docs/rules/plugins/issue/commands/triage.yml, docs/rules/register.yml, scripts/cplat/cplat.py, plugins/issue/README.md, plugins/shared/README.md, docs/adr/025-issue-triage.md, plugins/issue/.claude-plugin/plugin.json, .claude-plugin/marketplace.json, docs/changelog.d/177-triage-asks-reporters-plainly-and-closes.added.md]

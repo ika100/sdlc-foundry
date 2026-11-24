@@ -64,8 +64,9 @@ def test_a_fix_is_never_started_and_nothing_is_closed_ac_176_8(world):  # AC-176
     n = len(world.calls)                                     # the batch read is not part of the act
     act(world, rows)
     after = world.calls[n:]
-    assert {tuple(c[:2]) for c in after} <= {("issue", "view"), ("label", "list"), ("issue", "edit"), ("issue", "comment")}
-    assert not any("close" in c for c in after)
+    assert {tuple(c[:2]) for c in after} <= {("issue", "view"), ("label", "list"), ("issue", "edit"), ("issue", "comment"), ("issue", "close")}
+    closed = {int(c[2]) for c in after if c[:2] == ["issue", "close"]}    # spec 177: only the rows of the closing classes
+    assert closed <= {r["number"] for r in rows if r["class"] in ("question", "duplicate", "wontfix")}
 
 
 def test_only_real_label_changes_are_made_and_another_priority_is_replaced_ac_176_8(world):  # AC-176.8
