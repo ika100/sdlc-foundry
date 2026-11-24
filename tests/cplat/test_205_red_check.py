@@ -323,3 +323,12 @@ def test_the_usage_line_names_the_flag_for_every_refusal_ac_205_5(world, capsys)
     capsys.readouterr()
     assert quiet.main(["test-fast", "tests/a.py"]) == 2
     assert capsys.readouterr().err.strip() == USAGE
+
+
+def test_a_suite_that_unsets_the_cplat_variables_in_its_tests_is_still_judged_1048(world, capsys):
+    world.put("tests/conftest.py", "import os\n\nimport pytest\n\n\n@pytest.fixture(autouse=True)\n"
+              "def no_run_environment(monkeypatch):\n    for n in [n for n in os.environ if n.startswith('CPLAT_')]:\n"
+              "        monkeypatch.delenv(n, raising=False)\n")
+    world.put("tests/test_red.py", HELPERS + "\n\ndef test_a():\n    pkg.boom()\n")
+    rc, judged, lines = red(capsys, "tests/test_red.py")
+    assert by_name(judged)["test_a"][0] == "missing behaviour" and rc == 0
