@@ -1,1 +1,0 @@
-- A smoke run right after a rollout no longer escalates the ship because one liveness probe timed out. The probe before the smoke is now tried up to 3 more times, 10 s apart, while it times out; a refused connection still ends it at once (#1021).
