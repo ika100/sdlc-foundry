@@ -137,6 +137,13 @@ cplat prints who holds the lock; past its timeout the command fails with `the me
 no fix round: run it again. With `serialize: [merge, e2e]` the lock covers the whole land phase, so only one PR at a time waits for its
 end-to-end checks.
 
+A land that is inside the e2e scope and waits on the checks of its updated head lets go of the lock for that wait and queues its merge
+behind other in-scope lands; a land outside the e2e scope takes the fast lane and merges meanwhile (`fast lane: <PR> waits on its checks;
+merging <PR> outside the e2e scope`). When the commits that arrived in `main` since the last green e2e are all outside the e2e scope,
+the land keeps that e2e (`e2e: kept the green e2e of <sha>; <n> commit(s) since are outside the e2e scope`) and cancels the e2e runs of
+the new head after the merge; otherwise it prints why it waits for the e2e (`e2e: waiting for the e2e of <sha>: <reason> is inside the e2e
+scope`). A repo without an e2e workflow that runs `scripts/e2e-scope.py` behaves as before.
+
 During a platform release every merge into that repository waits for the release hold instead: cplat prints
 `waiting for the release hold of <repo>: release <version> since <time>` every minute, the wait has no timeout, and the merge continues by
 itself when the hold is cleared or expires. `cplat dispatch status` shows it as `release hold:`, and `cplat platform hold --clear` lifts a

@@ -31,6 +31,7 @@ tasks:
     covers: [AC-220.4, AC-220.1]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t3
     title: "merge_lock: the catch-up claim, the fast lane in held, catch-up rounds that keep a green e2e"
     files: [scripts/cplat/merge_lock.py]
