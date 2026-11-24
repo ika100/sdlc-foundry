@@ -40,4 +40,6 @@ Run `confirm --proposals F --json`, show its lines and ask `OK, do it`, `Change 
 
 ## 6. Hand over
 
-Print `act`'s output, then ask its choice with AskUserQuestion, else run `cplat next --json` and follow its `how`. `cplat dispatch status` and the Board show fix runs.> If a platform template, script or command misbehaves (not the user's code), stop, summarize it in two lines and offer `/issue:report`. **Hard rule:** never file an issue without the user's OK, because the platform repository is public; the platform posts only `platform` escalations and milestone comments itself.
+Print `act`'s output, then ask its choice with AskUserQuestion, else run `cplat next --json` and follow its `how`. `cplat dispatch status` and the Board show fix runs.
+
+> If a platform template, script or command misbehaves (not the user's code), stop, summarize it in two lines and offer `/issue:report`. **Hard rule:** never file an issue without the user's OK, because the platform repository is public; the platform posts only `platform` escalations and milestone comments itself.
