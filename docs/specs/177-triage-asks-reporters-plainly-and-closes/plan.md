@@ -31,6 +31,7 @@ tasks:
     covers: [AC-177.1, AC-177.4]
     parallel_safe: true
     depends_on: [t1, t2]
+    done: true
   - id: t5
     title: Rows validate missing fields and plain comments; actions close and reopen
     files: [scripts/cplat/triage_view.py]
