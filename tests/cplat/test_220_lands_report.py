@@ -20,7 +20,9 @@ def test_the_report_shows_median_and_p90_lock_wait_for_docs_and_code_lands_ac_22
     put(store, rec("r1", "2026-10-23T10:00:00Z", lands=docs[:3]))
     put(store, rec("r2", "2026-10-23T11:00:00Z", lands=docs[3:] + code + other))
     put(store, rec("r3", "2026-10-23T12:00:00Z"))                                # a record without lands items
-    got = report_json(capsys)["lands"]
+    out = report_json(capsys)
+    assert "lands" in out, "the report has no lands block"
+    got = out["lands"]
     assert got["docs"] == {"count": 5, "lock_wait_median_min": 0.6, "lock_wait_p90_min": 1.2}
     assert got["code"] == {"count": 3, "lock_wait_median_min": 9.0, "lock_wait_p90_min": 9.5}   # unknown scope is in neither group
     assert got["fast_lane"] == 1 and got["e2e_kept"] == 1
@@ -44,7 +46,9 @@ def test_the_ac_220_9_counts_are_zero_when_no_docs_land_waited_behind_a_catch_up
     lands = [land(1, "docs", 0.3, catch_up=0.0), land(2, "docs", 4.9, catch_up=4.9),
              land(3, "code", 2.0, catch_up=1.0, kept=True, rng="out", e2e=False), land(4, "code", 30.0, catch_up=26.0, e2e=True, rng="in")]
     put(store, rec("r1", "2026-10-23T10:00:00Z", lands=lands))
-    got = report_json(capsys)["lands"]
+    out = report_json(capsys)
+    assert "lands" in out, "the report has no lands block"
+    got = out["lands"]
     assert got["docs_waited_behind_catch_up_over_5_min"] == 0 and got["code_catch_up_e2e_out_of_scope"] == 0
 
 
@@ -55,7 +59,9 @@ def test_the_ac_220_9_counts_find_the_lands_that_the_spec_wants_gone_ac_220_9(st
              land(4, "code", 3.0, catch_up=3.0, e2e=False, rng="out"), land(5, "code", 26.0, catch_up=26.0, e2e=True, rng="in"),
              land(6, "docs", 7.0, catch_up=0.0)]
     put(store, rec("r1", "2026-10-23T10:00:00Z", lands=lands))
-    got = report_json(capsys)["lands"]
+    out = report_json(capsys)
+    assert "lands" in out, "the report has no lands block"
+    got = out["lands"]
     assert got["docs_waited_behind_catch_up_over_5_min"] == 1                  # more than 5 min of lock wait behind catch-up checks
     assert got["code_catch_up_e2e_out_of_scope"] == 1                          # an out-of-scope range whose land still waited for an e2e
     assert runs.main(["report"]) == 0
