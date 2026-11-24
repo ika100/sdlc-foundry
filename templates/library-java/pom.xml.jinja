@@ -37,6 +37,7 @@
     <surefire.plugin.version>3.6.0</surefire.plugin.version>
     <jar.plugin.version>3.5.1</jar.plugin.version>
     <source.plugin.version>3.4.0</source.plugin.version>
+    <javadoc.plugin.version>3.12.0</javadoc.plugin.version>
     <install.plugin.version>3.2.0</install.plugin.version>
     <deploy.plugin.version>3.2.0</deploy.plugin.version>
     <spotless.version>3.10.4</spotless.version>
@@ -101,6 +102,23 @@
           <execution>
             <id>attach-sources</id>
             <goals><goal>jar-no-fork</goal></goals>
+          </execution>
+        </executions>
+      </plugin>
+      <!-- Consumers' IDEs show the API docs of the published jar; a javadoc error fails `package`, so `devbox run test` (verify) and ci catch it -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-javadoc-plugin</artifactId>
+        <version>${javadoc.plugin.version}</version>
+        <configuration>
+          <doclint>all,-missing</doclint>
+          <failOnWarnings>true</failOnWarnings>
+          <quiet>true</quiet>
+        </configuration>
+        <executions>
+          <execution>
+            <id>attach-javadocs</id>
+            <goals><goal>jar</goal></goals>
           </execution>
         </executions>
       </plugin>

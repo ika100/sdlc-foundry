@@ -1,5 +1,6 @@
 """Static guards for the generated CI workflows (the publish path only runs on main/tags, so PR smoke tests never exercise it)."""
 import re
+import shlex
 from pathlib import Path
 
 import pytest
@@ -106,7 +107,7 @@ def test_a_fresh_render_passes_its_own_secrets_scan(template, tmp_path):
     subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
     files = subprocess.run(["git", "ls-files"], cwd=repo, capture_output=True, text=True, check=True).stdout.split()
     scan = _json.loads((repo / "devbox.json").read_text())["shell"]["scripts"]["secrets-scan"]
-    flags = scan.split("detect-secrets-hook", 1)[1].split()
+    flags = shlex.split(scan.split("detect-secrets-hook", 1)[1])
     out = subprocess.run(["uvx", "--from", "detect-secrets==1.5.0", "detect-secrets-hook", *flags, *files],
                          cwd=repo, capture_output=True, text=True)
     assert out.returncode == 0, out.stdout[-3000:]
@@ -125,11 +126,32 @@ def test_the_answers_file_never_fails_the_scan_389(template, tmp_path):
     subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
     files = subprocess.run(["git", "ls-files"], cwd=repo, capture_output=True, text=True, check=True).stdout.split()
     scan = _json.loads((repo / "devbox.json").read_text())["shell"]["scripts"]["secrets-scan"]
-    flags = scan.split("detect-secrets-hook", 1)[1].split()
+    flags = shlex.split(scan.split("detect-secrets-hook", 1)[1])
     hook = ["uvx", "--from", "detect-secrets==1.5.0", "detect-secrets-hook"]
-    unexcluded = " ".join(flags).replace("--exclude-files copier-answers", "").split()     # the recipe as it was before #389
+    unexcluded = [a.replace("copier-answers|", "") for a in flags]     # the recipe as it was before #389: only the contracts are excluded
     bare = subprocess.run([*hook, *unexcluded, ".copier-answers.yml"], cwd=repo, capture_output=True, text=True)
     assert bare.returncode == 1, "the path no longer trips detect-secrets: pick another one for this test"
+    out = subprocess.run([*hook, *flags, *files], cwd=repo, capture_output=True, text=True)
+    assert out.returncode == 0, out.stdout[-3000:]
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(not shutil.which("uvx"), reason="needs uvx")
+@pytest.mark.parametrize("template", BASELINE_TEMPLATES)
+def test_the_plan_contract_never_fails_the_scan_958(template, tmp_path):
+    """#958: contract/<plan>.json holds the plan's 40-hex commit sha, which detect-secrets reports as a secret."""
+    repo = _render(template, tmp_path / "todo", "todo")
+    (repo / "contract").mkdir(exist_ok=True)
+    (repo / "contract" / "plan.json").write_text('{"commit": "9f2b7c41d8e03a5b6c7d1e2f3a4b5c6d7e8f9a0b"}\n')
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
+    files = subprocess.run(["git", "ls-files"], cwd=repo, capture_output=True, text=True, check=True).stdout.split()
+    scan = _json.loads((repo / "devbox.json").read_text())["shell"]["scripts"]["secrets-scan"]
+    flags = shlex.split(scan.split("detect-secrets-hook", 1)[1])
+    hook = ["uvx", "--from", "detect-secrets==1.5.0", "detect-secrets-hook"]
+    unexcluded = [a.replace("|contract/.*[.]json", "") for a in flags]     # the recipe as it was before #958: only the answers are excluded
+    bare = subprocess.run([*hook, *unexcluded, "contract/plan.json"], cwd=repo, capture_output=True, text=True)
+    assert bare.returncode == 1, "the sha no longer trips detect-secrets: pick another one for this test"
     out = subprocess.run([*hook, *flags, *files], cwd=repo, capture_output=True, text=True)
     assert out.returncode == 0, out.stdout[-3000:]
 

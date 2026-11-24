@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **{{ project_name }}** — {{ description }}
 
-Owned by {{ owner_team }}. A Java {{ java_version }} (LTS) library built with Maven, published as the artifact `{{ group_id }}:{{ project_name }}` (jar and sources jar) to GitHub Packages. Package `{{ package_name }}`. No Spring Boot, no server, no container image, no deployment.
+Owned by {{ owner_team }}. A Java {{ java_version }} (LTS) library built with Maven, published as the artifact `{{ group_id }}:{{ project_name }}` (jar, sources jar and javadoc jar) to GitHub Packages. Package `{{ package_name }}`. No Spring Boot, no server, no container image, no deployment.
 
 ## Development Environment
 
@@ -22,7 +22,7 @@ Canonical `devbox run` scripts (configured in `devbox.json`):
 
 | Script | Purpose |
 |---|---|
-| `build` | `mvn package` without tests: `target/{{ project_name }}-<version>.jar` and its sources jar |
+| `build` | `mvn package` without tests: `target/{{ project_name }}-<version>.jar` with its sources and javadoc jars (a javadoc error fails the build) |
 | `test` | `mvn verify` — JUnit 5 tests, JaCoCo report and 80% line-coverage check |
 | `test-fast` | `mvn test` |
 | `lint` | `mvn spotless:check checkstyle:check` (google-java-format + `config/checkstyle.xml`) |
@@ -93,7 +93,7 @@ Updates (`/platform:update`) overwrite the skeleton files below. Put your own wo
 
 ## Releasing the package
 
-`/component:release` tags `main`'s head `vX.Y.Z`. The tag's CI run repeats the gates, then its `publish` job runs `devbox run publish vX.Y.Z` ([ADR-125](https://github.com/ika100/sdlc-foundry/blob/main/docs/adr/125-library-releases-publish-to-github-on-the-tag.md)): it fails before building anything when the commit built is not the tagged one (or has changes), sets the tag's version for the build only, and deploys `{{ group_id }}:{{ project_name }}:X.Y.Z` (jar, sources jar, POM) to GitHub Packages (`https://maven.pkg.github.com/{{ github_org | lower }}/{{ project_name }}`) with the job's `GITHUB_TOKEN` (`packages: write`). The tag is the version: `pom.xml` keeps `0.0.0-SNAPSHOT` and the release writes no version file. A rerun of the same tag deploys nothing, because the registry already has that version. `devbox run publish vX.Y.Z --dry-run` builds and checks locally without any registry call.
+`/component:release` tags `main`'s head `vX.Y.Z`. The tag's CI run repeats the gates, then its `publish` job runs `devbox run publish vX.Y.Z` ([ADR-125](https://github.com/ika100/sdlc-foundry/blob/main/docs/adr/125-library-releases-publish-to-github-on-the-tag.md)): it fails before building anything when the commit built is not the tagged one (or has changes), sets the tag's version for the build only, and deploys `{{ group_id }}:{{ project_name }}:X.Y.Z` (jar, sources jar, javadoc jar, POM) to GitHub Packages (`https://maven.pkg.github.com/{{ github_org | lower }}/{{ project_name }}`) with the job's `GITHUB_TOKEN` (`packages: write`). The tag is the version: `pom.xml` keeps `0.0.0-SNAPSHOT` and the release writes no version file. A rerun of the same tag deploys nothing, because the registry already has that version. `devbox run publish vX.Y.Z --dry-run` builds and checks locally without any registry call.
 
 Another repo depends on a released version like this:
 

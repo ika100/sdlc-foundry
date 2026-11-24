@@ -162,10 +162,19 @@ def test_the_pom_is_a_plain_jar_for_github_packages_ac_217_4(default):  # AC-217
     repo = root.find("m:distributionManagement/m:repository", NS)
     assert (text(repo, "m:id"), text(repo, "m:url")) == ("github", "https://maven.pkg.github.com/acmeco/shared-utils")
     plugins = list(root.iterfind("m:build/m:plugins/m:plugin", NS))
-    assert {text(p, "m:artifactId") for p in plugins} >= {"maven-source-plugin", "maven-compiler-plugin", "maven-surefire-plugin",
+    assert {text(p, "m:artifactId") for p in plugins} >= {"maven-source-plugin", "maven-javadoc-plugin", "maven-compiler-plugin",
+                                                          "maven-surefire-plugin",
                                                           "maven-deploy-plugin", "spotless-maven-plugin", "maven-checkstyle-plugin"}
     assert [text(p, "m:artifactId") for p in plugins if not text(p, "m:version")] == []
     assert "spring" not in (default / "pom.xml").read_text().lower()
+
+
+def test_the_build_attaches_a_javadoc_jar_that_fails_on_a_javadoc_error(default):  # #1058
+    root = pom(default)
+    javadoc = next(p for p in root.iterfind("m:build/m:plugins/m:plugin", NS) if text(p, "m:artifactId") == "maven-javadoc-plugin")
+    assert text(javadoc, "m:version") == "${javadoc.plugin.version}" and text(root, "m:properties/m:javadoc.plugin.version")
+    assert [text(e, "m:goals/m:goal") for e in javadoc.iterfind("m:executions/m:execution", NS)] == ["jar"]
+    assert (text(javadoc, "m:configuration/m:failOnWarnings"), text(javadoc, "m:configuration/m:doclint")) == ("true", "all,-missing")
 
 
 def test_the_sample_code_lives_in_the_package_ac_217_4(default):  # AC-217.4
@@ -199,8 +208,9 @@ else:
     assert "-DskipTests" in args and opt.get("jacoco.skip") == "true", args
     a, v, g = value("artifactId"), value("version"), value("groupId")
     pathlib.Path("target").mkdir(exist_ok=True)
-    jar = pathlib.Path("target") / ("%s-%s.jar" % (a, v))
-    jar.write_text("%s:%s:%s\n" % (g, a, v))
+    jars = [pathlib.Path("target") / ("%s-%s%s.jar" % (a, v, c)) for c in ("", "-sources", "-javadoc")]
+    for jar in jars:
+        jar.write_text("%s:%s:%s\n" % (g, a, v))
     if goal == "deploy":
         settings = pathlib.Path(args[args.index("-s") + 1]).read_text()
         assert "<id>github</id>" in settings and "${env.GH_TOKEN}" in settings, settings
@@ -208,7 +218,8 @@ else:
             log.write("token=%s\n" % os.environ["GH_TOKEN"])
         state = pathlib.Path(os.environ["MVN_STATE"]) / g.replace(".", "/") / a / v
         state.mkdir(parents=True, exist_ok=True)
-        (state / jar.name).write_text(jar.read_text())
+        for jar in jars:
+            (state / jar.name).write_text(jar.read_text())
         (state / ("%s-%s.pom" % (a, v))).write_text(text)
 '''
 
@@ -302,7 +313,7 @@ def test_a_tagged_head_deploys_the_tag_version_and_keeps_the_pom_ac_217_5(lib_re
     r = lib_repo.publish("v1.2.3")
     assert r.returncode == 0, r.stderr
     assert f"publish: published io.acme:shared-utils:1.2.3 to {REGISTRY}" in r.stdout
-    assert lib_repo.published() == ["io/acme/shared-utils/1.2.3/shared-utils-1.2.3.jar"]
+    assert lib_repo.published() == sorted(f"io/acme/shared-utils/1.2.3/shared-utils-1.2.3{c}.jar" for c in ("", "-sources", "-javadoc"))
     assert "token=tok-123" in lib_repo.log.read_text()
     deploy = next(c for c in lib_repo.calls("mvn") if c.endswith(" deploy"))
     assert " -s " in deploy and "-DskipTests" in deploy
@@ -349,7 +360,8 @@ def test_a_dry_run_builds_and_checks_without_the_registry_ac_217_7(lib_repo):  #
     lib_repo.git("tag", "v2.0.0")
     r = lib_repo.publish("v2.0.0", "--dry-run", GH_TOKEN="")
     assert r.returncode == 0, r.stderr
-    assert r.stdout.strip() == f"publish: would publish target/shared-utils-2.0.0.jar as io.acme:shared-utils:2.0.0 to {REGISTRY}"
+    assert r.stdout.strip() == ("publish: would publish target/shared-utils-2.0.0.jar, target/shared-utils-2.0.0-sources.jar and "
+                                f"target/shared-utils-2.0.0-javadoc.jar as io.acme:shared-utils:2.0.0 to {REGISTRY}")
     assert (lib_repo.path / "target" / "shared-utils-2.0.0.jar").read_text() == "io.acme:shared-utils:2.0.0\n"
     assert lib_repo.calls("curl") == [] and lib_repo.published() == []
     assert not [c for c in lib_repo.calls("mvn") if c.endswith(" deploy")]
@@ -382,7 +394,8 @@ def test_ci_has_the_library_job_set_and_the_publish_job_ac_217_8(default):  # AC
     pub = jobs["publish"]
     assert pub["if"] == "github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')"
     assert pub["needs"] == ["quality", "test", "security", "ci-extra"]
-    assert pub["permissions"] == {"contents": "read", "packages": "write"}
+    assert pub["permissions"] == {"contents": "read", "packages": "write", "id-token": "write", "attestations": "write"}  # #966
+    assert any(str(s.get("uses", "")).startswith("actions/attest-build-provenance@") for s in pub["steps"])
     assert [n for n, j in jobs.items() if "write" in (j.get("permissions") or {}).values()] == ["publish"]
     step = next(s for s in pub["steps"] if "devbox run publish" in str(s.get("run", "")))
     assert step["run"] == 'devbox run publish "$GITHUB_REF_NAME"'
