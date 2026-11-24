@@ -169,7 +169,7 @@ def test_progress_before_the_end_of_the_call_is_not_a_timeout_ac_194_3(sw, tick,
 
 # ---------------- AC-194.4: the /system:ship prompt and its register entry ----------------
 
-PATH = "plugins/system/commands/ship.md"
+PATH = "plugins/system/references/ship-loop.md"
 
 
 def wait_rule():

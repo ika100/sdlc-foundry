@@ -168,7 +168,7 @@ Before the spec, a person can run `/component:explore <topic | #issue>` (`/syste
 /instance:promote <component...> --to <env>   ──►  cplat instance promote  ──►  PR (Argo reconciles on merge)
 /component:add|set|remove <component...>    ──►  cplat component add|set|remove  ──►  PR (system.yaml + generated ApplicationSets)
 /system:spec <desc> → /system:plan <id>      ──►  product-manager ──► system:planner ──►  docs/specs/<id>/ + docs/plan/<id>.md
-/system:ship <id>                        ──►  one headless /component:ship session per ready repo, repo spec from the plan  ──►  PRs
+/system:ship <id>                        ──►  cplat system ship drive (detached, no model) starts one headless /component:ship session per ready repo; the session runs cplat system ship wait  ──►  PRs
 ```
 
 ---
