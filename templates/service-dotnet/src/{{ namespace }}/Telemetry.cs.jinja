@@ -1,0 +1,42 @@
+{% if needs_database %}using Npgsql;
+{% endif %}using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
+
+namespace {{ namespace }};
+
+/// <summary>
+/// OpenTelemetry tracing. It exports over OTLP only when OTEL_EXPORTER_OTLP_ENDPOINT is set (the standard OTel variable,
+/// set by the system together with OTEL_EXPORTER_OTLP_PROTOCOL when the environment has observability on) and OTEL_SDK_DISABLED is not
+/// <c>true</c>; otherwise nothing is registered and tracing is a no-op.
+/// </summary>
+public static class Telemetry
+{
+    /// <summary>True when the environment asks for trace export.</summary>
+    public static bool Enabled(Func<string, string?>? env = null)
+    {
+        env ??= Environment.GetEnvironmentVariable;
+        return !string.IsNullOrEmpty(env("OTEL_EXPORTER_OTLP_ENDPOINT"))
+            && !string.Equals(env("OTEL_SDK_DISABLED"), "true", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Registers tracing of incoming requests, outgoing HTTP calls{% if needs_database %} and database commands{% endif %} when <see cref="Enabled"/>.</summary>
+    public static IServiceCollection AddServiceTelemetry(this IServiceCollection services, AppConfig config, Func<string, string?>? env = null)
+    {
+        if (!Enabled(env))
+        {
+            return services;
+        }
+
+        services.AddOpenTelemetry()
+            .ConfigureResource(resource => resource.AddService(config.ServiceName))
+            .WithTracing(tracing => tracing
+                .AddAspNetCoreInstrumentation(options => options.Filter = context =>
+                    context.Request.Path != "/health" && context.Request.Path != "/ready" && context.Request.Path != "/metrics")
+                .AddHttpClientInstrumentation()
+{%- if needs_database %}
+                .AddNpgsql()
+{%- endif %}
+                .AddOtlpExporter());
+        return services;
+    }
+}
