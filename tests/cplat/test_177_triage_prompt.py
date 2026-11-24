@@ -25,6 +25,7 @@ def test_the_closing_hard_rule_keeps_its_register_id_and_enforcement_ac_177_3():
     hard = register["hard"]["triage-never-closes"] if "hard" in register else None
     assert hard is not None and hard["enforced_by"] == "cplat issue triage"
     assert hard_rule()["class"] == "hard"
+    assert "without the user's confirmation" in hard_rule()["text"]   # the closing condition the rule must now carry
 
 
 def test_the_hard_rule_says_closing_needs_the_users_confirmation_ac_177_3():  # AC-177.3

@@ -80,6 +80,31 @@ def calls(w, kind):
     return [(i, int(c[2]), c) for i, c in enumerate(w.calls) if c[:2] == ["issue", kind]]
 
 
+def issue_of(w, n, data=None):
+    got = w.by_number(data).get(n)
+    assert got is not None, f"#{n} is not in the batch"
+    return got
+
+
+def key_of(got, key):
+    assert key in got, f"{key!r} is missing (have {sorted(got)})"
+    return got[key]
+
+
+def line_of(lines, start):
+    found = [l for l in lines if l.startswith(start)]
+    assert found, f"no line starts with {start!r}"
+    return found[0]
+
+
+def reporter():
+    try:
+        import triage_reporter
+    except ModuleNotFoundError:
+        pytest.fail("triage_reporter is missing (AC-177.2, AC-177.4)")
+    return triage_reporter
+
+
 def silent_issue(w, n=12, days=14):
     w.issue(n, title="Old question", labels=("needs-info",), created=ago(days=days, hours=1))
     return n
@@ -99,13 +124,13 @@ def closed_issue(w, n=7, comments=None, reason="NOT_PLANNED"):
 def test_the_batch_carries_the_forms_and_the_missing_fields_of_a_form_filed_issue_ac_177_1(w):  # AC-177.1
     w.issue(1, body=FILED)
     data = w.batch()
-    assert [f["id"] for f in data["forms"]] == ["bug_report", "feature_request"]
-    assert w.by_number(data)[1]["form"] == {"id": "bug_report", "missing": ["Steps to reproduce"]}
+    assert [f["id"] for f in key_of(data, "forms")] ==["bug_report", "feature_request"]
+    assert key_of(issue_of(w, 1, data), "form") == {"id": "bug_report", "missing": ["Steps to reproduce"]}
 
 
 def test_an_issue_filed_without_a_form_has_no_form_and_no_missing_fields_ac_177_1(w):  # AC-177.1
     w.issue(1, body="it just broke")
-    assert w.by_number(w.batch())[1]["form"] == {"id": None, "missing": []}
+    assert key_of(issue_of(w, 1, w.batch()), "form") == {"id": None, "missing": []}
 
 
 def test_a_needs_info_row_needs_the_missing_fields_ac_177_1(w):  # AC-177.1
@@ -139,7 +164,7 @@ def test_an_issue_filed_without_a_form_needs_the_matching_form_in_its_row_ac_177
 def test_a_row_of_an_issue_without_a_form_is_valid_with_form_and_missing_fields_ac_177_1(w):  # AC-177.1
     w.issue(1, body="it just broke")
     w.batch()
-    assert w.by_number()[1]["form"]["id"] is None and w.data["forms"]
+    assert key_of(issue_of(w, 1), "form")["id"] is None and key_of(w.data, "forms")
     comment_ = "Thank you for the report. Please tell us What happened and the Steps to reproduce."
     ok = row(1, **needs_info(comment=comment_, missing=["What happened", "Steps to reproduce"], form="bug_report"))
     assert confirm(w, [ok]).rc == 0
@@ -148,7 +173,7 @@ def test_a_row_of_an_issue_without_a_form_is_valid_with_form_and_missing_fields_
 def test_a_row_for_a_form_filed_issue_is_valid_ac_177_1(w):  # AC-177.1
     w.issue(1, body=FILED)
     w.batch()
-    assert w.by_number()[1]["form"]["missing"] == ["Steps to reproduce"]
+    assert key_of(issue_of(w, 1), "form")["missing"] == ["Steps to reproduce"]
     assert confirm(w, [row(1, **needs_info(comment=THANKS, missing=["Steps to reproduce"]))]).rc == 0
 
 
@@ -209,7 +234,7 @@ def test_a_writer_may_get_internal_terms_and_needs_no_thanks_ac_177_2(w, assoc):
 
 
 def test_the_shown_comment_ends_with_the_days_and_reopen_sentence_ac_177_2(w):  # AC-177.2
-    import triage_reporter
+    triage_reporter = reporter()
     w.issue(1, body=FILED)
     w.batch()
     shown = confirm(w, [row(1, **needs_info(comment=THANKS, missing=["Steps to reproduce"]))], "--show", "1").out
@@ -226,7 +251,7 @@ def test_the_days_in_the_comment_follow_the_project_setting_ac_177_2(w):  # AC-1
 
 
 def test_act_posts_the_comment_with_the_days_sentence_and_keeps_the_issue_open_ac_177_2(w):  # AC-177.2
-    import triage_reporter
+    triage_reporter = reporter()
     w.issue(1, body=FILED)
     w.batch()
     act(w, [row(1, **needs_info(comment=THANKS, missing=["Steps to reproduce"]))])
@@ -304,8 +329,8 @@ def test_the_confirmation_says_which_rows_close_as_not_planned_ac_177_3(w):  # A
     w.batch()
     rows = [closing_row(1, "question", {"comment": "See the docs."}), row(2)]
     lines = confirm(w, rows).lines
-    one = next(l for l in lines if l.startswith("  #1 "))
-    two = next(l for l in lines if l.startswith("  #2 "))
+    one = line_of(lines, "  #1 ")
+    two = line_of(lines, "  #2 ")
     assert one.endswith(", close as not planned") and "close as not planned" not in two
 
 
@@ -326,9 +351,9 @@ def test_actions_of_a_closing_row_close_and_do_not_reopen_ac_177_3(w):  # AC-177
     rows = triage_view.load_proposals(w.proposals([closing_row(1, "wontfix", {"comment": "No, by design."}), row(2)]), w.data)
     issues = w.by_number()
     a = triage_view.actions(issues[1], rows[0])
-    assert a["close"] is True and a["reopen"] is False and a["comment"] == "No, by design." and "wontfix" in a["add"]
+    assert key_of(a, "close") is True and key_of(a, "reopen") is False and a["comment"] == "No, by design." and "wontfix" in a["add"]
     b = triage_view.actions(issues[2], rows[1])
-    assert b["close"] is False and b["reopen"] is False
+    assert key_of(b, "close") is False and key_of(b, "reopen") is False
 
 
 def test_the_json_summary_says_closed_and_the_undo_lists_a_reopen_ac_177_3(w):  # AC-177.3
@@ -337,7 +362,7 @@ def test_the_json_summary_says_closed_and_the_undo_lists_a_reopen_ac_177_3(w):  
     w.batch()
     data = act(w, [closing_row(1, "question", {"comment": "See the docs."}), row(2)], "all", "--json").json()
     done = {d["number"]: d for d in data["done"]}
-    assert done[1]["closed"] is True and done[1]["reopened"] is False and done[2]["closed"] is False
+    assert key_of(done[1], "closed") is True and key_of(done[1], "reopened") is False and key_of(done[2], "closed") is False
     assert "#1: gh issue reopen 1" in data["undo"]
 
 
@@ -405,9 +430,10 @@ def test_refuse_unattended_close_only_refuses_a_headless_run_ac_177_3(monkeypatc
 def test_a_needs_info_issue_silent_for_14_days_is_proposed_for_closing_ac_177_4(w):  # AC-177.4
     silent_issue(w)
     data = w.batch()
-    got = w.by_number(data)[12]
-    assert got["handled"]["kind"] == "silent" and got["handled"]["line"].startswith("silent ") and "close with a final comment" in got["handled"]["line"]
-    assert got["state"] == "open" and data["close_after_days"] == 14
+    got = issue_of(w, 12, data)
+    handled = key_of(got, "handled")
+    assert handled["kind"] == "silent" and handled["line"].startswith("silent ") and "close with a final comment" in handled["line"]
+    assert key_of(got, "state") == "open" and key_of(data, "close_after_days") == 14
     assert all(s["number"] != 12 for s in data["skipped"])
 
 
@@ -415,7 +441,7 @@ def test_a_needs_info_issue_silent_for_13_days_stays_skipped_ac_177_4(w):  # AC-
     silent_issue(w, days=13)
     silent_issue(w, n=13, days=14)
     data = w.batch()
-    assert w.by_number(data)[13]["handled"]["kind"] == "silent"
+    assert key_of(issue_of(w, 13, data), "handled")["kind"] == "silent"
     assert 12 not in w.by_number(data) and any(s["number"] == 12 and s["reason"].startswith("silent ") for s in data["skipped"])
 
 
@@ -424,14 +450,14 @@ def test_the_days_come_from_the_project_setting_ac_177_4(w):  # AC-177.4
     silent_issue(w, n=12, days=20)
     silent_issue(w, n=13, days=31)
     data = w.batch()
-    assert data["close_after_days"] == 30 and set(w.by_number(data)) == {13}
+    assert key_of(data, "close_after_days") == 30 and set(w.by_number(data)) == {13}
 
 
 def test_a_silent_issue_needs_no_row_and_appears_in_the_confirmation_ac_177_4(w):  # AC-177.4
     silent_issue(w)
     w.batch()
     lines = confirm(w, []).lines
-    line = next(l for l in lines if l.startswith("  #12 "))
+    line = line_of(lines, "  #12 ")
     assert line.startswith("  #12  needs-info, silent ") and line.endswith("days: close as not planned with a final comment")
 
 
@@ -442,7 +468,7 @@ def test_the_overview_lists_the_silent_issue_under_already_handled_ac_177_4(w): 
 
 
 def test_act_closes_a_silent_issue_with_the_final_comment_only_when_named_ac_177_4(w):  # AC-177.4
-    import triage_reporter
+    triage_reporter = reporter()
     silent_issue(w)
     w.issue(2, assoc="OWNER")
     w.batch()
@@ -474,7 +500,7 @@ def test_a_silent_issue_is_not_closed_by_a_headless_run_ac_177_4(w, monkeypatch)
 def test_a_reporter_comment_after_the_close_queues_the_closed_issue_ac_177_4(w):  # AC-177.4
     closed_issue(w)
     got = w.by_number(w.batch())
-    assert 7 in got and got[7]["state"] == "closed" and "needs-info" in got[7]["labels"]
+    assert 7 in got and key_of(got[7], "state") == "closed" and "needs-info" in got[7]["labels"]
 
 
 def test_a_closed_issue_without_a_reporter_comment_after_the_close_stays_out_ac_177_4(w):  # AC-177.4
@@ -497,7 +523,7 @@ def test_an_issue_closed_as_completed_stays_out_ac_177_4(w):  # AC-177.4
 
 def test_a_batch_answer_without_the_closed_alias_reads_as_no_closed_issues_ac_177_4(world):  # AC-177.4
     world.issue(1)
-    assert world.by_number(world.batch())[1]["state"] == "open"     # the plain fake gh has no waiting_closed
+    assert key_of(issue_of(world, 1, world.batch()), "state") == "open"     # the plain fake gh has no waiting_closed
 
 
 def test_act_reopens_a_requeued_issue_before_its_labels_and_comment_ac_177_4(w):  # AC-177.4
@@ -508,7 +534,7 @@ def test_act_reopens_a_requeued_issue_before_its_labels_and_comment_ac_177_4(w):
     assert [n for _, n, _ in reopen] == [7]
     after = [i for i, c in enumerate(w.calls) if c[:2] in (["issue", "edit"], ["issue", "comment"]) and c[2] == "7"]
     assert after and reopen[0][0] < min(after)
-    assert next(d for d in data["done"] if d["number"] == 7)["reopened"] is True
+    assert key_of(next((d for d in data["done"] if d["number"] == 7), {}), "reopened") is True
     assert calls(w, "close") == []
 
 
@@ -516,7 +542,7 @@ def test_the_confirmation_and_the_overview_say_reopen_ac_177_4(w):  # AC-177.4
     closed_issue(w)
     w.batch()
     path = w.proposals([row(7)])
-    line = next(l for l in w.run("confirm", "--proposals", path).lines if l.startswith("  #7 "))
+    line = line_of(w.run("confirm", "--proposals", path).lines, "  #7 ")
     assert line.startswith("  #7  reopen, ")
     assert "state: reopen" in w.run("confirm", "--proposals", path, "--show", "7").out.splitlines()
     assert "reopened by the reporter" in w.run("overview", "--proposals", path).out

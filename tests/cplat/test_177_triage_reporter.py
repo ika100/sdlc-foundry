@@ -37,7 +37,10 @@ body:
 
 
 def reporter():
-    return importlib.import_module("triage_reporter")
+    try:
+        return importlib.import_module("triage_reporter")
+    except ModuleNotFoundError:
+        pytest.fail("triage_reporter is missing (AC-177.1, AC-177.2, AC-177.4)")
 
 
 def write_forms(root, **files):
