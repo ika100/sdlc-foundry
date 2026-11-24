@@ -1,9 +1,7 @@
----
-spec_id: 222-the-ux-step-is-measured-on-website-plans
-verdict: pass
----
-
 # Verification — 222 The UX step is measured on website plans
+
+**Result:** pass
+**Base:** origin/main at b91e30ac+ · **Trace:** 11/11 criteria named by tests (`tests/cplat/test_222_ux_measured.py`, `tests/cplat/fixtures/ux_cases.json`)
 
 | Criterion | Result | Evidence |
 |---|---|---|

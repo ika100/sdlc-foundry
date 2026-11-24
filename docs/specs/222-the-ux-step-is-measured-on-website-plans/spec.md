@@ -1,7 +1,7 @@
 ---
 spec_id: 222-the-ux-step-is-measured-on-website-plans
 title: The UX step is measured on website plans
-status: building
+status: done
 priority: P1
 shape: platform
 tracks: [1059, 1060]
@@ -67,3 +67,4 @@ None.
 - 2026-11-24 draft: amend: AC-222.4 names the per-role usage the record carries, not per-agent time
 - 2026-11-24 approved; the old plan is plan.v1.md
 - 2026-11-24 building
+- 2026-11-24 done
