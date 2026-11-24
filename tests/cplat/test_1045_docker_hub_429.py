@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from waiting import with_prelude
 
 ROOT = Path(__file__).resolve().parents[2]
 LOGIN = "docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9"
@@ -39,10 +40,10 @@ def _build(tmp_path, outputs):
     for n, text in enumerate(outputs):
         (tmp_path / f"out{n}").write_text(text)
     fake = bindir / "docker"
-    fake.write_text(
+    fake.write_text(with_prelude(
         f'#!/bin/sh\nd="{tmp_path}"\nn=$(cat "$d/n" 2>/dev/null || echo 0)\necho $((n+1)) > "$d/n"\n'
         'f="$d/out$n"\n[ -s "$f" ] || exit 0\ncat "$f" >&2\nexit 1\n'
-    )
+    ))
     fake.chmod(fake.stat().st_mode | stat.S_IXUSR)
     env = {**os.environ, "PATH": f"{bindir}:{os.environ['PATH']}", "E2E_BUILD_RETRY_WAIT": "0"}
     lib = ROOT / "tests/e2e/lib/docker-build.sh"
