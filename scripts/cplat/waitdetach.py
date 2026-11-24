@@ -32,6 +32,7 @@ STREAM_POLL = 0.2
 WAIT_COMMANDS: tuple[tuple[str, ...], ...] = (
     ("pr", "wait"), ("component", "ship", "land"), ("component", "ship", "wait"), ("system", "wait"), ("cluster", "wait"),
     ("dispatch", "wait"), ("component", "release", "wait"), ("component", "release", "gates"), ("system", "ship", "land"),
+    ("system", "ship", "wait"),
 )
 _NEXT = ("system", "ship", "next")
 
