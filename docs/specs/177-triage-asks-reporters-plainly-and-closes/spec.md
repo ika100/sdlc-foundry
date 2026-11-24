@@ -1,7 +1,7 @@
 ---
 spec_id: 177-triage-asks-reporters-plainly-and-closes
 title: Triage asks reporters plainly and closes what needs no work
-status: building
+status: done
 priority: P2
 shape: platform
 ---
@@ -56,3 +56,4 @@ Closing what needs no work.
 - 2026-11-23 building
 - 2026-11-24 answer to the stop of spec-177.3 approved by the user: "User 2026-11-24: yes. Update the six spec 176/196 tests (test_176_view x3, test_176_act x2, test_196_triage_priority x1) to the spec 177 behaviour as plan task t5b before t6: needs-info rows carry `missing`, the question-row confirm line ends with ', close as not planned', comments get the 'Duplicate of #N' prefix and the days footer. Change only those expectations."
 - 2026-11-24 answer to the stop of spec-177.3 approved by the user: "User 2026-11-24: yes, same rule as question 1. Fix only the test data and expectations to the spec 177 behaviour: in test_177_triage_close::test_the_other_classes_are_never_closed use valid rows (a feature row with its spec, a needs-exploring row without a priority); in test_196_triage_priority::test_an_unattended_act_without_a_priority_change_still_works use a non-question row so it still tests the priority path. Standing rule for this spec: a test that fails only because its data or expectation predates spec 177 may be updated to the spec 177 behaviour without asking; a test whose behaviour the spec does not change stays as it is."
+- 2026-11-24 done
