@@ -788,6 +788,8 @@ jobs:
           grep -Fx "test-fast: checked nothing: 0 tests ran - add at least one test" /tmp/neg.err
       - name: image builds and starts (non-root, read-only root filesystem)
         working-directory: /tmp/test-dotnet
+        env:
+          IMAGE_BUDGET_BYTES: 150000000   # #1057: measured 133 MB (amd64) and 141 MB (arm64) with observability and database
         run: |
           docker build -t smoke:dotnet .
           db_env=""
@@ -800,6 +802,15 @@ jobs:
           # the image contract: no shell, numeric non-root user, read-only root, the pinned .NET major
           if docker run --rm --entrypoint sh smoke:dotnet -c true 2>/dev/null; then echo "the image has a shell"; exit 1; fi
           test "$(docker image inspect smoke:dotnet --format '{{.Config.User}}')" = "65532:65532" || { echo "not USER 65532:65532"; exit 1; }
+          # #1057: the unpacked filesystem stays within the budget: the chiseled ASP.NET Core runtime (about 125 MB) plus the
+          # service (under 10 MB); a larger base (-extra, the SDK) or a self-contained runtime copy exceeds it
+          docker create --name size smoke:dotnet >/dev/null
+          bytes=$(docker export size | wc -c)
+          docker rm size >/dev/null
+          echo "image filesystem: $bytes bytes (budget $IMAGE_BUDGET_BYTES)"
+          if [ "$bytes" -gt "$IMAGE_BUDGET_BYTES" ]; then
+            echo "the image filesystem is $bytes bytes, over the budget of $IMAGE_BUDGET_BYTES"; exit 1
+          fi
           major=$(sed -n 's|^FROM mcr.microsoft.com/dotnet/aspnet:\([0-9]*\)\..*|\1|p' Dockerfile)
           if [ -z "$major" ] || ! grep -q "<TargetFramework>net$major.0</TargetFramework>" Directory.Build.props; then
             echo "runtime image $major is not the target framework"; exit 1
