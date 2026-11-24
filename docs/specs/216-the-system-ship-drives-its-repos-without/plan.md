@@ -24,12 +24,14 @@ tasks:
     covers: [AC-216.4, AC-216.5, AC-216.6, AC-216.11]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t3
     title: "Stop hook: hold the owner on `cplat system ship wait`, driver steps are progress, the driver's waits do not count"
     files: [scripts/cplat/appship_state.py]
     covers: [AC-216.8]
     parallel_safe: true
     depends_on: [t1]
+    done: true
 ---
 
 # Plan — 216 The system ship drives its repos without a model
