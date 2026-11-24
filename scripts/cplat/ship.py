@@ -797,7 +797,7 @@ class GhError(PlatformError):
 def checks(repo: Path, pr: str) -> list[dict]:
     """The PR's checks; [] when it has none. A `gh` failure is a GhError, never "no checks" (#356)."""
     GH_ERRORS.pop("pr checks", None)
-    out = gh(["pr", "checks", pr, "--json", "name,state,bucket,link,startedAt"], cwd=repo, check=False)
+    out = gh(["pr", "checks", pr, "--json", "name,state,bucket,link,startedAt,workflow"], cwd=repo, check=False)
     with contextlib.suppress(ValueError):
         if out.strip():
             return json.loads(out)
@@ -853,6 +853,9 @@ class CheckWatch:
         self.missing: list[str] = []                                  # expected names the head does not show as passed yet
         self.concluded_since: float | None = None
         self.no_pr_run_since: float | None = None                     # #787: green checks, but no pull_request run yet
+        self.skip: tuple[str, frozenset[str]] | None = None           # spec 220: (head sha, workflows ignored on that head)
+        self.expected_workflow: dict[str, str] = {}                   # spec 220: expected check name -> its workflow
+        self.all_head_runs: list[dict] = []                           # spec 220: this poll's head runs, skip not applied
 
     def expect_from_current(self) -> None:
         """Before the land changes the head: the checks the new head must show (required ones, and those that passed here)."""
@@ -866,7 +869,40 @@ class CheckWatch:
         except GhError:
             seen = set()
         self.expected = {n: True for n in required} | {n: False for n in seen - required}
+        self.expected_workflow = {}
+        try:
+            for c in checks(self.repo, self.pr):
+                if c.get("workflow") and c.get("name") in self.expected:
+                    self.expected_workflow[c["name"]] = c["workflow"]
+        except GhError:
+            pass
         self.concluded_since = None
+
+    def skip_workflows(self, head: str, names: frozenset[str]) -> None:
+        """Spec 220: on this head the checks and runs of these workflows are not waited for; their expected names go."""
+        self.skip = (head, frozenset(names))
+        for n in [n for n, wf in self.expected_workflow.items() if wf in names]:
+            self.expected.pop(n, None)
+            del self.expected_workflow[n]
+
+    def cancel_runs(self, names: frozenset[str]) -> list[str]:
+        """Spec 220: cancel the unfinished runs of these workflows on the head; the lines to print (a failure is a WARNING)."""
+        self.all_head_runs = self._list_head_runs()
+        slug = self._slug()
+        lines: list[str] = []
+        for r in self.all_head_runs:
+            wf = r.get("workflowName")
+            if wf not in names or r.get("status") == "completed" or not r.get("databaseId"):
+                continue
+            rid = r["databaseId"]
+            GH_ERRORS.pop("run cancel", None)
+            gh(["run", "cancel", str(rid)] + (["-R", slug] if slug else []), cwd=self.repo, check=False)
+            err = GH_ERRORS.get("run cancel", "")
+            if err:
+                lines.append(f"WARNING: cancelling run {rid} ({wf}) failed: {err.splitlines()[-1]}")
+            else:
+                lines.append(f"e2e: cancelled run {rid} ({wf}) on {(self.head or '')[:7]}: the kept e2e covers it")
+        return lines
 
     def expect_required(self, base: str) -> None:
         """Before a push of local commits (AC-171.5: the old head's checks are never read): the base branch's required checks."""
@@ -990,11 +1026,17 @@ class CheckWatch:
             self.cancel_seen.clear()
         if head:
             self.head = head
+        if self.skip and self.head != self.skip[0]:
+            self.skip = None
         cs = checks(self.repo, self.pr)
         shas = [self._sha_of(c) for c in cs]
         if head:
             cs = [c for c, sha in zip(cs, shas) if sha in (None, head)]
-        self.head_runs = self._list_head_runs()
+        self.all_head_runs = self.head_runs = self._list_head_runs()
+        if self.skip:
+            names = self.skip[1]
+            cs = [c for c in cs if c.get("workflow") not in names]
+            self.head_runs = [r for r in self.head_runs if r.get("workflowName") not in names]
         return self._newest_runs(cs)
 
     def _slug(self) -> str | None:
@@ -1006,7 +1048,7 @@ class CheckWatch:
         if not self.head:
             return []
         slug = self._slug()
-        out = gh(["run", "list", "--commit", self.head, "--json", "status,conclusion,databaseId,workflowDatabaseId,event",
+        out = gh(["run", "list", "--commit", self.head, "--json", "status,conclusion,databaseId,workflowDatabaseId,workflowName,event",
                   "-L", "50"]
                  + (["-R", slug] if slug else []), cwd=self.repo, check=False)
         try:
