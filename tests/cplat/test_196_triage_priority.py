@@ -59,7 +59,7 @@ def test_the_confirmation_line_names_the_priority_and_its_reason_ac_196_1(world)
 
 
 @pytest.mark.parametrize("cls,extra", [("question", {"comment": "see docs"}), ("duplicate", {"comment": "same", "duplicate_of": 2}),
-                                       ("wontfix", {"comment": "no"}), ("needs-exploring", {}), ("needs-info", {"comment": "which?"})])
+                                       ("wontfix", {"comment": "no"}), ("needs-exploring", {}), ("needs-info", {"comment": "Thanks for the report. Which version?", "missing": ["version"]})])
 def test_the_other_classes_show_no_priority_ac_196_1(world, cls, extra):  # AC-196.1
     world.issue(1)
     world.issue(2)
