@@ -19,8 +19,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import appship_proc
-import appship_report
-import appship_sched
 import appship_state as state
 from core import PlatformError
 
@@ -101,21 +99,6 @@ def _write_progress(gitops: Path, data: dict) -> None:
 
 # ---------------- drive ----------------
 
-def escalated_lines(st: dict) -> list[str]:
-    """The `ESCALATED:` block (design.md, `system ship wait`)."""
-    spec = st["spec"]
-    lines = [f"ESCALATED: product ship {spec}: {st.get('escalated')} (cause {st.get('cause') or 'unknown'})"]
-    for rid, r in (st.get("repos") or {}).items():
-        if r.get("state") != "escalated":
-            continue
-        for q in appship_sched.questions_of(r.get("reason") or "", r.get("questions")):
-            lines.append(f"{rid}: question: {q['text']} (suggested: {q.get('suggested') or 'no suggestion'})"
-                         if q.get("suggested") else f"{rid}: question: {q['text']} (no suggestion)")
-    lines += appship_report.state_table(st)
-    lines += [f"log: {(st.get('driver') or {}).get('log') or '-'}", f"resume it with /system:ship {spec}"]
-    return lines
-
-
 def drive(gitops: Path) -> int:
     if os.environ.get(SWITCH) == "0":
         print(OFF_LINE)
@@ -161,7 +144,8 @@ def drive(gitops: Path) -> int:
             return 0
     phase, log = exceeded
     esc = state.escalate(gitops, f"system ship driver ended twice in phase {phase}; log {log}", "environment")
-    print("\n".join(escalated_lines(esc)))
+    import appship_wait
+    print("\n".join(appship_wait.escalated_lines(esc)))
     return 1
 
 
