@@ -1,7 +1,7 @@
 ---
 spec_id: 220-a-docs-only-land-does-not-wait-for-a
 title: A docs-only land does not wait for a code PR's catch-up e2e
-status: building
+status: done
 priority: P1
 shape: platform
 tracks: [280]
@@ -71,3 +71,4 @@ Tests.
 - 2026-11-23 priority P1 given by you
 - 2026-11-23 approved
 - 2026-11-23 building
+- 2026-11-24 done
