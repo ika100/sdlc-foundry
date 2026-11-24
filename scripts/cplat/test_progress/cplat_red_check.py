@@ -15,8 +15,11 @@ import pytest
 ENV = "CPLAT_RED_FILE"
 
 
+_FILE: str | None = None   # read once at configure: a test fixture may clear the CPLAT_* variables later
+
+
 def _path() -> str | None:
-    return os.environ.get(ENV) or None
+    return _FILE or os.environ.get(ENV) or None
 
 
 def _append(record: dict) -> None:
@@ -32,6 +35,8 @@ def _append(record: dict) -> None:
 
 
 def pytest_configure(config) -> None:
+    global _FILE
+    _FILE = os.environ.get(ENV) or None
     if not hasattr(config, "workerinput"):
         _append({"kind": "start"})
 
