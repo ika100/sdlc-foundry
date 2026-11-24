@@ -10,12 +10,14 @@ tasks:
     covers: [AC-216.1, AC-216.2, AC-216.3, AC-216.4, AC-216.5, AC-216.9, AC-216.10, AC-216.11]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t4
     title: "`/system:ship` with the driver: drive, wait, hand-over; today's loop as the switch-off reference; ADR and docs"
     files: [plugins/system/commands/ship.md, plugins/system/references/ship-loop.md, docs/rules/plugins/system/commands/ship.yml, docs/rules/plugins/system/references/ship-loop.yml, tests/cplat/test_186_system_ship.py, tests/cplat/test_186_attended_ask.py, tests/cplat/test_194_system_ship_wait.py, tests/cplat/test_143_waits_docs.py, plugins/system/README.md, plugins/system/.claude-plugin/plugin.json, .claude-plugin/marketplace.json, docs/AGENTS.md, docs/adr/README.md, docs/adr/128-a-system-ships-mechanical-loop-runs-in-cplat.md, docs/changelog.d/216-system-ship-driver.changed.md]
     covers: [AC-216.7, AC-216.10, AC-216.12]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: "`cplat system ship wait`: step lines and one result (DONE, ENTRY, WAIT, ESCALATED, STOPPED, ENDED, TIMEOUT)"
     files: [scripts/cplat/appship_wait.py, scripts/cplat/appship.py, scripts/cplat/waitdetach.py]
