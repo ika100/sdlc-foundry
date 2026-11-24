@@ -46,6 +46,7 @@ def _load(path: Path) -> tuple[bool, list[dict]]:
             continue
         if rec.get("kind") == "start":
             started = True
+            records.append(rec)
         else:
             records.append(rec)
     return started, records
@@ -54,12 +55,32 @@ def _load(path: Path) -> tuple[bool, list[dict]]:
 class _Code:
     """What counts as test code and as a repo frame under one root."""
 
-    def __init__(self, root: Path, shape: str | None):
+    def __init__(self, root: Path, shape: str | None, sys_path: list[str] | None = None):
         import spec
         self.root = root.resolve()
         self.globs = spec.test_globs(shape)
         self.ignored = spec._ignored
         self.test_roots = {g.split("/", 1)[0] for g in self.globs if g.split("/", 1)[0] and not re.search(r"[*?\[]", g.split("/", 1)[0])}
+        rels = [self.rel(p) for p in sys_path or []]      # in-repo directories of the test run's sys.path (#1062)
+        self.path_dirs = [r for r in rels if r is not None and not self.ignored(r) and "site-packages" not in r.parts]
+        self.planned = self._planned_stems(spec)
+
+    def _planned_stems(self, spec) -> set[str]:
+        """Names of the files the plan of a spec in build lists in `files:` (`a/x.py` → `x`, `a/pkg/` → `pkg`)."""
+        stems: set[str] = set()
+        try:
+            for s in spec.judged_specs(self.root):
+                for t in (s.plan[0].get("tasks") or []) if s.plan else []:
+                    for f in (t.get("files") or []) if isinstance(t, dict) else []:
+                        p = Path(str(f).rstrip("/"))
+                        if p.suffix in ("", ".py") and p.name:
+                            stems.add(p.stem)
+                        for base in (Path("src"), *self.path_dirs):      # `src/pkg/mod.py` plans the package `pkg`
+                            if p.suffix in ("", ".py") and base in p.parents and p != base:
+                                stems.add(p.relative_to(base).parts[0].removesuffix(".py"))
+        except Exception:  # noqa: BLE001  (a plan that cannot be read names nothing)
+            pass
+        return stems
 
     def rel(self, path: str) -> Path | None:
         try:
@@ -79,13 +100,14 @@ class _Code:
 
     def own_package(self, top: str, top_file: str | None) -> bool:
         """The repo's own code: the project's package name, a module or package under the root or `src/`, or one the
-        test run found inside the repo."""
+        test run found inside the repo, one a plan task of the spec in build names, or one that would sit in an in-repo
+        `sys.path` directory of the run (`scripts/cplat`, #1062)."""
         if top_file and self.is_repo_frame(top_file):
             return True
-        for base in (self.root, self.root / "src"):
+        for base in (self.root, self.root / "src", *(self.root / d for d in self.path_dirs)):
             if (base / top).is_dir() or (base / f"{top}.py").is_file():
                 return True
-        return top in self.project_names()
+        return top in self.planned or top in self.project_names()
 
     def project_names(self) -> set[str]:
         try:
@@ -178,7 +200,8 @@ def _judge_test(recs: list[dict], code: _Code) -> tuple[str, str]:
 
 def classify(records: list[dict], root: Path, shape: str | None, files: list[str]) -> list[tuple[str, str, str]]:
     """(node id, class, exception line) per test of `files` (absolute paths), sorted by node id."""
-    code = _Code(root, shape)
+    start = next((r for r in records if r.get("kind") == "start"), {})
+    code = _Code(root, shape, start.get("sys_path") if isinstance(start.get("sys_path"), list) else None)
     wanted = {str(Path(f).resolve()) for f in files}
 
     def wanted_file(f: str) -> bool:

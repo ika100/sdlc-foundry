@@ -36,7 +36,7 @@ def pytest_configure(config) -> None:
     global _PATH
     _PATH = os.environ.get(ENV) or None
     if not hasattr(config, "workerinput"):
-        _append({"kind": "start"})
+        _append({"kind": "start", "sys_path": [os.path.realpath(p or ".") for p in sys.path if isinstance(p, str)]})
 
 
 def _module_file(name: str | None) -> str | None:
