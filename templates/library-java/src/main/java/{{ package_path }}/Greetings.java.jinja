@@ -1,0 +1,20 @@
+package {{ package_name }};
+
+/** Greetings: the sample public API of {{ project_name }}. Replace it with the library's own. */
+public final class Greetings {
+
+  private Greetings() {}
+
+  /**
+   * Greets someone by name.
+   *
+   * @param name who to greet; blank means everyone
+   * @return the greeting
+   */
+  public static String greet(String name) {
+    if (name == null || name.isBlank()) {
+      return "Hello, world!";
+    }
+    return "Hello, " + name.strip() + "!";
+  }
+}

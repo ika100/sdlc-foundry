@@ -32,7 +32,7 @@ GATE_SOURCE = TEMPLATES / "gitops-app" / "scripts" / "gate.sh"
 
 # AC-130.14: the coverage table. template -> covered gates (recipes). Keep equal to the templates of shapes.yml.
 TEST_TEMPLATES = ["service-python", "library-python", "service-go", "service-java", "web-nextjs", "service-typescript",
-                  "library-typescript", "service-dotnet", "library-dotnet"]
+                  "library-typescript", "service-dotnet", "library-dotnet", "library-java"]
 GITOPS_TEMPLATES = ["gitops-app", "cluster-gitops"]
 COVERED = {t: ["test", "test-fast", "secrets-scan"] for t in TEST_TEMPLATES}
 COVERED.update({t: ["test", "test-fast", "validate", "render-check", "secrets-scan"] for t in GITOPS_TEMPLATES})

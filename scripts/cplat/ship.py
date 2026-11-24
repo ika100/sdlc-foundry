@@ -1002,13 +1002,14 @@ class CheckWatch:
     def _without_idle_foreign(self, cs: list[dict]) -> list[dict]:
         """#999: a check suite of another app with no check run (Dependabot's `.github/dependabot.yml`, queued) never
         completes; `gh pr checks` lists it as a pending check without an Actions run. Only as many such pending checks
-        as the head has idle foreign suites are not waited for (said once)."""
+        as the head has idle foreign suites are not waited for (said once). #1052: a foreign suite still `queued` (never
+        started) is idle too, though it holds a check run; it cannot be re-requested."""
         loose = [c for c in cs if c.get("bucket") == "pending" and not run_of(c)]
         if not loose or not self.head:
             return cs
         out = gh(["api", f"repos/{{owner}}/{{repo}}/commits/{self.head}/check-suites", "--jq",
-                  '[.check_suites[] | select(.app.slug != "github-actions" and .check_runs_count == 0 '
-                  'and .status != "completed")] | length'], cwd=self.repo, check=False)
+                  '[.check_suites[] | select(.app.slug != "github-actions" and .status != "completed" '
+                  'and (.check_runs_count == 0 or .status == "queued"))] | length'], cwd=self.repo, check=False)
         try:
             idle = int(out.strip() or 0)
         except ValueError:
@@ -1017,7 +1018,7 @@ class CheckWatch:
         for c in skipped:
             if c["name"] not in self.reported:
                 self.reported[c["name"]] = "ignored"
-                say(f"  {c['name']}: a check suite of another app without check runs, not waited for")
+                say(f"  {c['name']}: a check suite of another app that never started, not waited for")
         return [c for c in cs if not any(c is s for s in skipped)]
 
     def _slug(self) -> str | None:
@@ -1350,7 +1351,10 @@ def _job_log(repo: Path, slug: str, c: dict, why: str) -> tuple[str, str]:
         return "", why
     path = f"repos/{slug}/actions/jobs/{m.group(1)}/logs"
     # #825: `gh run view --log-failed` refuses a log with terminal escape sequences; `gh api` prints it on request
-    raw = ANSI.sub("", gh(["api", path, "--allow-escape-sequences"], cwd=repo, check=False))
+    raw = gh(["api", path, "--allow-escape-sequences"], cwd=repo, check=False)
+    if "unknown flag" in GH_ERRORS.get(f"api {path}", ""):   # #1038: a gh before the flag prints the log without it
+        raw = gh(["api", path], cwd=repo, check=False)
+    raw = ANSI.sub("", raw)
     text = "".join(f"{c['name']}\t\t{ln}" for ln in raw.splitlines(keepends=True) if ln.strip())
     return text, GH_ERRORS.get(f"api {path}", "") or why
 

@@ -141,7 +141,8 @@ shapes:
     detection:
       copier_src: templates/service-java
       sniff:
-        - "pom.xml"
+        - "pom.xml + Dockerfile"
+        - "pom.xml referencing spring-boot"
         - "build.gradle*"
     default_stack:
       language: java
@@ -299,6 +300,28 @@ shapes:
       runtime: dotnet-lts
     status: stable
     adr: [125, 127]
+
+  - id: library-java
+    plugin: svc-java
+    template: library-java
+    deployable: false
+    test_globs: ["src/test/**/*.java"]   # where `cplat spec trace` looks for AC ids (ADR-026)
+    ci_checks: ["quality (spotless + checkstyle + compile)", "test (mvn verify + JaCoCo)", "security (OWASP dependency-check + detect-secrets)", "ci-extra"]   # required on main by new-service (spec 054)
+    validation:   # spec 103: what `cplat validate` selects and which changes always run the full tests and security
+      selector: null
+    library: true
+    publish:   # spec 217 / ADR-125: the release tag's `publish` job deploys <group_id>:<project_name> to maven.pkg.github.com
+      registry: github-maven
+    detection:
+      copier_src: templates/library-java
+      sniff:
+        - "pom.xml without a Dockerfile or a Spring Boot reference"
+    default_stack:
+      language: java
+      version: "21"
+      build_tool: maven
+    status: stable
+    adr: [9, 125]
 
   - id: platform
     plugin: svc

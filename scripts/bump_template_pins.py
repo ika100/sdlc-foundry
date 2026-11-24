@@ -44,6 +44,12 @@ UPDATERS: dict[str, dict] = {
             ["mvn", "-B", "-q", "versions:update-properties", "-DallowMajorUpdates=false", "-DgenerateBackupPoms=false"],
         ],
     },
+    "library-java": {             # no parent POM: every version is a property
+        "files": ["pom.xml"],
+        "commands": [
+            ["mvn", "-B", "-q", "versions:update-properties", "-DallowMajorUpdates=false", "-DgenerateBackupPoms=false"],
+        ],
+    },
     "web-nextjs": {
         "files": ["package.json"],
         "commands": [["npx", "--yes", "npm-check-updates", "-u", "--target", "minor"]],
