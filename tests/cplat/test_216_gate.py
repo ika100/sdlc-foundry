@@ -74,7 +74,7 @@ def test_the_drivers_own_wait_does_not_let_the_owner_stop_ac_216_8(dw, monkeypat
     st = with_driver(dw, monkeypatch)
     put_mark(dw, f"{CPLAT} next --wait",f"driver:{st['run_id']}", os.getppid())
     r = stop(dw)
-    assert r.json["decision"] == "block" and WAIT in r.json["reason"]
+    assert r.json.get("decision") == "block" and WAIT in r.json.get("reason", "")
 
 
 def test_a_running_wait_of_the_owner_lets_the_stop_through_ac_216_8(dw, monkeypatch):  # AC-216.8

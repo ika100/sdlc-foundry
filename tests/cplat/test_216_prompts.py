@@ -75,6 +75,7 @@ def test_the_instructions_read_at_the_start_end_shorter_than_before_ac_216_7(): 
 def test_the_reference_holds_todays_loop_in_todays_order_ac_216_7():  # AC-216.7
     wanted = ["publish", "next --json", "repo start", "next --wait", "repo resume", "repo hold", "land", "phase complete", "complete",
               "finish"]
+    assert (ROOT / LOOP).is_file(), f"{LOOP} is missing"
     assert is_subsequence(wanted, mentions(LOOP))
     body = collapsed(prompt(LOOP))
     assert re.search(r"three\b.*\bin a row", body) and "--cause environment" in body and "TIMEOUT:" in body and "WAIT:" in body
@@ -121,7 +122,9 @@ def test_the_attended_answer_path_goes_through_the_switch_ac_216_10():  # AC-216
 # ---------------- AC-216.12: the kill rule is written down ----------------
 
 def test_the_adr_states_the_kill_rule_of_the_measure_ac_216_12():  # AC-216.12
-    (adr,) = list((ROOT / "docs" / "adr").glob("*-a-system-ships-mechanical-loop-runs-in-cplat.md"))
+    found = list((ROOT / "docs" / "adr").glob("*-a-system-ships-mechanical-loop-runs-in-cplat.md"))
+    assert len(found) == 1, f"one ADR for the mechanical loop, found {found}"
+    adr = found[0]
     text = collapsed(adr.read_text())
     assert "ADR-082" in text and "ADR-086" in text and "CPLAT_SYSTEM_DRIVER=0" in text
     for number in ("40", "4.0 M", "journey 23"):
@@ -133,6 +136,8 @@ def test_the_adr_states_the_kill_rule_of_the_measure_ac_216_12():  # AC-216.12
 
 def test_the_changelog_fragment_names_the_switch_and_the_measure_ac_216_12():  # AC-216.12
     folder = ROOT / "docs" / "changelog.d"
-    (fragment,) = [*folder.glob("216-*.added.md"), *folder.glob("216-*.changed.md")]
+    found = [*folder.glob("216-*.added.md"), *folder.glob("216-*.changed.md")]
+    assert len(found) == 1, f"one changelog fragment for spec 216, found {found}"
+    fragment = found[0]
     text = collapsed(fragment.read_text())
     assert "CPLAT_SYSTEM_DRIVER" in text and "measure" in text.lower()
