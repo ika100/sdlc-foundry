@@ -6,7 +6,6 @@ eval gate reads a real git repo under tmp_path with records passed in (`records=
 from __future__ import annotations
 
 import json
-import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -317,11 +316,13 @@ def test_the_field_keeps_its_answer_whatever_the_criteria_ac_222_10(tmp_path, ca
 
 # ---------------- AC-222.11: the docs ----------------
 
-def test_the_docs_name_the_workflow_and_the_rule_ac_222_11():  # AC-222.11
+def test_the_docs_name_the_workflow_and_the_rule_ac_222_11(capsys):  # AC-222.11
     readme = (BENCH / "README.md").read_text()
     section = readme.split("## ux-plan", 1)[1].split("\n## ", 1)[0]
     for word in ("bench-files-web", "--dir", "plugins/web/", "spec_ux.py", "ux.md"):
         assert word in section
-    ref = (ROOT / "plugins/svc/skills/spec-format/references/spec.md").read_text()
-    assert "spec 222" in ref
-    assert os.path.exists(ROOT / "docs/specs/222-the-ux-step-is-measured-on-website-plans/spec.md")
+    with pytest.raises(SystemExit):
+        spec.main(["ux", "--help"])
+    help_text = " ".join(capsys.readouterr().out.split())
+    for word in ("image", "field", "page", "header", "log", "spec 222"):
+        assert word in help_text

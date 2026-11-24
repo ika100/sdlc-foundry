@@ -34,7 +34,7 @@ Spec 219 added the UX design step: `/component:plan` runs `web:ux-designer` for 
 - **AC-222.8** Given a criterion or story of a website spec, when `cplat spec ux` looks for something a user sees, then it also recognises inputs, rows, labels, headings, headers and footers, keyboard focus, edit mode, empty and loading states, screen readers and accessible names, colours and themes, "appears", and a person typing, pressing, entering, selecting or submitting.
 - **AC-222.9** Given a criterion that names a container, Docker or base image (or an image tag, digest or scan), fields of a JSON, request, response, body or query, a page size, page number or `page` parameter, or what logs or metrics show, when `cplat spec ux` looks for something a user sees, then those words do not count; another visible word in the same criterion still does.
 - **AC-222.10** Given the labelled cases in `tests/cplat/fixtures/ux_cases.json` (criteria taken from the journey and demo website specs, each with its source, plus written website-repo criteria that change no screen), when the rule decides each one alone, then every case gets its label; a spec with a `ux:` field keeps that answer whatever its criteria say.
-- **AC-222.11** Given the benchmark README and the spec-format reference of the UX step, when they are read, then they name the `ux-plan` workflow, when the gate asks for it, its sample and its result check, and how the rule treats image, field and page wording.
+- **AC-222.11** Given the benchmark README, when it is read, then it names the `ux-plan` workflow, when the gate asks for it, its sample and its result check; and `cplat spec ux --help` says that image, field, page, header and log wording of a server or build does not count as visible.
 
 ## Non-goals
 
@@ -50,6 +50,7 @@ Spec 219 added the UX design step: `/component:plan` runs `web:ux-designer` for 
 - **A3** The gate selects `ux-plan` for any changed prompt under `plugins/web/` and for `scripts/cplat/spec_ux.py` (other option: only `ux-designer.md`; affects AC-222.6, AC-222.7). Reason: the web coder and tester read `ux.md` too, and `spec_ux.py` decides whether the step runs.
 - **A4** The tuned rule removes vetoed phrases before it looks for a visible word, instead of dropping the ambiguous words (other option: drop "image", "field", "page"; affects AC-222.8, AC-222.9). Reason: "page" and "field" are the most frequent words of the real UI criteria.
 - **A5** Ground truth for the cases is a person's reading: a criterion is labelled `needed` when it describes something a user sees or does in the browser (other option: label whole specs only; affects AC-222.10).
+- **A6** The rule is documented in `cplat spec ux --help` and its module, not in the spec-format reference (other option: a sentence in that prompt; affects AC-222.11). Reason: the prompts are 49 bytes under their size baseline, and a prompt change would ask every release for new benchmarks.
 
 ## Open questions
 
@@ -58,4 +59,7 @@ None.
 ## Changelog
 
 - 2026-11-24 created
+- 2026-11-24 amended: AC-222.11 documents the rule in the command's help (A6)
+- 2026-11-24 approved
+- 2026-11-24 draft: amend: AC-222.11 documents the rule in cplat spec ux's help, not in a prompt (prompt size headroom)
 - 2026-11-24 approved
