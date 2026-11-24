@@ -236,7 +236,7 @@ class Hold:
 
 @contextlib.contextmanager
 def held(slug: str, who: str, timeout: float, interval: float = 5, *,
-         fast_lane: Callable[[], bool] | None = None) -> Iterator[Hold]:
+         fast_lane: Callable[[], bool] | None = None, stats: LandStats | None = None) -> Iterator[Hold]:
     """Hold the merge lock of `slug`. While the holder's process is alive the wait is a queue: it does not count against
     `timeout` and ends in `Busy` only after QUEUE_LIMIT seconds. `Busy` after `timeout` seconds when the holder's process
     is gone and the lock stays taken. A release hold of another process (spec 198) is waited for outside the lock and does
@@ -244,7 +244,7 @@ def held(slug: str, who: str, timeout: float, interval: float = 5, *,
     land is outside the e2e scope: then it merges while the claimant waits on its checks."""
     path, info = dispatch_state.merge_lock_path(slug), dispatch_state.merge_info_path(slug)
     path.parent.mkdir(parents=True, exist_ok=True)
-    stats = LandStats()
+    stats = stats if stats is not None else LandStats()    # a caller's own, so its fast-lane predicate can fill `scope`
     with open(path, "a") as lock:
         _acquire(lock, slug, timeout, interval, stats, fast_lane, who)
         hold = Hold(slug, who, lock, timeout, interval, stats)

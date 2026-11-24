@@ -45,6 +45,7 @@ tasks:
     covers: [AC-220.3, AC-220.4, AC-220.7, AC-220.8, AC-220.10]
     parallel_safe: true
     depends_on: [t2, t3]
+    done: true
 human_steps:
   - "7 days after the release that carries spec 220: run `cplat platform runs report --since 7`, check that both AC-220.9 counts in the Lands block are 0, and write the Lands block into #280"
 ---

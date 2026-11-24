@@ -22,9 +22,11 @@ from pathlib import Path
 import adr
 import core
 import dispatch_state
+import e2e_gate
 import land_resolve
 import merge_lock
 import rulescheck
+import runs
 import ship
 import spec
 from core import PlatformError
@@ -98,6 +100,7 @@ class Settled:
     failed: list[dict] = field(default_factory=list)
     sha: str = ""                                # the merge commit
     updated: bool = False                        # the branch head changed on GitHub (catch-up or regeneration)
+    kept: bool = False                           # the merged head kept an e2e (spec 220)
 
 
 def _last_line(res) -> str:
@@ -412,18 +415,70 @@ def regenerate(repo: Path, url: str, watch: ship.CheckWatch, rounds: Rounds, run
     return [f"merged {base} into {head} without a conflict ({n})"]
 
 
+# ---------------- the fast lane and the record of a land (spec 220) ----------------
+
+def _base_of(repo: Path, url: str) -> str:
+    return _view(repo, url, "baseRefName").get("baseRefName") or "main"
+
+
+def _scope_name(scope: e2e_gate.Scope) -> str:
+    return "unknown" if scope.run is None else ("code" if scope.run else "docs")
+
+
+def fast_lane(repo: Path, url: str, mode: Mode, stats: merge_lock.LandStats) -> Callable[[], bool] | None:
+    """The predicate `merge_lock.held(fast_lane=)` asks when it finds a live claim: True when this land's own change is outside
+    the e2e scope. None for a RELEASE land (AC-220.7), which queues behind a claim. The scope it found goes to `stats.scope`."""
+    if not mode.catch_up:
+        return None
+
+    def outside() -> bool:
+        scope = e2e_gate.change_scope(repo, url, _base_of(repo, url))
+        stats.scope = _scope_name(scope)
+        return scope.run is False
+    return outside
+
+
+def lock(repo: Path, url: str, slug: str, who: str, timeout: float, interval: float, mode: Mode = CATCH_UP):
+    """`merge_lock.held` for a land of `url`: outside the e2e scope it merges while a claimant waits on its checks."""
+    if not e2e_gate.workflows(repo):        # no e2e workflow: no claims, no fast lane, the lock as before
+        return merge_lock.held(slug, who, timeout, interval)
+    stats = merge_lock.LandStats()
+    return merge_lock.held(slug, who, timeout, interval, fast_lane=fast_lane(repo, url, mode, stats), stats=stats)
+
+
+def record_land(repo: Path, url: str, watch: ship.CheckWatch, hold: merge_lock.Hold | None, mode: Mode) -> None:
+    """Add this land to the run record's `lands` list (AC-220.8). Never raises, never changes the result of the land."""
+    try:
+        if hold is None:
+            return
+        stats = hold.stats
+        if stats.scope is None and e2e_gate.workflows(repo):
+            stats.scope = _scope_name(e2e_gate.change_scope(repo, url, _base_of(repo, url)))
+        m = re.search(r"/pull/(\d+)", url)
+        item = {"pr": int(m.group(1)) if m else url, "mode": mode.name, "scope": stats.scope,
+                "lock_wait_min": round(stats.lock_wait_s / 60, 1),
+                "lock_wait_catch_up_min": round(stats.lock_wait_catch_up_s / 60, 1),
+                "catch_up_min": round(stats.catch_up_s / 60, 1), "catch_up_e2e": stats.catch_up_e2e,
+                "range_scope": stats.range_scope, "fast_lane": stats.fast_lane, "e2e_kept": stats.e2e_kept}
+        runs.add_to(watch.run_id, "lands", item)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 # ---------------- the settle loop ----------------
 
 def settle(repo: Path, url: str, watch: ship.CheckWatch, timeout: float, interval: float, rounds: Rounds, run,
-           before_merge: Callable[[], tuple[bool, list[str]]] | None = None, mode: Mode = CATCH_UP) -> Settled:
+           before_merge: Callable[[], tuple[bool, list[str]]] | None = None, mode: Mode = CATCH_UP,
+           hold: merge_lock.Hold | None = None) -> Settled:
     """Inside the merge lock, after the first green: catch up with the base (CATCH_UP) or stop as `BaseMoved` (RELEASE), then
     merge on the head the checks were judged on. A conflict in a generated file is regenerated, a head that moved or a merge
-    GitHub refuses is waited for (`MAX_REFUSALS` in one land), and nothing merges unchecked."""
+    GitHub refuses is waited for (`MAX_REFUSALS` in one land), and nothing merges unchecked. With a `hold` (spec 220) the
+    catch-up waits give the lock up under a claim, and the e2e run of a kept head is cancelled after the merge."""
     lines: list[str] = []
     updated = False
     while True:
         try:
-            caught = merge_lock.catch_up(repo, url, watch, timeout, interval, allow=mode.catch_up)
+            caught = merge_lock.catch_up(repo, url, watch, timeout, interval, allow=mode.catch_up, hold=hold)
         except merge_lock.Behind as e:
             raise BaseMoved(url, e.base) from e
         except Unresolvable:
@@ -450,7 +505,9 @@ def settle(repo: Path, url: str, watch: ship.CheckWatch, timeout: float, interva
         watch.expected = {}                      # the green before this merge attempt met them
         kind, value = merge(repo, url, watch.head, run)
         if kind == "merged":
-            return Settled("merged", lines + [f"merged {url} (squash)"] + cleanup(repo, url, run), sha=value, updated=updated)
+            cancelled = watch.cancel_runs(caught.kept) if caught.kept else []
+            return Settled("merged", lines + [f"merged {url} (squash)"] + cancelled + cleanup(repo, url, run), sha=value,
+                           updated=updated, kept=bool(caught.kept))
         if kind in ("head-moved", "refused"):
             rounds.refused += 1
             rounds.reason = value if kind == "refused" else f"the head moved to {value[:7]}"

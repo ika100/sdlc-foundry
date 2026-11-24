@@ -1432,8 +1432,9 @@ def land(repo: Path, timeout: float, interval: float, queue_timeout: float = QUE
     slug, who = merge_lock.slug_of(repo, pr), merge_lock.who_of(pr)
     whole = bool(st.get("merge", True)) and "e2e" in dispatch_policy.serialize(repo)   # with e2e: the whole land phase
     try:
-        with merge_lock.held(slug, who, timeout, min(interval, 5)) if whole else contextlib.nullcontext():
-            return _land(repo, st, pr, timeout, interval, queue_timeout, (slug, who, whole))
+        import land_merge
+        with land_merge.lock(repo, pr, slug, who, timeout, min(interval, 5)) if whole else contextlib.nullcontext() as hold:
+            return _land(repo, st, pr, timeout, interval, queue_timeout, (slug, who, whole), hold)
     except merge_lock.Conflict as e:        # spec 171: only a conflict that is not a generated file's reaches here
         raise PlatformError(str(e), hint=CONFLICT_HINT) from e
 
@@ -1491,7 +1492,7 @@ def push_ahead(repo: Path, st: dict, pr: str, watch: CheckWatch) -> str | None:
 
 
 def _land(repo: Path, st: dict, pr: str, timeout: float, interval: float, queue_timeout: float,
-          lock: tuple[str, str, bool]) -> tuple[bool, list[str]]:
+          lock: tuple[str, str, bool], hold=None) -> tuple[bool, list[str]]:
     import land_merge
     watch = CheckWatch(repo, pr, queue_timeout, st.get("run_id"))
     push_ahead(repo, st, pr, watch)
@@ -1528,14 +1529,16 @@ def _land(repo: Path, st: dict, pr: str, timeout: float, interval: float, queue_
         save_state(repo, st)
         return True, lines + ["not merged (--no-merge): merge the PR (and its gitops PRs) yourself, then run `/component:ship` "
                               "again to wait for dev"]
-    import merge_lock
     slug, who, whole = lock
-    with contextlib.nullcontext() if whole else merge_lock.held(slug, who, timeout, min(interval, 5)):
-        return _merge_locked(repo, st, pr, watch, lines, timeout, interval, queue_timeout, rounds)
+    with contextlib.nullcontext(hold) if whole else land_merge.lock(repo, pr, slug, who, timeout, min(interval, 5)) as hold:
+        try:
+            return _merge_locked(repo, st, pr, watch, lines, timeout, interval, queue_timeout, rounds, hold)
+        finally:
+            land_merge.record_land(repo, pr, watch, hold, land_merge.CATCH_UP)
 
 
 def _merge_locked(repo: Path, st: dict, pr: str, watch: CheckWatch, lines: list[str], timeout: float, interval: float,
-                  queue_timeout: float, rounds) -> tuple[bool, list[str]]:
+                  queue_timeout: float, rounds, hold=None) -> tuple[bool, list[str]]:
     """Inside the merge lock (spec 171): `land_merge.settle` catches the branch up, regenerates a conflict in a generated
     file, merges on the head its checks were judged on and cleans up; the before-merge gitops PRs and a draft go first."""
     import land_merge
@@ -1548,7 +1551,7 @@ def _merge_locked(repo: Path, st: dict, pr: str, watch: CheckWatch, lines: list[
 
     try:
         settled = land_merge.settle(repo, pr, watch, timeout, interval, rounds, run, before_merge=before_merge,
-                                   mode=land_merge.CATCH_UP)
+                                   mode=land_merge.CATCH_UP, hold=hold)
     except land_merge.Unresolvable as e:
         raise PlatformError(str(e), hint=CONFLICT_HINT) from e
     except land_merge.MergeRefused:
