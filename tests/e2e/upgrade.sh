@@ -34,6 +34,8 @@ root=$(cd "$(dirname "$0")/../.." && pwd)
 . "$root/tests/e2e/lib/probe.sh"   # probe_run: probe pods with a component's own variables (#323)
 # shellcheck source=SCRIPTDIR/lib/uv-cache.sh
 . "$root/tests/e2e/lib/uv-cache.sh"   # a throwaway uv cache per script run (spec 208)
+# shellcheck source=SCRIPTDIR/lib/docker-build.sh
+. "$root/tests/e2e/lib/docker-build.sh"   # e2e_docker_build: docker build, retried once on a registry 429 (#1045)
 work="${E2E_WORK:-$(mktemp -d)}"
 e2e_uv_cache_start
 port="${E2E_PORT:-8098}"
@@ -189,7 +191,7 @@ k get nodes >/dev/null || fail "the cluster $ctx is not reachable"
 
 step "2 Setup on $FROM: build and push upg-api"
 (cd "$api_repo" && uv lock -q) || fail "uv lock in upg-api failed"      # --skip-tasks left no uv.lock and the Dockerfile needs it
-docker build -q -t "localhost:$regport/upg-api:latest" "$api_repo" >/dev/null || fail "docker build upg-api failed"
+e2e_docker_build -q -t "localhost:$regport/upg-api:latest" "$api_repo" >/dev/null || fail "docker build upg-api failed"
 docker push -q "localhost:$regport/upg-api:latest" >/dev/null || fail "docker push upg-api failed"
 
 # ---- probes: plain Pods that carry upg-api's own variables, as the component sees them ----
