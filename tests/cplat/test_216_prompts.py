@@ -46,6 +46,22 @@ def test_the_session_reacts_to_every_result_of_the_wait_ac_216_7():  # AC-216.7
     body = collapsed(text)
     assert re.search(r"three\b.*\bin a row", body) and "--cause environment" in body
     assert "cplat next --json" in body                                       # the hand-over after DONE:, ESCALATED: and STOPPED:
+    bullets = [b for b in re.split(r"\n(?=\s*[-*] )", text) if re.match(r"\s*[-*] ", b)]
+
+    def bullet_of(word):                  # the bullet whose first line names the result line
+        found = [b for b in bullets if word in b.strip().split("\n")[0]]
+        assert found, word
+        return found[0]
+
+    entry, ended = bullet_of("ENTRY:"), bullet_of("ENDED:")
+    assert "references/ship-entry.md" in entry and "drive" in entry
+    assert entry is not ended, "ENDED: has its own bullet, so that it cannot build the entry"
+    assert "drive" in ended and "ship-entry" not in ended and "ENTRY:" not in ended and "the same" not in ended
+    handover = [u for u in re.split(r"\n\s*\n|\n(?=\s*[-*] |#)", text) if "cplat next --json" in u]
+    assert handover
+    for word in ("DONE:", "ESCALATED:", "STOPPED:"):
+        own = bullet_of(word)
+        assert "cplat next --json" in own or any(word in u or "every result" in u for u in handover), word
 
 
 def test_the_session_builds_the_entry_and_follows_the_reference_for_it_ac_216_7():  # AC-216.7
