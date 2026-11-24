@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Publish the release (spec 217, ADR-125): check that the commit built is the tagged one, build the jar with the tag's version,
+# Publish the release (spec 217, ADR-125): check that the commit built is the tagged one, build the jar (with its sources and
+# javadoc jars) with the tag's version,
 # then deploy it to GitHub Packages (maven.pkg.github.com, pom.xml's distributionManagement). The `publish` CI job runs it on a
 # v* tag, after every gate of the same run passed, so the build skips the tests.
 #   devbox run publish vX.Y.Z             check, build, deploy (needs GH_TOKEN with packages: write)
@@ -43,6 +44,8 @@ case "$registry" in
      exit 1 ;;
 esac
 jar="target/$artifact-$version.jar"
+# the jar with its sources and javadoc jars: consumers' IDEs show both (#1058)
+jars=("$jar" "target/$artifact-$version-sources.jar" "target/$artifact-$version-javadoc.jar")
 
 # set the tag's version for this build only: pom.xml is restored whatever happens
 settings=$(mktemp)
@@ -58,8 +61,10 @@ fi
 
 if [ "$dry_run" -eq 1 ]; then
   mvn -B -DskipTests -Djacoco.skip=true package >&2
-  [ -f "$jar" ] || { echo "publish: the build wrote no $jar" >&2; exit 1; }
-  echo "publish: would publish $jar as $group:$artifact:$version to $registry"
+  for f in "${jars[@]}"; do
+    [ -f "$f" ] || { echo "publish: the build wrote no $f" >&2; exit 1; }
+  done
+  echo "publish: would publish ${jars[0]}, ${jars[1]} and ${jars[2]} as $group:$artifact:$version to $registry"
   exit 0
 fi
 
