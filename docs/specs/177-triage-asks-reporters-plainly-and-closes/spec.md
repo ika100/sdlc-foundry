@@ -43,6 +43,7 @@ Closing what needs no work.
 - **A1** The hard rule "never close an issue" becomes "never close an issue without the user's confirmation" (other option: keep issues open; affects AC-177.3, AC-177.4).
 - **A2** A silent `needs-info` issue is proposed for closing after 14 days, configurable per repository (other option: 30 days; affects AC-177.4).
 - **A3** The plain-language rules apply to reporters outside the repository only; comments to `owner`, `member` or `collaborator` may use internal terms (other option: plain language for everyone; affects AC-177.2).
+- Decided by the user (2026-11-24, stop of spec-177.3): Fix the AC-177.3 test rows so feature gets a spec and needs-exploring gets no priority/expected? Answer: "User 2026-11-24: yes. Update the six spec 176/196 tests (test_176_view x3, test_176_act x2, test_196_triage_priority x1) to the spec 177 behaviour as plan task t5b before t6: needs-info rows carry `missing`, the question-row confirm line ends with ', close as not planned', comments get the 'Duplicate of #N' prefix and the days footer. Change only those expectations."
 
 ## Open questions
 
@@ -52,3 +53,4 @@ Closing what needs no work.
 - 2026-11-10 approved
 - 2026-11-23 brought up to date with spec 176 (done: `batch`, `confirm`), spec 196 and #649 (every undecided issue is queued); criteria unchanged in substance
 - 2026-11-23 building
+- 2026-11-24 answer to the stop of spec-177.3 approved by the user: "User 2026-11-24: yes. Update the six spec 176/196 tests (test_176_view x3, test_176_act x2, test_196_triage_priority x1) to the spec 177 behaviour as plan task t5b before t6: needs-info rows carry `missing`, the question-row confirm line ends with ', close as not planned', comments get the 'Duplicate of #N' prefix and the days footer. Change only those expectations."
