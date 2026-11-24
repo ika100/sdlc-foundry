@@ -1,7 +1,7 @@
 {
   "name": "svc-java",
-  "version": "0.8.1",
-  "description": "Agents for Java service repos (Spring Boot 4, Maven, JDK 21, distroless): coder, tester, deployment, observability, and release. Used by the /svc:* orchestrators when the repo shape is service-java. Requires devbox recipes from the service-java Copier template.",
+  "version": "0.9.0",
+  "description": "Agents for Java service and library repos (Spring Boot 4, Maven, JDK 21, distroless; plain jars on GitHub Packages): coder, tester, deployment, observability, and release. Used by the /svc:* orchestrators when the repo shape is service-java or library-java. Requires devbox recipes from those Copier templates.",
   "author": {
     "name": "Eike Hensler",
     "email": "eike.hensler@gmail.com"

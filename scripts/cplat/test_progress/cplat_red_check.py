@@ -13,13 +13,11 @@ import sys
 import pytest
 
 ENV = "CPLAT_RED_FILE"
-
-
-_FILE: str | None = None   # read once at configure: a test fixture may clear the CPLAT_* variables later
+_PATH: str | None = None   # #1048: read at start, since a suite's autouse fixture may unset CPLAT_* during the tests
 
 
 def _path() -> str | None:
-    return _FILE or os.environ.get(ENV) or None
+    return _PATH or os.environ.get(ENV) or None
 
 
 def _append(record: dict) -> None:
@@ -35,10 +33,10 @@ def _append(record: dict) -> None:
 
 
 def pytest_configure(config) -> None:
-    global _FILE
-    _FILE = os.environ.get(ENV) or None
+    global _PATH
+    _PATH = os.environ.get(ENV) or None
     if not hasattr(config, "workerinput"):
-        _append({"kind": "start"})
+        _append({"kind": "start", "sys_path": [os.path.realpath(p or ".") for p in sys.path if isinstance(p, str)]})
 
 
 def _module_file(name: str | None) -> str | None:

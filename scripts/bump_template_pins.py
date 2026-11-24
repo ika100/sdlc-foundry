@@ -44,6 +44,12 @@ UPDATERS: dict[str, dict] = {
             ["mvn", "-B", "-q", "versions:update-properties", "-DallowMajorUpdates=false", "-DgenerateBackupPoms=false"],
         ],
     },
+    "library-java": {             # no parent POM: every version is a property
+        "files": ["pom.xml"],
+        "commands": [
+            ["mvn", "-B", "-q", "versions:update-properties", "-DallowMajorUpdates=false", "-DgenerateBackupPoms=false"],
+        ],
+    },
     "web-nextjs": {
         "files": ["package.json"],
         "commands": [["npx", "--yes", "npm-check-updates", "-u", "--target", "minor"]],
@@ -59,6 +65,10 @@ UPDATERS: dict[str, dict] = {
     "service-dotnet": {
         "files": ["Directory.Packages.props"],
         # minor/patch within the major (dotnet list package --highest-minor); the Jinja-free PackageVersion lines map back
+        "commands": [["dotnet", "restore"], [sys.executable, str(ROOT / "scripts" / "dotnet_bump_minor.py")]],
+    },
+    "library-dotnet": {           # spec 221: the service's tooling, the same Directory.Packages.props mapping
+        "files": ["Directory.Packages.props"],
         "commands": [["dotnet", "restore"], [sys.executable, str(ROOT / "scripts" / "dotnet_bump_minor.py")]],
     },
     "service-go": {

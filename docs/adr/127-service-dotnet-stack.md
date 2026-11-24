@@ -42,6 +42,9 @@ defaults proposed with the issue, recorded as the spec's assumptions.
   `service-java`, so `cplat deps` reads both with one parser, and the lock files cover the transitive packages.
 - **xUnit v3 on VSTest**: `dotnet test` keeps `--filter`, the TRX logger, `--blame-hang-timeout` and coverlet, which the
   gate, the smoke runner and the coverage gate use; Microsoft.Testing.Platform is a later switch.
+- **Size (#1057)**: the image is about 133 MB unpacked on amd64 (141 MB on arm64), 60 MB to pull; the chiseled base image is about 125 MB of it.
+  Trimming a self-contained publish cuts it to about 50 MB but reports over 100 trim warnings (EF Core, Npgsql, the
+  shared framework's MVC parts), so it is not used. The CI smoke job fails a variant over 150,000,000 bytes.
 - **Chiseled image, UID 65532**: no shell or package manager, like distroless; the platform's numeric non-root user of
   the Go, Java and TypeScript images instead of the image's own `app` user (1654).
 

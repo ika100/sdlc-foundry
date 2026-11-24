@@ -1,0 +1,251 @@
+{
+ "about": "Spec 222 (AC-222.10): criteria of website specs labelled by whether they change what a user sees in the browser (assumption A5). Real ones name their repo and criterion.",
+ "cases": [
+  {
+   "text": "Given the root URL is open, when the user submits a title with the due date left empty, then the request to task-api carries `\"due_date\": null` and the created task appears at the end of the list with \"No due date\". (system AC-002.10)",
+   "ux": "needed",
+   "source": "ika100-demo/taskboard-web",
+   "criterion": "AC-001.4"
+  },
+  {
+   "text": "Given the root URL is open, when the user submits the title `\"  Buy milk  \"` (leading and trailing spaces), then the request to task-api carries the title exactly `\"  Buy milk  \"`, untrimmed, and `GET /tasks` returns it that way. (system AC-002.15)",
+   "ux": "needed",
+   "source": "ika100-demo/taskboard-web",
+   "criterion": "AC-001.12"
+  },
+  {
+   "text": "Given todo \"Buy milk\" is in edit mode with a changed input, when the user chooses \"Edit\" on todo \"Call mum\", then \"Buy milk\" leaves edit mode showing its original title, nothing is sent to todo-api for it, and \"Call mum\" is in edit mode; at no time is more than one row in edit mode. (product AC-002.1)",
+   "ux": "needed",
+   "source": "ika100/todo-web",
+   "criterion": "AC-002.3"
+  },
+  {
+   "text": "Given todo \"Buy milk\" is in edit mode with the input changed to \"Buy oat milk\", when the user presses Escape in the input or chooses \"Cancel\", then the row leaves edit mode showing \"Buy milk\", no request is sent to todo-api, and keyboard focus is on that todo's \"Edit\" control. (product AC-002.4)",
+   "ux": "needed",
+   "source": "ika100/todo-web",
+   "criterion": "AC-002.8"
+  },
+  {
+   "text": "Given todo \"Buy milk\" is in edit mode with the input changed to \"Buy oat milk\", when the user presses the pointer inside the input or presses and releases it on \"Save\", then edit mode is not cancelled by that press; choosing \"Save\" saves as in AC-002.4. (product AC-002.11, product AC-002.2)",
+   "ux": "needed",
+   "source": "ika100/todo-web",
+   "criterion": "AC-002.10"
+  },
+  {
+   "text": "Given a save is waiting for todo-api's answer, when the user presses Enter again or chooses \"Save\" again, then no second `PATCH` is sent for that todo, and Escape, \"Cancel\" or a pointer press outside the row do not end edit mode before the answer arrives. (product AC-002.2)",
+   "ux": "needed",
+   "source": "ika100/todo-web",
+   "criterion": "AC-002.19"
+  },
+  {
+   "text": "Given todo \"Buy milk\" is in edit mode and the input, after removing leading and trailing whitespace, equals \"Buy milk\", when the user saves, then the row leaves edit mode showing \"Buy milk\" and no request is sent to todo-api. (product AC-002.2)",
+   "ux": "needed",
+   "source": "ika100/todo-web",
+   "criterion": "AC-002.21"
+  },
+  {
+   "text": "Given todo \"Buy milk\" is saved as \"Buy oat milk\" and todo-api answers `200`, when the row leaves edit mode, then keyboard focus is on that todo's edit control, now named \"Edit Buy oat milk\". (product AC-002.2)",
+   "ux": "needed",
+   "source": "ika100/todo-web",
+   "criterion": "AC-002.25"
+  },
+  {
+   "text": "Given the Task API's GET /tasks returns tasks, when a person opens /, then the board lists every task in the order the API returned them (oldest first), each title exactly as returned (whitespace kept) and the due date as YYYY-MM-DD, or \"No due date\" when due_date is null (system AC-001.3)",
+   "ux": "needed",
+   "source": "ika100-demo/taskboard5-web",
+   "criterion": "AC-001.1"
+  },
+  {
+   "text": "Given a person opens the board and adds a task, when the browser's network requests are inspected, then every request goes to the web app's own origin and none to the Task API; API_URL is read only on the server and never sent to the browser (system AC-001.10)",
+   "ux": "needed",
+   "source": "ika100-demo/taskboard5-web",
+   "criterion": "AC-001.7"
+  },
+  {
+   "text": "Given `TODO_API_URL` points to a mocked todo-api, when the user saves a new title, then the `PATCH` reaches that address from the todo-web server, the browser makes no request to that address, and no title, draft or todo data is written to localStorage, sessionStorage, IndexedDB or cookies. (product AC-002.2)",
+   "ux": "needed",
+   "source": "ika100/todo-web",
+   "criterion": "AC-002.20"
+  },
+  {
+   "text": "Given the container image is running with its default port 3000 and `TODO_API_URL` pointing to a todo-api that answers `GET /todos` with `200 []`, when a client requests `GET /`, then the answer is `200` with an HTML page that is the todo list page (it contains the add input), and the template landing page is no longer served. (product AC-001.1)",
+   "ux": "needed",
+   "source": "ika100/todo-web",
+   "criterion": "AC-001.1"
+  },
+  {
+   "text": "Given a browser posts `{\"title\": ..., \"due_date\": ...}` to the web app's `POST /api/tasks`, when task-api answers `201` or `422`, then the route answers with the same status and task-api's body unchanged; when task-api answers anything else, fails to connect or exceeds 6 seconds, then the route answers `502` with `{\"detail\": \"The task could not be saved.\"}`. (system AC-002.14)",
+   "ux": "none",
+   "source": "ika100-demo/taskboard-web",
+   "criterion": "AC-001.11"
+  },
+  {
+   "text": "Given the API is unreachable or the API's address is not configured, when the web app starts and its liveness and readiness endpoints are called, then the app starts and both endpoints answer as healthy. (system AC-002.11)",
+   "ux": "none",
+   "source": "ika100-demo/taskboard2-web",
+   "criterion": "AC-001.12"
+  },
+  {
+   "text": "Given the Task API is unreachable, when the platform probes the board, then `/api/health` and `/api/ready` keep answering `200`, so the board stays served (system AC-001.7)",
+   "ux": "none",
+   "source": "ika100-demo/taskboard26-web",
+   "criterion": "AC-001.7"
+  },
+  {
+   "text": "Given the Task API is unavailable, when the web app's own health and readiness endpoints (`/api/health`, `/api/ready`) are called, then both still answer with status 200. (system AC-001.10)",
+   "ux": "none",
+   "source": "ika100-demo/taskboard3-web",
+   "criterion": "AC-001.8"
+  },
+  {
+   "text": "Given the Task API is unreachable, when the web app's readiness endpoint `/api/ready` and liveness endpoint `/api/health` are called, then both still answer `200`. (system AC-001.11)",
+   "ux": "none",
+   "source": "ika100-demo/taskboard4-web",
+   "criterion": "AC-001.11"
+  },
+  {
+   "text": "Given a load or save against the Task API fails (as in AC-001.10 or AC-001.12), when the web app's server log is read, then it holds one entry for that failure naming the HTTP status or the error kind (connection error, timeout, malformed body) and not the task's title or due date. (system AC-001.11, AC-001.12)",
+   "ux": "none",
+   "source": "ika100-demo/taskboard4-web",
+   "criterion": "AC-001.15"
+  },
+  {
+   "text": "Given the Task API is down, when the platform calls `/api/ready` and `/api/health`, then both still answer 200, so the page stays reachable (system AC-001.8)",
+   "ux": "none",
+   "source": "ika100-demo/taskboard16-web",
+   "criterion": "AC-001.8"
+  },
+  {
+   "text": "Given the Task API is unreachable, when `/api/ready` and `/api/health` are called, then both still answer 200, so the web site keeps serving its pages (system AC-001.8)",
+   "ux": "none",
+   "source": "ika100-demo/taskboard23-web",
+   "criterion": "AC-001.8"
+  },
+  {
+   "text": "Given the todo list page is deployed, when a client requests `GET /api/health`, `GET /api/ready` and `GET /api/metrics`, then each answers as it did before this feature. (product AC-001.1)",
+   "ux": "none",
+   "source": "ika100/todo-web",
+   "criterion": "AC-001.2"
+  },
+  {
+   "text": "Given the task API answers `GET /tasks` with `200 []`, when a person opens the web app's root URL, then the page shows the heading \"Tasks\", the message \"No tasks yet.\" and the add-task form with a title field, a due date field and a submit button. (system AC-001.6)",
+   "ux": "needed",
+   "source": "ika100/demo-taskboard-web",
+   "criterion": "AC-001.1"
+  },
+  {
+   "text": "Given any state of the task list (empty or not), when a person opens the web app's root URL, then the page answers `200` and shows the heading \"Tasks\" and the add-task form. (system AC-001.6) (smoke)",
+   "ux": "needed",
+   "source": "ika100/demo-taskboard-web",
+   "criterion": "AC-001.2"
+  },
+  {
+   "text": "Given the task API answers `GET /tasks` with tasks \"A\" (`due_date` \"2026-12-01\") and then \"B\" (`due_date` `null`), when a person opens the root URL, then \"A\" is listed before \"B\", \"A\" shows \"Due 2026-12-01\" and \"B\" shows \"No due date\", in the order the API returned them with no re-sorting. (system AC-001.7)",
+   "ux": "needed",
+   "source": "ika100/demo-taskboard-web",
+   "criterion": "AC-001.3"
+  },
+  {
+   "text": "Given the task API returns a task with `due_date` \"2026-12-01\", when the page is rendered in any server or browser time zone (for example UTC-10 and UTC+14), then it shows exactly \"Due 2026-12-01\". (system AC-001.7)",
+   "ux": "needed",
+   "source": "ika100/demo-taskboard-web",
+   "criterion": "AC-001.4"
+  },
+  {
+   "text": "Given the page was loaded once and afterwards a task was added directly through the task API, when the person reloads the root URL, then the new task appears in the list (the list is fetched from the API on every page load, never served from a cache). (system AC-001.8)",
+   "ux": "needed",
+   "source": "ika100/demo-taskboard-web",
+   "criterion": "AC-001.5"
+  },
+  {
+   "text": "Given the task list page, when a person enters the title \"Buy milk\", leaves the due date empty and submits, then the web app sends `POST /tasks` with `title` \"Buy milk\" and `due_date` `null` (or no `due_date`), and on `201` the returned task appears at the end of the list with \"No due date\" without a page navigation, and the title and due date fields are empty again. (system AC-001.9)",
+   "ux": "needed",
+   "source": "ika100/demo-taskboard-web",
+   "criterion": "AC-001.6"
+  },
+  {
+   "text": "The container image runs as user 65532 and listens on port 3000.",
+   "ux": "none",
+   "source": "written for spec 222",
+   "criterion": null
+  },
+  {
+   "text": "Given a release tag, when CI builds the Docker image, then the image tag is the version and the image scan has no HIGH finding.",
+   "ux": "none",
+   "source": "written for spec 222",
+   "criterion": null
+  },
+  {
+   "text": "Given `GET /api/tasks?page=2`, when the proxy forwards it, then the page size is 50 and the response fields are id, title and due_date.",
+   "ux": "none",
+   "source": "written for spec 222",
+   "criterion": null
+  },
+  {
+   "text": "Given the `Cache-Control` header, when `/api/tasks` answers, then the response header is `no-store`.",
+   "ux": "none",
+   "source": "written for spec 222",
+   "criterion": null
+  },
+  {
+   "text": "Given the Task API is down, when a request fails, then one entry appears in the server log and the metrics show one more error.",
+   "ux": "none",
+   "source": "written for spec 222",
+   "criterion": null
+  },
+  {
+   "text": "Given `API_URL` is unset, when the server starts, then it reads the address at runtime and the readiness endpoint answers 503.",
+   "ux": "none",
+   "source": "written for spec 222",
+   "criterion": null
+  },
+  {
+   "text": "Given the JSON body has the field `title`, when the route validates it, then a missing field answers 422.",
+   "ux": "none",
+   "source": "written for spec 222",
+   "criterion": null
+  },
+  {
+   "text": "Given the build, when `next build` runs, then it uses the standalone output and the bundle stays under 500 kB.",
+   "ux": "none",
+   "source": "written for spec 222",
+   "criterion": null
+  },
+  {
+   "text": "Given the task list is empty, when the start page loads, then the empty state reads \"No tasks yet\".",
+   "ux": "needed",
+   "source": "written for spec 222",
+   "criterion": null
+  },
+  {
+   "text": "Given a person types a title and presses Enter, then the task is added at the end of the list.",
+   "ux": "needed",
+   "source": "written for spec 222",
+   "criterion": null
+  },
+  {
+   "text": "Given the dark theme is chosen, when the board renders, then the colours follow the system setting.",
+   "ux": "needed",
+   "source": "written for spec 222",
+   "criterion": null
+  },
+  {
+   "text": "Given a screen reader, when the save finishes, then it announces \"Saved\" once and keyboard focus returns to the input.",
+   "ux": "needed",
+   "source": "written for spec 222",
+   "criterion": null
+  },
+  {
+   "text": "Given a task is done, when the list renders, then its row is struck through and its label reads \"done\".",
+   "ux": "needed",
+   "source": "written for spec 222",
+   "criterion": null
+  },
+  {
+   "text": "Given the header, when a person opens any route, then the heading names the signed-in user.",
+   "ux": "needed",
+   "source": "written for spec 222",
+   "criterion": null
+  }
+ ]
+}

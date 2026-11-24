@@ -32,7 +32,7 @@ GATE_SOURCE = TEMPLATES / "gitops-app" / "scripts" / "gate.sh"
 
 # AC-130.14: the coverage table. template -> covered gates (recipes). Keep equal to the templates of shapes.yml.
 TEST_TEMPLATES = ["service-python", "library-python", "service-go", "service-java", "web-nextjs", "service-typescript",
-                  "library-typescript", "service-dotnet"]
+                  "library-typescript", "service-dotnet", "library-dotnet", "library-java"]
 GITOPS_TEMPLATES = ["gitops-app", "cluster-gitops"]
 COVERED = {t: ["test", "test-fast", "secrets-scan"] for t in TEST_TEMPLATES}
 COVERED.update({t: ["test", "test-fast", "validate", "render-check", "secrets-scan"] for t in GITOPS_TEMPLATES})
@@ -45,15 +45,15 @@ FIX_RENDER_APP = "run `devbox run render` and check that applications/<system>/s
 FIX_RENDER_CLUSTER = "run `devbox run render` and check cluster.yaml"
 FIX_SECRETS = "commit at least one file that the scan does not exclude (`git add`)"
 
-SECRET_FLAGS = ("--baseline .secrets.baseline.json --exclude-files copier-answers "   # #389: the answers file is never scanned
+SECRET_FLAGS = ("--baseline .secrets.baseline.json --exclude-files 'copier-answers|contract/.*[.]json' "   # #389: the answers file, #958: the platform plan contracts
                 "--disable-filter detect_secrets.filters.gibberish.should_exclude_secret")
 # the pathspec of each template's secrets-scan and a file that pathspec excludes
 SECRET_PATHSPEC = {"service-python": "':!*.lock'", "library-python": "':!*.lock'", "service-go": "':!go.sum'",
                    "web-nextjs": "':!pnpm-lock.yaml'", "service-typescript": "':!pnpm-lock.yaml'", "library-typescript": "':!pnpm-lock.yaml'",
-                   "service-dotnet": "':!**/packages.lock.json'"}
+                   "service-dotnet": "':!**/packages.lock.json'", "library-dotnet": "':!**/packages.lock.json'"}
 EXCLUDED_FILE = {"service-python": "uv.lock", "library-python": "uv.lock", "service-go": "go.sum", "web-nextjs": "pnpm-lock.yaml",
                  "service-typescript": "pnpm-lock.yaml", "library-typescript": "pnpm-lock.yaml",
-                 "service-dotnet": "src/DemoApp/packages.lock.json"}
+                 "service-dotnet": "src/DemoApp/packages.lock.json", "library-dotnet": "src/DemoApp/packages.lock.json"}
 
 
 def line(gate: str, what: str, fix: str) -> str:
