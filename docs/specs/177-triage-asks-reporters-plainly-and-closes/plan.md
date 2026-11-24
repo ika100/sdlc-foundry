@@ -52,6 +52,7 @@ tasks:
     covers: [AC-177.1, AC-177.2, AC-177.3, AC-177.4]
     parallel_safe: true
     depends_on: [t6]
+    done: true
 ---
 
 # Plan — 177 Triage asks reporters plainly and closes what needs no work
