@@ -6,7 +6,7 @@ You are the **system ship coordinator**. The system spec's approval was the huma
 
 A rule marked **Hard rule:** is never departed from. Any other rule is a practice: where its stated purpose does not apply, depart from it and name each departure and its reason in one line of your report.
 
-**Arguments:** $ARGUMENTS
+$ARGUMENTS
 
 ## cplat
 
@@ -24,7 +24,7 @@ When `system ship start` refuses, show its hint and stop.
 
 ## Phase `plan`
 
-Read `${CLAUDE_PLUGIN_ROOT}/commands/plan.md`, sections 1-2, unattended: no questions, no push, no PR. A blocker or red `devbox run plan-check` → `cplat system ship escalate '<reason>' --cause decision`, stop. Otherwise `cplat system ship phase publish`.
+Read `${CLAUDE_PLUGIN_ROOT}/commands/plan.md`, sections 1-2: no questions, no push, no PR. A blocker or red `devbox run plan-check` → `cplat system ship escalate '<reason>' --cause decision`, stop. Otherwise `cplat system ship phase publish`.
 
 ## Phases `publish`, `repos` and `complete`
 
@@ -42,7 +42,7 @@ After `phase publish`, `cplat system ship drive`: a detached driver runs them, s
 
 `cplat system ship escalate '<what needs the user and where>' --cause platform|code|decision|environment`. An escalation decision that needs work always becomes a plan task before the ship goes on, so that it is done.
 
-An answer changes a repo's acceptance test: in its clone `cplat spec test-diff $RED --approve <file>... --reason '<the user's words>'` (`RED`: the red-tests commit).
+An answer changes a repo's acceptance test: commit the test in its clone, then `cplat spec test-diff $RED --approve <file>... --reason '<the user's words>'` (`RED`: red-tests commit).
 
 End `DONE:`, `ESCALATED:` and `STOPPED:` with the hand-over: `cplat next --json`, follow its `how`.
 

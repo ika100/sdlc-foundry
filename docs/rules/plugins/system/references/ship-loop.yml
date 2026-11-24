@@ -1,6 +1,6 @@
 rules:
   - id: R14
-    text: "one repo's decision need not wait for another's build, and only the user approves answers."
+    text: "one repo's decision need not wait for another's build, and only the user approves answers (suggested ones in the spec)."
     class: experience
     source: "#684"
   - id: R9
