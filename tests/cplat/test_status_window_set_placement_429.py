@@ -50,3 +50,27 @@ def test_an_existing_key_is_changed_in_place():
     out = _set(TEXT, "dev", "policy", "audit")
     assert YAML().load(out)["environments"]["dev"] == {"host": "{component}.{system}-dev.localhost", "policy": "audit"}
     assert out.index("audit") < out.index("  prod:")      # changed where it was, in the dev block
+
+
+OBS_TEXT = """environments:
+  dev:
+    host: "{component}.{system}-dev.localhost"
+    observability:
+      # host: "{component}.example.com"
+  prod:
+    policy: "off"
+"""
+
+
+def test_a_new_observability_key_is_not_put_under_a_comment_of_another_key_960():
+    """#960: journey 25 got `observability:` / `# host: …` / `ui: lgtm`: the new key sat under a comment that is not its own."""
+    y = YAML()
+    y.preserve_quotes = True
+    data = y.load(OBS_TEXT)
+    conf = data["environments"]["dev"]
+    systemset.add_nested_key(conf, "observability", "ui", "lgtm")
+    out = io.StringIO()
+    y.dump(data, out)
+    lines = out.getvalue().splitlines()
+    assert YAML().load(out.getvalue())["environments"]["dev"]["observability"] == {"ui": "lgtm"}
+    assert lines.index("      ui: lgtm") < lines.index('      # host: "{component}.example.com"'), out.getvalue()

@@ -1,0 +1,28 @@
+rules:
+- id: R1
+  text: '| `ServiceApp.cs` | `/health` (liveness, no checks) and `/ready` (readiness, the health checks tagged `ServiceApp.ReadyTag`) — always present |'
+  class: not a rule
+- id: R2
+  text: '| `Telemetry.cs` | OpenTelemetry .NET SDK (ASP.NET Core, HttpClient and, with a database, Npgsql instrumentation), exporting only when `OTEL_EXPORTER_OTLP_ENDPOINT` is set |'
+  class: not a rule
+- id: R3
+  text: Domain counters and histograms with prometheus-net (`Metrics.CreateCounter`, `Metrics.CreateHistogram`), labelled with bounded values only (a route pattern, never a raw URL or an id), because every label value is a new time series.
+  class: practice
+- id: R4
+  text: Never log secrets or full request bodies, because logs are widely readable.
+  class: practice
+- id: R5
+  text: never create `k8s/` in this repo, because the gitops-app repo owns manifests.
+  class: hard
+  hard: gitops-owns-the-cluster
+  source: ADR-017
+- id: R6
+  text: Do not provision Prometheus, Grafana or collectors, because the system owns monitoring infrastructure; write application code and PrometheusRule manifests.
+  class: practice
+- id: R7
+  text: never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033).
+  class: hard
+  hard: issue-filing-needs-consent
+- id: R8
+  text: '| `JsonLineFormatter.cs` | JSON log lines carrying `trace_id` and `span_id` of the current `Activity` — always present |'
+  class: not a rule

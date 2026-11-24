@@ -31,6 +31,7 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import core
 import dispatch_state
 import e2e_gate
 import release_hold
@@ -199,8 +200,10 @@ class Hold:
         self.locked = False
         self._lock, self._timeout, self._interval = lock, timeout, interval
         self._since = dispatch_state.now().strftime("%H:%M:%S")
+        self.current = "merge"
 
     def _write_info(self, phase: str) -> None:
+        self.current = phase
         dispatch_state.write_json(dispatch_state.merge_info_path(self.slug),
                                   {"who": self.who, "pid": os.getpid(), "since": self._since, "phase": phase})
 
@@ -249,10 +252,30 @@ def held(slug: str, who: str, timeout: float, interval: float = 5, *,
         _acquire(lock, slug, timeout, interval, stats, fast_lane, who)
         hold = Hold(slug, who, lock, timeout, interval, stats)
         hold.locked = True
+
+        @contextlib.contextmanager
+        def paused() -> Iterator[None]:
+            """A GitHub rate-limit wait (#1028) never holds the lock: let go, wait, queue again. The head check of the merge
+            (`catch_up`, `land_merge`) runs inside the lock, so a head or base that moved meanwhile is seen."""
+            if not hold.locked:
+                yield
+                return
+            info.unlink(missing_ok=True)
+            fcntl.flock(lock, fcntl.LOCK_UN)
+            hold.locked = False
+            try:
+                yield
+            finally:
+                _acquire(lock, slug, timeout, interval, stats, None, who)
+                hold.locked = True
+                hold._write_info(hold.current)
+
+        core.RATE_WAIT_HOOKS.append(paused)
         try:
             hold._write_info("merge")
             yield hold
         finally:
+            core.RATE_WAIT_HOOKS.remove(paused)
             _drop_claim(slug)
             if hold.locked:
                 info.unlink(missing_ok=True)

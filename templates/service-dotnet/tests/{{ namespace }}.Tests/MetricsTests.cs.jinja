@@ -1,0 +1,44 @@
+namespace {{ namespace }}.Tests;
+
+public sealed class MetricsTests
+{
+    [Fact]
+    public async Task Metrics_holds_the_request_counter_and_histogram_by_method_route_and_status()
+    {
+        await using var app = TestApp.Create();
+        var http = app.CreateClient();
+        await http.GetAsync(new Uri("/health", UriKind.Relative), TestContext.Current.CancellationToken);
+        await http.GetAsync(new Uri("/nowhere", UriKind.Relative), TestContext.Current.CancellationToken);
+
+        var text = await http.GetStringAsync(new Uri("/metrics", UriKind.Relative), TestContext.Current.CancellationToken);
+
+        Assert.Contains("http_requests_total{method=\"GET\",route=\"/health\",status=\"200\"}", text, StringComparison.Ordinal);
+        Assert.Contains("http_requests_total{method=\"GET\",route=\"unmatched\",status=\"404\"}", text, StringComparison.Ordinal);
+        Assert.Contains("http_request_duration_seconds_bucket{method=\"GET\",route=\"/health\",status=\"200\"", text, StringComparison.Ordinal);
+        Assert.Contains("process_cpu_seconds_total", text, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(null, null, false)]
+    [InlineData("http://collector:4318", null, true)]
+    [InlineData("http://collector:4318", "true", false)]
+    [InlineData("http://collector:4318", "TRUE", false)]
+    public void Tracing_exports_only_with_an_endpoint_and_not_disabled(string? endpoint, string? disabled, bool expected)
+    {
+        var env = new Dictionary<string, string?> { ["OTEL_EXPORTER_OTLP_ENDPOINT"] = endpoint, ["OTEL_SDK_DISABLED"] = disabled };
+        Assert.Equal(expected, Telemetry.Enabled(env.GetValueOrDefault));
+    }
+
+    [Fact]
+    public void With_an_endpoint_the_tracer_provider_is_registered()
+    {
+        var env = new Dictionary<string, string?> { ["OTEL_EXPORTER_OTLP_ENDPOINT"] = "http://collector:4318" };
+        var config = AppConfig.FromEnvironment(new Dictionary<string, string?>());
+
+        var with = new ServiceCollection().AddServiceTelemetry(config, env.GetValueOrDefault);
+        var without = new ServiceCollection().AddServiceTelemetry(config, _ => null);
+
+        Assert.Contains(with, d => d.ServiceType.FullName == "OpenTelemetry.Trace.TracerProvider");
+        Assert.Empty(without);
+    }
+}

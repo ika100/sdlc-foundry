@@ -1,0 +1,72 @@
+using System.Diagnostics;
+using System.Text.Json;
+using Microsoft.Extensions.Logging.Abstractions;
+
+namespace {{ namespace }}.Tests;
+
+public sealed class LoggingTests
+{
+    private static JsonElement Line(string text) => JsonDocument.Parse(text).RootElement;
+
+    [Fact]
+    public void A_line_is_one_json_object_with_time_level_msg_logger_and_the_fields()
+    {
+        var state = new List<KeyValuePair<string, object?>>
+        {
+            new("OrderId", 42),
+            new("{OriginalFormat}", "order {OrderId} created"),
+        };
+        var line = Line(JsonLineFormatter.Format(LogLevel.Information, "Orders", "order 42 created", state, null, null));
+
+        Assert.Equal("info", line.GetProperty("level").GetString());
+        Assert.Equal("order 42 created", line.GetProperty("msg").GetString());
+        Assert.Equal("Orders", line.GetProperty("logger").GetString());
+        Assert.Equal("42", line.GetProperty("OrderId").GetString());
+        Assert.True(DateTimeOffset.TryParse(line.GetProperty("time").GetString(), System.Globalization.CultureInfo.InvariantCulture, out _));
+        Assert.False(line.TryGetProperty("{OriginalFormat}", out _));
+    }
+
+    [Fact]
+    public void Inside_an_active_span_the_line_carries_its_trace_and_span_ids()
+    {
+        using var activity = new Activity("request").SetIdFormat(ActivityIdFormat.W3C).Start();
+        var line = Line(JsonLineFormatter.Format(LogLevel.Warning, "c", "m", null, null, activity));
+
+        Assert.Equal(activity.TraceId.ToHexString(), line.GetProperty("trace_id").GetString());
+        Assert.Equal(activity.SpanId.ToHexString(), line.GetProperty("span_id").GetString());
+        Assert.Matches("^[0-9a-f]{32}$", line.GetProperty("trace_id").GetString());
+        Assert.Matches("^[0-9a-f]{16}$", line.GetProperty("span_id").GetString());
+    }
+
+    [Fact]
+    public void Outside_a_span_the_line_carries_no_trace_ids()
+    {
+        var line = Line(JsonLineFormatter.Format(LogLevel.Error, "c", "m", null, new InvalidOperationException("boom"), null));
+
+        Assert.False(line.TryGetProperty("trace_id", out _));
+        Assert.False(line.TryGetProperty("span_id", out _));
+        Assert.Contains("boom", line.GetProperty("error").GetString(), StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(LogLevel.Trace, "trace")]
+    [InlineData(LogLevel.Debug, "debug")]
+    [InlineData(LogLevel.Critical, "fatal")]
+    [InlineData(LogLevel.None, "info")]
+    public void The_level_is_a_word(LogLevel level, string word) =>
+        Assert.Equal(word, Line(JsonLineFormatter.Format(level, "c", "m", null, null, null)).GetProperty("level").GetString());
+
+    [Fact]
+    public void The_formatter_writes_one_line_per_entry_and_nothing_for_an_empty_one()
+    {
+        var formatter = new JsonLineFormatter();
+        using var writer = new StringWriter();
+
+        formatter.Write(new LogEntry<string>(LogLevel.Information, "c", default, "hello", null, (s, _) => s), null, writer);
+        formatter.Write(new LogEntry<string?>(LogLevel.Information, "c", default, null, null, (s, _) => s!), null, writer);
+
+        var lines = writer.ToString().Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
+        Assert.Single(lines);
+        Assert.Equal("hello", Line(lines[0]).GetProperty("msg").GetString());
+    }
+}

@@ -10,14 +10,7 @@ Owned by {{ owner_team }}. Next.js (App Router only), TypeScript, pnpm, Node {{ 
 
 ## Development Environment
 
-This project uses [devbox](https://www.jetify.com/devbox) to manage the dev environment.
-
-```bash
-devbox shell        # enter the dev environment
-devbox run dev      # next dev on port {{ port }}
-devbox run test     # vitest with coverage
-devbox run quality  # eslint + tsc --noEmit gate
-```
+This project uses [devbox](https://www.jetify.com/devbox) to manage the dev environment (`devbox shell`).
 
 Canonical `devbox run` scripts (configured in `devbox.json`):
 
@@ -46,26 +39,7 @@ Canonical `devbox run` scripts (configured in `devbox.json`):
 
 ## Claude Code agents
 
-Agents and slash commands come from the [`ika100/sdlc-foundry`](https://github.com/ika100/sdlc-foundry) marketplace, enabled in `.claude/settings.json`:
-
-- `web@sdlc-foundry` — web coder, tester, deployment, observability, release agents
-- `svc@sdlc-foundry` — product-manager, architect and the other pipeline agents
-- `component@sdlc-foundry` — the commands: `/component:spec`, `plan`, `build`, `ship`, `fix`, `check`, `release`
-- `instance@sdlc-foundry`, `api@sdlc-foundry`, `issue@sdlc-foundry`, `platform@sdlc-foundry` — `/instance:promote`, `/api:list`, `/issue:report`, `/platform:update`
-- `shared@sdlc-foundry` — quality and security agents, the `cplat` launcher
-
-### Common workflows
-
-| Task | Command |
-|---|---|
-| Write a feature spec (first step) | `/component:spec <description>` |
-| Plan the approved spec | `/component:plan <NNN>` |
-| Build it: tests first, verified | `/component:build <NNN>` |
-| All of it unattended: build, PR, merge on green CI, dev | `/component:ship <NNN>` (headless: `cplat headless "/component:ship <NNN>"`) |
-| Where specs stand | `/component:spec --all` |
-| Small change | `/component:fix <description>` |
-| Read-only quality + security audit | `/component:check` |
-| Release | `/component:release` |
+Agents and slash commands come from the [`ika100/sdlc-foundry`](https://github.com/ika100/sdlc-foundry) marketplace, enabled in `.claude/settings.json`; each command's description says what it does. Read the platform's `docs/AGENTS.md` for the full orchestration model.
 
 ### Spec first
 

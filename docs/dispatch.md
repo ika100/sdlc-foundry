@@ -38,7 +38,7 @@ adopts the units that still run. Keep it alive with a terminal multiplexer, laun
 
 | Key | Values | Default |
 |---|---|---|
-| `slots` | integer 1 to 10 | `1` |
+| `slots` | integer 1 to 10: units building at once. A unit that only lands (status `landing`, or a ship in its land phase) holds no build slot, up to `slots` of them; `status` shows `slots: 2 of 3 building, 3 landing` | `1` |
 | `budget.mode` | `cost`, `plan` | `cost` |
 | `budget.usd_per_day` | number > 0: the daily limit in US dollars | none: in mode `cost`, `start` and `resume` refuse without it (or without the deprecated `budget.tokens_per_day`) |
 | `budget.usd_per_month` | number > 0: the limit since the 1st of the local month | none |

@@ -1,0 +1,7 @@
+using {{ namespace }};
+
+var app = ServiceApp.Build(args);
+await app.RunAsync();
+
+/// <summary>The entry point; public so that the tests' <c>WebApplicationFactory&lt;Program&gt;</c> can start the service.</summary>
+public partial class Program;

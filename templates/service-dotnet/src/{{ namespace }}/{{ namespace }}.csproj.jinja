@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <RootNamespace>{{ namespace }}</RootNamespace>
+    <AssemblyName>{{ namespace }}</AssemblyName>
+    <!-- The image ships what runs (#1057): no IIS web.config and no API documentation file; the PDB stays for line numbers in stack traces. -->
+    <IsTransformWebConfigDisabled>true</IsTransformWebConfigDisabled>
+    <PublishDocumentationFile>false</PublishDocumentationFile>
+  </PropertyGroup>
+{%- if needs_observability or needs_database %}
+
+  <ItemGroup>
+{%- if needs_observability %}
+    <PackageReference Include="prometheus-net.AspNetCore" />
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.Http" />
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" />
+{%- endif %}
+{%- if needs_database %}
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
+{%- if needs_observability %}
+    <PackageReference Include="Npgsql.OpenTelemetry" />
+{%- endif %}
+{%- endif %}
+  </ItemGroup>
+{%- endif %}
+
+  <ItemGroup>
+{%- if needs_database %}
+    <Using Include="{{ namespace }}.Data" />
+{%- endif %}
+    <InternalsVisibleTo Include="{{ namespace }}.Tests" />
+  </ItemGroup>
+
+</Project>

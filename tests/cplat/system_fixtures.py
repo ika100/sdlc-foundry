@@ -23,7 +23,7 @@ PIN5 = ROOT / "templates" / "gitops-app" / "scripts" / "pin.py"
 NOT_MIGRATED = "not migrated to 5.0: run `cplat platform update --migrate`"
 SHA = "0123456789abcdef0123456789abcdef01234567"
 ALLOWED_TOP = "system, owner, environments, components, apis, resources, gateway, secretStore, registries, autonomy"  # spec 124
-PAIRS = "service/python, service/java, service/go, service/typescript, website/typescript, library/python, library/typescript"
+PAIRS = "service/python, service/java, service/go, service/typescript, service/csharp, website/typescript, library/python, library/typescript, library/csharp, library/java"
 
 
 def mod(name: str):

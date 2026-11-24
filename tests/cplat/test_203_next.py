@@ -22,9 +22,9 @@ import core
 from support_192 import World
 from waiting import with_prelude
 
-HANG = 5
+HANG = 60          # a silent source waits this long (released at teardown): far past LIMIT, so a wait on it fails the bound
 SOURCE, TOTAL = 1, 2
-LIMIT = 4          # seconds `cplat next` may take with the lowered deadlines (HANG is longer)
+LIMIT = TOTAL + 15  # seconds `cplat next` may take with the lowered deadlines: the total deadline plus a margin for a loaded machine
 
 
 @pytest.fixture

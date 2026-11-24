@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from failsum import docker, gitops, go, java, python, web
+from failsum import docker, dotnet, gitops, go, java, python, web
 from failsum.core import (FORMAT_UNKNOWN, MAX_ENTRIES, MAX_EXCERPT, MAX_LINES, MIN_TAIL, TAIL, Check, CiCheck, Context, Entry,
                           Parser, Result, Summary, build_check, ci_check, clean_lines, message, normalise, raw, segments)
 
@@ -18,7 +18,7 @@ __all__ = ["FORMAT_UNKNOWN", "MAX_ENTRIES", "MAX_EXCERPT", "MAX_LINES", "MIN_TAI
            "Parser", "Result", "Summary", "PARSERS", "enabled", "message", "normalise", "raw", "read_sidecar", "sidecar",
            "summarize", "summarize_ci", "write_sidecar"]
 
-PARSERS: tuple = tuple(p for mod in (python, java, go, web, gitops, docker) for p in mod.PARSERS)
+PARSERS: tuple = tuple(p for mod in (python, java, go, web, dotnet, gitops, docker) for p in mod.PARSERS)
 
 
 def enabled(repo: Path) -> tuple[bool, str]:
