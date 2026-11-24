@@ -151,9 +151,11 @@ def test_the_adr_states_the_kill_rule_of_the_measure_ac_216_12():  # AC-216.12
 
 
 def test_the_changelog_fragment_names_the_switch_and_the_measure_ac_216_12():  # AC-216.12
+    # a fragment 216-*.md until the release, then a paragraph of docs/CHANGELOG.md
     folder = ROOT / "docs" / "changelog.d"
-    found = [*folder.glob("216-*.added.md"), *folder.glob("216-*.changed.md")]
-    assert len(found) == 1, f"one changelog fragment for spec 216, found {found}"
-    fragment = found[0]
-    text = collapsed(fragment.read_text())
-    assert "CPLAT_SYSTEM_DRIVER" in text and "measure" in text.lower()
+    found = [f.read_text() for f in (*folder.glob("216-*.added.md"), *folder.glob("216-*.changed.md"))]
+    assert len(found) <= 1, f"one changelog fragment for spec 216, found {len(found)}"
+    if not found:
+        found = [e for e in (ROOT / "docs" / "CHANGELOG.md").read_text().split("\n\n") if "CPLAT_SYSTEM_DRIVER" in e]
+    entries216 = [collapsed(e) for e in found]
+    assert [e for e in entries216 if "CPLAT_SYSTEM_DRIVER" in e and "measure" in e.lower()], "no changelog entry for spec 216 names CPLAT_SYSTEM_DRIVER and the measure"
