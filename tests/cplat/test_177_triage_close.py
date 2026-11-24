@@ -314,12 +314,15 @@ def test_an_unconfirmed_row_is_never_closed_ac_177_3(w, cls, extra):  # AC-177.3
     assert [n for _, n, _ in calls(w, "close")] == [1]
 
 
-@pytest.mark.parametrize("cls", ["bug", "small-change", "feature", "needs-exploring"])
-def test_the_other_classes_are_never_closed_ac_177_3(w, cls):  # AC-177.3
+@pytest.mark.parametrize("cls,extra", [("bug", {}), ("small-change", {}),
+                                       ("feature", {"spec": "201-new-thing", "new_spec": True, "expected": None}),
+                                       ("needs-exploring", {"priority": None, "priority_reason": None, "expected": None})])
+def test_the_other_classes_are_never_closed_ac_177_3(w, cls, extra):  # AC-177.3
+    w.spec("201-new-thing", status="draft")
     w.issue(1, assoc="OWNER")
     w.issue(2, assoc="OWNER")
     w.batch()
-    act(w, [row(1, **{"class": cls}), closing_row(2, "question", {"comment": "See the docs."})])
+    act(w, [row(1, **{"class": cls, **extra}), closing_row(2, "question", {"comment": "See the docs."})])
     assert [n for _, n, _ in calls(w, "close")] == [2]
 
 

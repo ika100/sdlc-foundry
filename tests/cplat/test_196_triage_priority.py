@@ -223,11 +223,11 @@ def test_an_unattended_act_with_a_priority_change_refuses_before_any_write_ac_19
 
 def test_an_unattended_act_without_a_priority_change_still_works_ac_196_4(world, monkeypatch):  # AC-196.4
     monkeypatch.setenv("CPLAT_HEADLESS", "1")
-    world.issue(1)
+    world.issue(1, labels=("triage", "p1"))
     world.batch()
-    assert world.run("act", "--proposals", world.proposals([row(1, **{"class": "question", **no_priority(comment="see docs")})]),
+    assert world.run("act", "--proposals", world.proposals([row(1, **{"class": "bug", "comment": "see docs"})]),
                      "--rows", "all").rc == 0
-    assert world.edits()[1][0] == {"question"}
+    assert "bug" in world.edits()[1][0] and not (world.edits()[1][0] & PRIORITY_LABELS)
 
 
 # ---------------- AC-196.5: exactly one priority label afterwards ----------------
