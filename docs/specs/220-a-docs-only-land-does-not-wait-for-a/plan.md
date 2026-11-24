@@ -38,6 +38,7 @@ tasks:
     covers: [AC-220.1, AC-220.2, AC-220.4, AC-220.5, AC-220.6, AC-220.7, AC-220.10]
     parallel_safe: true
     depends_on: [t1, t2]
+    done: true
   - id: t4
     title: "Lands pass the fast lane and the hold, cancel the kept e2e run and record the land"
     files: [scripts/cplat/land_merge.py, scripts/cplat/pr.py, scripts/cplat/ship.py]
