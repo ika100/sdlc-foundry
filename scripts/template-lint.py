@@ -119,14 +119,14 @@ def steps(template: str, rendered: Path) -> list[Step] | None:
     if template in ("service-python", "library-python"):
         return [Step(["uv", "run", "ruff", "check", "--output-format=concise", "."], parse_ruff),
                 Step(["uv", "run", "ruff", "format", "--check", "."], parse_ruff_format)]
-    if template == "service-java":
+    if template in ("service-java", "library-java"):
         return [Step(["mvn", "-B", "--no-transfer-progress", "spotless:check", "checkstyle:check"], parse_maven)]
     if template == "service-go":
         return [Step(["golangci-lint", "run", "./..."], parse_golangci)]
     if template in ("web-nextjs", "service-typescript", "library-typescript"):
         found = [] if (rendered / "node_modules").exists() else [Step(["npx", "-y", PNPM, "install"], no_lines, True)]
         return found + [Step(["npx", "-y", PNPM, "lint"], parse_eslint)]
-    if template == "service-dotnet":
+    if template in ("service-dotnet", "library-dotnet"):
         return [Step(["dotnet", "format", "--verify-no-changes", "--severity", "warn"], parse_dotnet_format)]
     if template in ("gitops-app", "cluster-gitops"):
         return None
@@ -204,7 +204,7 @@ def render_data(template: str) -> list[str]:
     if template in ("service-python", "library-python"):
         data["module_name"] = "lint_" + template.replace("-", "_")
         data["description"] = "Smoke test"
-    elif template in ("web-nextjs", "service-typescript", "library-typescript", "service-dotnet"):
+    elif template in ("web-nextjs", "service-typescript", "library-typescript", "service-dotnet", "library-dotnet"):
         data["description"] = "Smoke test"
     elif template == "gitops-app":
         data.update(app_name="lint", description="Smoke test")

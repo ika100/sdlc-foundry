@@ -1,6 +1,6 @@
 rules:
   - id: R1
-    text: "only that unit, per `${CLAUDE_PLUGIN_ROOT}/references/unit-mode.md`"
+    text: "only that unit, by the rules of `${CLAUDE_PLUGIN_ROOT}/references/unit-mode.md` that the start call prints"
     class: not a rule
     source: spec 131
   - id: R2
@@ -103,7 +103,7 @@ rules:
     hard: only-approved-specs-built
     source: ADR-026
   - id: R26
-    text: "push only in Phase 7, through `cplat pr open`, because it runs every check first"
+    text: "push only in the pull request phase, through `cplat pr open`, because it runs every check first"
     class: hard
     hard: push-only-through-pr-open
   - id: R27

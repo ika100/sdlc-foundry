@@ -10,7 +10,7 @@ A rule marked **Hard rule:** is never departed from. Any other rule is a practic
 
 ## cplat
 
-One `cplat` call per Bash invocation, output read whole (no `grep`, `head` or `tail`). First `cplat component ship start <spec> --detach [--no-merge] [--full] [--take-over]` (`--unit <unit>` instead of `--detach` in a unit, neither for `--here`); print it verbatim: its `shape:` line names the shape and agents, and in a unit it prints the unit's rules and state, so no `cplat shape` call or unit-mode.md is needed.
+One `cplat` call per Bash invocation, output read whole (no `grep`, `head` or `tail`). First `cplat component ship start <spec> --detach [--no-merge] [--full] [--take-over]` (a unit: `cplat component ship start <spec> --unit <unit>`; `--here`: neither flag); print it verbatim: its `shape:` line names the shape and agents, and in a unit it prints the unit's rules and state, so no `cplat shape` call or unit-mode.md is needed.
 
 - A `headless: pid` line → read `${CLAUDE_PLUGIN_ROOT}/references/ship-handoff.md` and follow it; only Finish and Escalate here apply, because the headless session does every phase.
 - `unsupported` or no shape → stop (gitops-app repos use `/system:ship`).
@@ -32,14 +32,14 @@ Read `${CLAUDE_PLUGIN_ROOT}/commands/plan.md` and follow it for this spec; after
 
 ## Phase `build`
 
-Read `${CLAUDE_PLUGIN_ROOT}/commands/build.md` and follow its Phases 0–6 for this spec; skip Phase 7. Gitops tasks (with `repo:`) → read `${CLAUDE_PLUGIN_ROOT}/references/ship-gitops.md` and follow it.
+Read `${CLAUDE_PLUGIN_ROOT}/commands/build.md` and follow its Phases 0–6 skipping Phase 7 (a unit session follows its briefing). Gitops tasks (with `repo:`) → read `${CLAUDE_PLUGIN_ROOT}/references/ship-gitops.md` and follow it.
 
 Escalate on build's stop rules. Then `cplat component ship phase pr`.
 
 ## Phase `pr`
 
 1. Write `.pr-body.md` in the repo root (Write tool, never into `.git/`, because Claude Code refuses edits there) with the template in `${CLAUDE_PLUGIN_ROOT}/references/build-pr.md`, then `cplat deps report --body-file .git/PR_BODY.md`.
-2. `cplat component ship pr --title "feat(<scope>): <spec title, ≤72 chars>" --body-file .pr-body.md`: it runs the whole `devbox run ci` first; red → nothing is pushed: fix it via the coder (`cplat platform runs agent fix-round ci`), `cplat validate run` between rounds, and call it again; after the fix `cplat spec test-diff red --task <task>` (`red` finds the red-tests commit): a `test helper` or `type-only` line → the last paragraph of `${CLAUDE_PLUGIN_ROOT}/references/build-tighten.md` without asking, exit 1 otherwise → escalate cause `decision` as a changed test. Then it pushes and opens the PR (platform repo: `--no-spec`). `cplat` puts a Summary at the top of the PR body; the orchestrator writes none.
+2. `cplat component ship pr --title "feat(<scope>): <spec title, ≤72 chars>" --body-file .pr-body.md`: it runs the whole `devbox run ci` first; red → nothing is pushed: fix it via the coder (`cplat platform runs agent fix-round ci`), `cplat validate run` between rounds, and call it again; after the fix `cplat spec test-diff --task <task>` (it finds the red-tests commit): a `test helper` or `type-only` line → the last paragraph of `${CLAUDE_PLUGIN_ROOT}/references/build-tighten.md` without asking, exit 1 otherwise → escalate cause `decision` as a changed test. Then it pushes and opens the PR (platform repo: `--no-spec`). `cplat` puts a Summary at the top of the PR body; the orchestrator writes none.
 
 ## Phase `land`
 

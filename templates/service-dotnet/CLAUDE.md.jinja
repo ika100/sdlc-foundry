@@ -121,6 +121,8 @@ Updates (`/platform:update`) overwrite the skeleton files below. Put your own wo
 
 CI's `docker` job builds the multi-stage, non-root, chiseled image on every run and pushes on `main` (`latest`, `sha-<40>`, `sha-<short>`); a `v*.*.*` tag gives the tested `sha-<40>` image its semver tags (`release-image`). Registry: `{{ docker_registry }}/{{ project_name }}`, authenticated with `GITHUB_TOKEN`.
 
+The image is the chiseled ASP.NET Core base image (about 125 MB unpacked, 57 MB to pull) plus the published service, without `web.config` or the API documentation file. Keep it framework-dependent and untrimmed: trimming the runtime breaks EF Core and reflection-based code at run time (`PublishTrimmed` reports over 100 trim warnings for this service).
+
 ## Deployment
 
 This repo ships **only a container image**. Kubernetes manifests, environment wiring (e.g. `API_URL`), replicas, resources and exposure belong to the system's `gitops-app` repo (platform ADR-017): register the component with `/component:add {{ project_name }}` in the system's repo (needs the GitHub topic `deployable-service`, set by `/component:new`), then `/instance:promote {{ project_name }} --to <env>`. Change how the service runs by editing its entry under `components:` in that repo's `system.yaml`; change the port, probe paths or user in the Dockerfile/app and update the entry to match.
