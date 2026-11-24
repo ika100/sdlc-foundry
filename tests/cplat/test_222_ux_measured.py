@@ -182,7 +182,8 @@ def test_a_ux_plan_run_writes_a_benchmark_record_and_resets_the_sample_ac_222_4(
     (r,) = benchmark_records(store)
     b = r["benchmark"]
     assert r["outcome"] == "done" and b["workflow"] == "ux-plan" and b["sample_repo"] == WEB and b["sample_rev"] == web_pin()
-    assert b["reset"] == "done" and r["usage"]["totals"]["calls"] == 2 and clone_ready
+    assert b["reset"] == "done" and r["usage"]["totals"]["calls"] == 2 and "by_role" in r["usage"] and clone_ready
+    assert r["started_at"] and r["ended_at"]
     assert world.pushed() and all(c[-1] == f"{web_pin()}:refs/heads/main" for c in world.pushed())
     assert [a[-1] for a in world.headless_calls] == ["/component:plan 902"]
 

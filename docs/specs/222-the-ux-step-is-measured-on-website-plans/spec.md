@@ -1,7 +1,7 @@
 ---
 spec_id: 222-the-ux-step-is-measured-on-website-plans
 title: The UX step is measured on website plans
-status: approved
+status: building
 priority: P1
 shape: platform
 tracks: [1059, 1060]
@@ -27,7 +27,7 @@ Spec 219 added the UX design step: `/component:plan` runs `web:ux-designer` for 
 - **AC-222.1** Given `scripts/cplat/benchmark/tasks.json`, when it is read, then it has a workflow `ux-plan` with the single step `/component:plan 902` and the spec file `spec-902.md`, a spec of shape `web-nextjs` whose criteria change a screen, and the workflow's sample is the `bench-files-web` component of the `system-ship` sample at that sample's pinned revision (one pin, no second sample repo).
 - **AC-222.2** Given `cplat platform runs benchmark ux-plan`, when it prepares the sample, then it uses the clone `bench-files-web` in the system-ship folder (`--dir`, else `$CPLAT_BENCH_SYSTEM_DIR`, else `<state dir>/benchmark/system-ship`), whose Claude Code trust that benchmark already needs, and refuses with the folder and the command to fix it when that clone is missing or not trusted.
 - **AC-222.3** Given a `ux-plan` run whose plan step finished, when its result is checked, then it is `done` only when the clone's `feature/<spec_id>` branch holds `docs/specs/<spec_id>/ux.md`, `cplat spec ux` answers `done` for it, the spec has no `cplat spec check` error, and `design.md` or `plan.md` names `ux.md`; otherwise the record is `failed` with the first missing item as its result check.
-- **AC-222.4** Given a `ux-plan` run, when it ends, then its record is a `benchmark` record like the other workflows' (usage, phases, per-agent children with tokens and time) and the sample is put back to its pinned revision.
+- **AC-222.4** Given a `ux-plan` run, when it ends, then its record is a `benchmark` record like the other workflows' (wall clock, usage with tokens and cost per role, so the ux-designer's and the architect's apart) and the sample is put back to its pinned revision.
 - **AC-222.5** Given the spec of the `build` benchmark on its `service-python` sample, when `cplat spec ux` decides it, then the answer is `none`: the existing Python benchmarks never run the ux-designer.
 - **AC-222.6** Given `cplat platform eval-gate` (and `cplat platform release`, which runs it) without `--workflow`, when no changed file is under `plugins/web/` and `scripts/cplat/spec_ux.py` did not change, then it selects exactly `quick-task` and `build`, as before this spec.
 - **AC-222.7** Given the same gate, when a changed prompt is under `plugins/web/` or `scripts/cplat/spec_ux.py` changed, then it also requires a `ux-plan` benchmark with this `plugins/` tree (same rules: outcome `done`, at most 1.5× the tokens of the base version's median); a change to `spec_ux.py` alone requires only `ux-plan`. `--workflow` accepts `ux-plan`, and `cplat platform rules rebaseline` still asks for `quick-task` and `build` only.
@@ -59,7 +59,11 @@ None.
 ## Changelog
 
 - 2026-11-24 created
+- 2026-11-24 amended: AC-222.4 names the per-role usage the record carries
 - 2026-11-24 amended: AC-222.11 documents the rule in the command's help (A6)
 - 2026-11-24 approved
 - 2026-11-24 draft: amend: AC-222.11 documents the rule in cplat spec ux's help, not in a prompt (prompt size headroom)
 - 2026-11-24 approved
+- 2026-11-24 draft: amend: AC-222.4 names the per-role usage the record carries, not per-agent time
+- 2026-11-24 approved; the old plan is plan.v1.md
+- 2026-11-24 building

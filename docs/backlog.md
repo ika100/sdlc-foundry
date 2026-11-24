@@ -18,6 +18,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [216-the-system-ship-drives-its-repos-without](specs/216-the-system-ship-drives-its-repos-without/spec.md) — The system ship drives its repos without a model | P1 | approved | 12 |  |
 | [220-a-docs-only-land-does-not-wait-for-a](specs/220-a-docs-only-land-does-not-wait-for-a/spec.md) — A docs-only land does not wait for a code PR's catch-up e2e | P1 | approved | 10 | #280 |
 | [221-a-net-library-shape](specs/221-a-net-library-shape/spec.md) — A .NET library shape | P1 | approved | 11 | #720 |
+| [222-the-ux-step-is-measured-on-website-plans](specs/222-the-ux-step-is-measured-on-website-plans/spec.md) — The UX step is measured on website plans | P1 | building | 11 | #1059, #1060 |
 | [177-triage-asks-reporters-plainly-and-closes](specs/177-triage-asks-reporters-plainly-and-closes/spec.md) — Triage asks reporters plainly and closes what needs no work | P2 | approved | 4 |  |
 | [001-create-a-repo-of-any-shape-with-one](specs/001-create-a-repo-of-any-shape-with-one/spec.md) — Create a repo of any shape with one command | P0 | done | 9 |  |
 | [002-generated-repos-enable-their-plugins](specs/002-generated-repos-enable-their-plugins/spec.md) — Generated repos enable their plugins automatically | P0 | done | 2 |  |
