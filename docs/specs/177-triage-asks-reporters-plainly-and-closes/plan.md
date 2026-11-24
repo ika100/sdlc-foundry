@@ -38,6 +38,7 @@ tasks:
     covers: [AC-177.1, AC-177.2, AC-177.3, AC-177.4]
     parallel_safe: true
     depends_on: [t1, t4]
+    done: true
   - id: t6
     title: act reopens, labels, comments and closes the confirmed rows
     files: [scripts/cplat/triage_act.py]
