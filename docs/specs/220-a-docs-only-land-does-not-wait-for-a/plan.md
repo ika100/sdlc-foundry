@@ -10,18 +10,21 @@ tasks:
     covers: [AC-220.1, AC-220.2, AC-220.4]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: "CheckWatch: the workflow of each check, skipping workflows on one head, cancelling their runs"
     files: [scripts/cplat/ship.py]
     covers: [AC-220.1, AC-220.3]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t5
     title: "runs report: lock wait median and p90 for docs and code lands"
     files: [scripts/cplat/runs_report.py]
     covers: [AC-220.8, AC-220.9]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t6
     title: "ADR-089 amendment, docs/dispatch.md and the changelog fragment"
     files: [docs/adr/089-every-merge-into-main-holds-the-repo-merge-lock.md, docs/dispatch.md, docs/changelog.d/220-docs-land-fast-lane.changed.md]
