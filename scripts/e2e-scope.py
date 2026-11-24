@@ -2,7 +2,8 @@
 """Does this change need the cluster e2e (spec 134, AC-134.2, AC-134.3)?
 
   e2e-scope.py [--base REF]   prints `run=true|false` (for $GITHUB_OUTPUT); one `trigger: <path>` line per reason on stderr
-  e2e-scope.py --list         the scripts/cplat modules the e2e exercises, one per line
+  e2e-scope.py --diff FROM TO   the same for commit TO against commit FROM, no pull request merge adjustment (spec 220)
+  e2e-scope.py --list        the scripts/cplat modules the e2e exercises, one per line
 
 The cluster e2e (tests/e2e/run.sh, tests/e2e/cluster.sh, tests/e2e/clusters.sh) runs on a pull request only when the change touches what it exercises:
 the gitops-app and cluster-gitops templates (not their copied .github/ files or Markdown), the templates' Dockerfiles, the e2e files,
@@ -179,18 +180,34 @@ def decide(base: str) -> tuple[bool, list[str]]:
     return bool(reasons), reasons
 
 
+def decide_diff(frm: str, to: str) -> tuple[bool, list[str]]:
+    """The scope of the commits FROM..TO as they are (spec 220): no `pr_base` adjustment; an unknown commit is an error."""
+    frm, to = frm.strip(), to.strip()
+    for ref in (frm, to):
+        git("rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}")
+    files = git("diff", "--name-only", frm, to).split()
+    reasons = triggers(REPO, files)
+    if CHANGELOG in files:
+        old = git("show", f"{frm}:{CHANGELOG}") if git("ls-tree", "--name-only", frm, CHANGELOG).strip() else ""
+        reasons += [f"release heading {v}" for v in _new_headings(old, git("show", f"{to}:{CHANGELOG}"))]
+    return bool(reasons), reasons
+
+
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--base", metavar="REF", help="compare HEAD with REF (default: the merge base with origin/main)")
+    ap.add_argument("--diff", nargs=2, metavar=("FROM", "TO"), help="compare commit TO with commit FROM")
     ap.add_argument("--list", action="store_true", help="print the exercised scripts/cplat modules")
     ns = ap.parse_args(argv)
+    if ns.diff and ns.base:
+        ap.error("--diff and --base cannot be used together")
     try:
         if ns.list:
             print("\n".join(sorted(exercised(REPO))))
             return 0
-        run, reasons = decide(ns.base or default_base())
+        run, reasons = decide_diff(*ns.diff) if ns.diff else decide(ns.base or default_base())
     except Exception as e:  # noqa: BLE001  (one readable line, never a traceback)
-        print(f"ERROR: {e}")
+        print(f"ERROR: {e}", file=sys.stderr if ns.diff else sys.stdout)   # --diff keeps stdout for `run=` alone (spec 220)
         return 1
     for r in reasons:
         print(f"trigger: {r}", file=sys.stderr)
