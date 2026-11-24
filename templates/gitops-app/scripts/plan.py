@@ -35,7 +35,7 @@ STATUSES = {"draft", "in_progress", "completed", "abandoned"}
 ACTIVE = {"draft", "in_progress"}
 # Mirrors shapes.yml of the platform repo (ADR-015). Extend via PLAN_SHAPES=a,b when a new shape lands
 # before this template is updated.
-SHAPES = {"service-python", "library-python", "web-nextjs", "gitops-app", "service-java", "service-go", "service-typescript", "library-typescript", "service-dotnet", "library-dotnet"}
+SHAPES = {"service-python", "library-python", "web-nextjs", "gitops-app", "service-java", "service-go", "service-typescript", "library-typescript", "service-dotnet", "library-dotnet", "library-java"}
 ENVS = {"dev", "staging", "prod"}
 FRONT = re.compile(r"\A---\n(.*?)\n---\n?(.*)\Z", re.S)
 AC_LINE = re.compile(r"^\s*[-*]\s+(~~)?\*\*(AC-\d{3,}\.\d+)\*\*")

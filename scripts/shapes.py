@@ -202,6 +202,11 @@ def publish_errors(sid: str, tdir: Path, registry: str | None) -> list[str]:
         scope = REGISTRIES.get(registry or "")
         if scope and (job.get("permissions") or {}).get(scope) != "write":
             errs.append(f"the `publish` job needs `{scope}: write` for registry {registry}")
+        perms = job.get("permissions") or {}
+        if perms.get("id-token") != "write" or perms.get("attestations") != "write":
+            errs.append("the `publish` job needs `id-token: write` and `attestations: write` for the build provenance")
+        if not any(str(st.get("uses", "")).startswith("actions/attest-build-provenance@") for st in job.get("steps") or []):
+            errs.append("the `publish` job must attest the build provenance with actions/attest-build-provenance")
     if wf.get("permissions") != {"contents": "read"}:
         errs.append("the workflow's default permissions must be `contents: read`")
     for name, j in jobs.items():

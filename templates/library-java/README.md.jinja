@@ -1,0 +1,27 @@
+# {{ project_name }}
+
+{{ description }}
+
+Java library (JDK {{ java_version }}, Maven) generated from the `library-java` template of [`ika100/sdlc-foundry`](https://github.com/ika100/sdlc-foundry), published as `{{ group_id }}:{{ project_name }}` to GitHub Packages on every release tag.
+
+## Use
+
+```xml
+<!-- the repository https://maven.pkg.github.com/{{ github_org | lower }}/{{ project_name }} (id github) and a read:packages token: see CLAUDE.md, Releasing the package -->
+<dependency>
+  <groupId>{{ group_id }}</groupId>
+  <artifactId>{{ project_name }}</artifactId>
+  <version>X.Y.Z</version>
+</dependency>
+```
+
+## Develop
+
+```bash
+devbox shell
+devbox run quality    # spotless + checkstyle + compile
+devbox run test       # JUnit 5 + JaCoCo
+devbox run build      # target/{{ project_name }}-0.0.0-SNAPSHOT.jar
+```
+
+See `CLAUDE.md` for conventions and the full recipe list. Skeleton updates: `/platform:update`.

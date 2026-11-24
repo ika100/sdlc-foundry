@@ -28,10 +28,10 @@ class Finding:
 
 TOOLS = {"service-python": "pip-audit", "library-python": "pip-audit", "web-nextjs": "pnpm-audit",
          "service-go": "govulncheck", "service-java": "trivy", "service-typescript": "pnpm-audit",
-         "library-typescript": "pnpm-audit", "service-dotnet": "trivy", "library-dotnet": "trivy"}
+         "library-typescript": "pnpm-audit", "service-dotnet": "trivy", "library-dotnet": "trivy", "library-java": "trivy"}
 DEP_FILES = {"service-python": ("pyproject.toml", "uv.lock"), "library-python": ("pyproject.toml", "uv.lock"),
              "web-nextjs": ("package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml"),
-             "service-go": ("go.mod", "go.sum"), "service-java": ("pom.xml",),
+             "service-go": ("go.mod", "go.sum"), "service-java": ("pom.xml",), "library-java": ("pom.xml",),
              "service-typescript": ("package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml"),
              "library-typescript": ("package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml"),
              "service-dotnet": ("Directory.Packages.props", "**/packages.lock.json")}   # a glob: dep_files() expands it
@@ -100,7 +100,7 @@ def declared(shape: str, repo: Path) -> set[str]:
             out = set(data.get("dependencies", {})) | set(data.get("devDependencies", {}))
         elif shape == "service-go":
             out = _go_requires((repo / "go.mod").read_text())
-        elif shape == "service-java":
+        elif shape in ("service-java", "library-java"):
             out = _maven_dependencies((repo / "pom.xml").read_text())
         elif shape in ("service-dotnet", "library-dotnet"):
             out = set(re.findall(r'<PackageVersion\s+Include="([^"]+)"', (repo / "Directory.Packages.props").read_text()))
