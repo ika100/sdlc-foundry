@@ -1,0 +1,19 @@
+package {{ package_name }};
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+import org.junit.jupiter.api.Test;
+
+class GreetingsTest {
+
+  @Test
+  void greetsByName() {
+    assertEquals("Hello, Ada!", Greetings.greet(" Ada "));
+  }
+
+  @Test
+  void greetsEveryoneWithoutAName() {
+    assertEquals("Hello, world!", Greetings.greet(""));
+    assertEquals("Hello, world!", Greetings.greet(null));
+  }
+}

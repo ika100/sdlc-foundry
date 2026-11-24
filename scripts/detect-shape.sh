@@ -29,6 +29,7 @@ if [ -f "$answers" ]; then
     */templates/library-typescript|templates/library-typescript) echo library-typescript; exit 0 ;;
     */templates/service-dotnet|templates/service-dotnet) echo service-dotnet; exit 0 ;;
     */templates/library-dotnet|templates/library-dotnet) echo library-dotnet; exit 0 ;;
+    */templates/library-java|templates/library-java)     echo library-java; exit 0 ;;
   esac
 fi
 
@@ -46,8 +47,13 @@ fi
 # a Node backend: package.json depends on fastify (a next app was caught above)
 if [ -f package.json ] && grep -Eq '"fastify"[[:space:]]*:' package.json; then echo service-typescript; exit 0; fi
 
+# Java: a Gradle build, or a pom.xml next to a Dockerfile or referencing Spring Boot, is a service; a bare pom.xml a library
 gradle=(build.gradle*)
-if [ -f pom.xml ] || [ ${#gradle[@]} -gt 0 ]; then echo service-java; exit 0; fi
+if [ ${#gradle[@]} -gt 0 ]; then echo service-java; exit 0; fi
+if [ -f pom.xml ]; then
+  if [ -f Dockerfile ] || grep -q 'spring-boot' pom.xml; then echo service-java; else echo library-java; fi
+  exit 0
+fi
 
 if [ -f go.mod ]; then echo service-go; exit 0; fi
 

@@ -119,7 +119,7 @@ def steps(template: str, rendered: Path) -> list[Step] | None:
     if template in ("service-python", "library-python"):
         return [Step(["uv", "run", "ruff", "check", "--output-format=concise", "."], parse_ruff),
                 Step(["uv", "run", "ruff", "format", "--check", "."], parse_ruff_format)]
-    if template == "service-java":
+    if template in ("service-java", "library-java"):
         return [Step(["mvn", "-B", "--no-transfer-progress", "spotless:check", "checkstyle:check"], parse_maven)]
     if template == "service-go":
         return [Step(["golangci-lint", "run", "./..."], parse_golangci)]

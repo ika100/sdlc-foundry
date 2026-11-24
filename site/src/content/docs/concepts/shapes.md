@@ -5,7 +5,7 @@ sidebar:
   order: 2
 ---
 
-Every repository has a **shape**: `service-python`, `service-java`, `service-go`, `service-typescript`, `service-dotnet`, `web-nextjs`, `library-python`, `library-typescript`, `library-dotnet` or `gitops-app`. In the [domain model](/sdlc-foundry/concepts/domain-model/) a shape is a component's `type` and `lang` in `system.yaml` (`service` + `java` is `service-java`, `service` + `typescript` is `service-typescript`, `service` + `csharp` is `service-dotnet`, `website` + `typescript` is `web-nextjs`, `library` + `typescript` is `library-typescript`, `library` + `csharp` is `library-dotnet`); `gitops-app` is the repository of the system itself. The shape decides:
+Every repository has a **shape**: `service-python`, `service-java`, `service-go`, `service-typescript`, `service-dotnet`, `web-nextjs`, `library-python`, `library-typescript`, `library-dotnet`, `library-java` or `gitops-app`. In the [domain model](/sdlc-foundry/concepts/domain-model/) a shape is a component's `type` and `lang` in `system.yaml` (`service` + `java` is `service-java`, `service` + `typescript` is `service-typescript`, `service` + `csharp` is `service-dotnet`, `website` + `typescript` is `web-nextjs`, `library` + `typescript` is `library-typescript`, `library` + `csharp` is `library-dotnet`); `gitops-app` is the repository of the system itself. The shape decides:
 
 - which **template** creates the repository (CI, Dockerfile, `devbox` recipes, agent instructions),
 - which **agents** work on it (a Java coder knows Maven and Spring; a web tester knows Vitest and Playwright; the `svc-ts` agents know Fastify and Drizzle; the `svc-dotnet` agents know ASP.NET Core and EF Core),

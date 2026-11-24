@@ -35,6 +35,7 @@ TEST_FAST: dict[str, tuple[list[str], str]] = {
     "service-dotnet": (["tests/**/*.cs"], "dotnet"),
 }
 TEST_FAST["library-dotnet"] = TEST_FAST["service-dotnet"]
+TEST_FAST["library-java"] = TEST_FAST["service-java"]
 GO_TEST = re.compile(r"^func (Test\w+)\(", re.M)
 DOTNET_CLASS = re.compile(r"\b(?:class|record)\s+(\w+)")
 
@@ -112,7 +113,7 @@ def build_tests(root: Path, ref: str, task: str | None, load: bool, base: str | 
         if not entry:
             doc["reason"] = f"{repo_shape} runs no test runner in test-fast"
         elif kind == "java":
-            doc["reason"] = "service-java runs share target/, so they cannot run at once (ADR-094)"
+            doc["reason"] = f"{repo_shape} runs share target/, so they cannot run at once (ADR-094)"
         elif kind == "dotnet":
             doc["reason"] = f"{repo_shape} runs share bin/ and obj/, so they cannot run at once (ADR-094)"
         else:

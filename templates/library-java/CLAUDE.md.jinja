@@ -1,0 +1,138 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project
+
+**{{ project_name }}** — {{ description }}
+
+Owned by {{ owner_team }}. A Java {{ java_version }} (LTS) library built with Maven, published as the artifact `{{ group_id }}:{{ project_name }}` (jar and sources jar) to GitHub Packages. Package `{{ package_name }}`. No Spring Boot, no server, no container image, no deployment.
+
+## Development Environment
+
+This project uses [devbox](https://www.jetify.com/devbox) to manage the dev environment (JDK {{ java_version }} + Maven).
+
+```bash
+devbox shell        # enter the dev environment
+devbox run test     # mvn verify (JUnit 5 + JaCoCo 80% line gate)
+devbox run quality  # spotless + checkstyle + compile gate
+```
+
+Canonical `devbox run` scripts (configured in `devbox.json`):
+
+| Script | Purpose |
+|---|---|
+| `build` | `mvn package` without tests: `target/{{ project_name }}-<version>.jar` and its sources jar |
+| `test` | `mvn verify` — JUnit 5 tests, JaCoCo report and 80% line-coverage check |
+| `test-fast` | `mvn test` |
+| `lint` | `mvn spotless:check checkstyle:check` (google-java-format + `config/checkstyle.xml`) |
+| `lint-fix` | `mvn spotless:apply` |
+| `typecheck` | `mvn -DskipTests compile test-compile` |
+| `quality` | `lint` then `typecheck` — the gate CI runs |
+| `audit` | With `NVD_API_KEY` set: OWASP Dependency-Check (fails at CVSS ≥ 7). Without it: `trivy fs` for HIGH/CRITICAL (accepted risks go in `.trivyignore`, each with a reason) |
+| `secrets-scan` | detect-secrets against `.secrets.baseline.json` |
+| `security` | `audit` + `secrets-scan` |
+| `secrets-baseline` | refresh `.secrets.baseline.json` with fixed flags (never run `detect-secrets scan` by hand) |
+| `publish` | `publish vX.Y.Z [--dry-run]`: build with the tag's version and deploy (see Releasing the package) |
+| `ci` | `quality` + `test` + `security`: the gates CI runs, then `ci-extra` when your repo defines it; run it before every push |
+
+**Rule for every agent (human, CI, and AI): never call `mvn`, `java`, `javac`, `detect-secrets`, or `trivy` directly. Always go through `devbox run <script>`. For one-off Maven goals use `devbox run -- mvn -B <goal>`; add a recipe if it is used repeatedly.**
+
+## Claude Code agents
+
+Agents and slash commands come from the [`ika100/sdlc-foundry`](https://github.com/ika100/sdlc-foundry) marketplace, enabled in `.claude/settings.json`:
+
+- `svc-java@sdlc-foundry` — Java coder, tester, release agents (shared with the Spring Boot service shape)
+- `svc@sdlc-foundry` — product-manager, architect and the other pipeline agents
+- `component@sdlc-foundry` — the commands: `/component:spec`, `plan`, `build`, `ship`, `fix`, `check`, `release`
+- `instance@sdlc-foundry`, `api@sdlc-foundry`, `issue@sdlc-foundry`, `platform@sdlc-foundry` — `/api:list`, `/issue:report`, `/platform:update`
+- `shared@sdlc-foundry` — quality and security agents, the `cplat` launcher
+
+### Common workflows
+
+| Task | Command |
+|---|---|
+| Write a feature spec (first step) | `/component:spec <description>` |
+| Plan the approved spec | `/component:plan <NNN>` |
+| Build it: tests first, verified | `/component:build <NNN>` |
+| All of it unattended: build, PR, merge on green CI | `/component:ship <NNN>` (headless: `cplat headless "/component:ship <NNN>"`) |
+| Where specs stand | `/component:spec --all` |
+| Small change | `/component:fix <description>` |
+| Read-only quality + security audit | `/component:check` |
+| Release (tag; the tag's CI run publishes the jar) | `/component:release` |
+
+### Spec first
+
+A feature starts with a spec, not code ([ADR-026](https://github.com/ika100/sdlc-foundry/blob/main/docs/adr/026-feature-specs.md)): `/component:spec <description>` writes `docs/specs/<NNN>-<slug>/spec.md` with acceptance criteria `AC-<NNN>.<n>` and asks you its open questions; approve it (`/component:spec approve <NNN>`), plan it (`/component:plan <NNN>`), then build it (`/component:build <NNN>`): acceptance tests are written from the criteria first and fail, the code makes them pass, a reviewer checks the result against the spec, and the PR lists every criterion. Tests that name a criterion are the spec in code: never weaken them; change the spec instead (`/component:spec --amend <NNN> <change>`). `/component:spec --all` shows where each spec stands; `devbox run spec-check` validates every spec and traces built ones to their tests (also the warn-only `specs` CI workflow). Small changes and bug fixes (`/component:fix`) need no spec, but stop when they would change a criterion.
+
+## Feature Branch Workflow
+
+Branch prefixes: `feature/`, `fix/`, `chore/`, `docs/`, `refactor/`, `release/`. Slugs: lowercase, hyphens, ≤40 chars. Main is protected; all changes via PR. Required CI checks: `quality`, `test`, `security`, `pr-title`. PR titles follow Conventional Commits (`type(scope): description ≤72 chars`).
+
+## Where your additions go
+
+Updates (`/platform:update`) overwrite the skeleton files below. Put your own work next to them, where an update keeps it:
+
+| Updates overwrite | Your additions go in |
+|---|---|
+| the template's recipes in `devbox.json` (including `ci`) | gates: the `ci-extra` recipe (`devbox run ci` and the `ci-extra` CI check run it); other tools: recipes of your own in `devbox.json` (kept) |
+| `.github/workflows/ci.yml` | a workflow file of your own in `.github/workflows/` |
+| `.claude/settings.json` | your own permission entries (allow, ask, deny) in it; they are kept |
+| `CLAUDE.md` | `.claude/project-notes.md` |
+| other skeleton files (`scripts/publish.sh`, `scripts/deps.sh` ...) | nowhere: propose the change to the platform (`/issue:report`) |
+
+## Conventions
+
+- **Public API.** Public types in `{{ package_name }}` (source under `src/main/java/{{ package_path }}/`) are the library's API: each is documented with Javadoc and tested. Put internals in a sub-package such as `{{ package_name }}.internal` and keep them package-private where you can; anything there may change in any release.
+- **Modern Java.** Java {{ java_version }} features where they simplify (records, sealed types, pattern matching, `switch` expressions); immutable value types; no static mutable state; no framework dependency in the API.
+- **Formatting:** google-java-format via Spotless — run `devbox run lint-fix`, never hand-format. Checkstyle enforces unused/star imports, naming, and Javadoc on public types and non-trivial public methods.
+- **Versions follow semver** through Conventional Commits: `feat:` a minor release, `fix:` a patch, `feat!:` or `BREAKING CHANGE:` a major one. A removed or changed public method is a major release.
+- **Dependencies.** Keep runtime dependencies few: every one becomes a dependency of each consumer. Test tools get `<scope>test</scope>`. Add one by inserting a `<dependency>` block; change plugin versions or the Java release only when asked.
+- **Tests:** JUnit 5 in `src/test/java`, calling the public API the way a consumer would; JaCoCo gate 80% lines.
+- **Docs:** feature specs in `docs/specs/` (index in `docs/backlog.md`), ADRs in `docs/adr/`.
+
+## Releasing the package
+
+`/component:release` tags `main`'s head `vX.Y.Z`. The tag's CI run repeats the gates, then its `publish` job runs `devbox run publish vX.Y.Z` ([ADR-125](https://github.com/ika100/sdlc-foundry/blob/main/docs/adr/125-library-releases-publish-to-github-on-the-tag.md)): it fails before building anything when the commit built is not the tagged one (or has changes), sets the tag's version for the build only, and deploys `{{ group_id }}:{{ project_name }}:X.Y.Z` (jar, sources jar, POM) to GitHub Packages (`https://maven.pkg.github.com/{{ github_org | lower }}/{{ project_name }}`) with the job's `GITHUB_TOKEN` (`packages: write`). The tag is the version: `pom.xml` keeps `0.0.0-SNAPSHOT` and the release writes no version file. A rerun of the same tag deploys nothing, because the registry already has that version. `devbox run publish vX.Y.Z --dry-run` builds and checks locally without any registry call.
+
+Another repo depends on a released version like this:
+
+1. The repository in its `pom.xml`:
+
+   ```xml
+   <repositories>
+     <repository>
+       <id>github</id>
+       <url>https://maven.pkg.github.com/{{ github_org | lower }}/{{ project_name }}</url>
+     </repository>
+   </repositories>
+   ```
+
+2. A token that can read packages, even for a public package, as the `<server>` of the same id in the consumer's Maven settings (`~/.m2/settings.xml` locally, a settings file written by the CI job):
+
+   ```xml
+   <servers>
+     <server>
+       <id>github</id>
+       <username>${env.GITHUB_ACTOR}</username>
+       <password>${env.PACKAGES_READ_TOKEN}</password>
+     </server>
+   </servers>
+   ```
+
+   Locally `export PACKAGES_READ_TOKEN=$(gh auth token)` after `gh auth refresh -s read:packages`; in the consumer's CI the secret `PACKAGES_READ_TOKEN` (a token with `read:packages`), or `GITHUB_TOKEN` when this package grants the consuming repo access in its package settings.
+3. The dependency:
+
+   ```xml
+   <dependency>
+     <groupId>{{ group_id }}</groupId>
+     <artifactId>{{ project_name }}</artifactId>
+     <version>X.Y.Z</version>
+   </dependency>
+   ```
+
+## Project notes
+
+Project-specific guidance for Claude Code goes in `.claude/project-notes.md`, which is loaded below and never changed by updates.
+
+@.claude/project-notes.md

@@ -391,3 +391,23 @@ def test_the_platform_ci_smoke_tests_the_template_ac_215_10():  # AC-215.10
                                  "CLAUDE.md", "plugins/svc-ts/README.md"])
 def test_the_docs_name_the_shape_ac_215_11(rel):  # AC-215.11
     assert SHAPE in (ROOT / rel).read_text(), rel
+
+
+# ---------------- #967: the shipped maps carry their sources ----------------
+def test_the_build_maps_inline_their_sources_because_only_dist_is_shipped_967(default):
+    build = json.loads((default / "tsconfig.build.json").read_text())["compilerOptions"]
+    assert build["sourceMap"] is True and build["inlineSources"] is True
+    assert "declarationMap" not in build   # a .d.ts.map cannot inline sources, and src/ is not in the package
+    assert package(default)["files"] == ["dist"]
+
+
+@pytest.mark.skipif(not shutil.which("tsc"), reason="needs tsc")
+def test_every_built_map_carries_its_sources_967(default, tmp_path):
+    work = tmp_path / "w"
+    shutil.copytree(default, work, ignore=shutil.ignore_patterns("node_modules", ".git"))
+    subprocess.run(["tsc", "-p", "tsconfig.build.json", "--types", ""], cwd=work, check=False, capture_output=True)
+    maps = list((work / "dist").rglob("*.map"))
+    assert maps
+    for m in maps:
+        data = json.loads(m.read_text())
+        assert data.get("sourcesContent") and len(data["sourcesContent"]) == len(data["sources"]), m
