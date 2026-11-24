@@ -31,7 +31,7 @@ Read `${CLAUDE_PLUGIN_ROOT}/commands/plan.md`, sections 1-2: no questions, no pu
 After `phase publish`, `cplat system ship drive`: a detached driver runs them, starting each repo's `/component:ship` via `cplat headless`.
 
 - `driver: off`, or to answer the questions of an `ESCALATED:` (`cplat system ship start <spec>`, then `CPLAT_SYSTEM_DRIVER=0 cplat system ship drive`): read `${CLAUDE_PLUGIN_ROOT}/references/ship-loop.md` and follow it, because the driver never asks.
-- Else `cplat system ship wait`, act on the result:
+- Else `cplat system ship wait`, then:
   - `WAIT:` or `TIMEOUT:`: wait again; escalate only after three `TIMEOUT:` in a row (a `WAIT:` resets the count): `cplat system ship escalate '<the TIMEOUT line>' --cause environment`, because a stuck driver means runner or cluster.
   - `ENTRY:`: build it with `${CLAUDE_PLUGIN_ROOT}/references/ship-entry.md`, then `cplat system ship drive`.
   - `ENDED:`: `cplat system ship drive`.
@@ -42,8 +42,8 @@ After `phase publish`, `cplat system ship drive`: a detached driver runs them, s
 
 `cplat system ship escalate '<what needs the user and where>' --cause platform|code|decision|environment`. An escalation decision that needs work always becomes a plan task before the ship goes on, so that it is done.
 
-An answer changes a repo's acceptance test: commit the test in its clone, then `cplat spec test-diff $RED --approve <file>... --reason '<the user's words>'` (`RED`: red-tests commit).
+An answer changes a repo's acceptance test: commit the test, then `cplat spec test-diff $RED --approve <file>... --reason '<the user's words>'` (`RED`: red tests).
 
-End `DONE:`, `ESCALATED:` and `STOPPED:` with the hand-over: `cplat next --json`, follow its `how`.
+End `DONE:`, `ESCALATED:`, `STOPPED:`, a driver-off `complete` and escalation with the hand-over: `cplat next --json`, follow its `how`.
 
 > If a platform template, script or command fails (not the user's code), stop, sum it up in two lines and offer `/issue:report`. **Hard rule:** never file an issue without the user's OK, because the platform repository is public; the platform posts only `platform` escalations and milestone comments itself (ADR-033, ADR-122).
