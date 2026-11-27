@@ -15,7 +15,6 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | Spec | Priority | Status | Criteria | Tracks |
 |---|---|---|---|---|
 | [104-generated-repos-build-and-observe](specs/104-generated-repos-build-and-observe/spec.md) — Generated repos build and observe reliably | P1 | approved | 12 | #143, #965 |
-| [107-open-source-tools-are-adopted-on](specs/107-open-source-tools-are-adopted-on/spec.md) — Open-source tools are adopted on measured value | P1 | approved | 11 | #164 |
 | [221-a-net-library-shape](specs/221-a-net-library-shape/spec.md) — A .NET library shape | P1 | approved | 11 | #720 |
 | [224-a-merge-queue-tests-ready-e2e-changes](specs/224-a-merge-queue-tests-ready-e2e-changes/spec.md) — A merge queue tests ready e2e changes together | P1 | approved | 8 |  |
 | [001-create-a-repo-of-any-shape-with-one](specs/001-create-a-repo-of-any-shape-with-one/spec.md) — Create a repo of any shape with one command | P0 | done | 9 |  |
@@ -109,6 +108,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [103-validation-runs-what-a-change-can-affect](specs/103-validation-runs-what-a-change-can-affect/spec.md) — Validation runs what a change can affect | P1 | done | 11 | #142 |
 | [105-a-deploy-counts-only-after-its-checks](specs/105-a-deploy-counts-only-after-its-checks/spec.md) — A deploy counts only after its checks pass | P1 | done | 8 | #155 |
 | [106-prod-runs-the-exact-image-staging-tested](specs/106-prod-runs-the-exact-image-staging-tested/spec.md) — Prod runs the exact image staging tested | P1 | done | 12 | #157 |
+| [107-open-source-tools-are-adopted-on](specs/107-open-source-tools-are-adopted-on/spec.md) — Open-source tools are adopted on measured value | P1 | done | 11 | #164 |
 | [112-fast-cplat-test-job-shared-renders-and](specs/112-fast-cplat-test-job-shared-renders-and/spec.md) — Fast cplat test job: shared renders and sharding | P1 | done | 15 |  |
 | [113-a-domain-model-core-in-cplat](specs/113-a-domain-model-core-in-cplat/spec.md) — A domain model core in cplat | P1 | done | 18 |  |
 | [114-the-platform-speaks-the-domain-model-5-0](specs/114-the-platform-speaks-the-domain-model-5-0/spec.md) — The platform speaks the domain model (5.0) | P1 | done | 67 |  |
