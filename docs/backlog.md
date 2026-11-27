@@ -15,7 +15,6 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | Spec | Priority | Status | Criteria | Tracks |
 |---|---|---|---|---|
 | [107-open-source-tools-are-adopted-on](specs/107-open-source-tools-are-adopted-on/spec.md) — Open-source tools are adopted on measured value | P1 | approved | 11 | #164 |
-| [220-a-docs-only-land-does-not-wait-for-a](specs/220-a-docs-only-land-does-not-wait-for-a/spec.md) — A docs-only land does not wait for a code PR's catch-up e2e | P1 | approved | 10 | #280 |
 | [221-a-net-library-shape](specs/221-a-net-library-shape/spec.md) — A .NET library shape | P1 | approved | 11 | #720 |
 | [177-triage-asks-reporters-plainly-and-closes](specs/177-triage-asks-reporters-plainly-and-closes/spec.md) — Triage asks reporters plainly and closes what needs no work | P2 | approved | 4 |  |
 | [001-create-a-repo-of-any-shape-with-one](specs/001-create-a-repo-of-any-shape-with-one/spec.md) — Create a repo of any shape with one command | P0 | done | 9 |  |
@@ -205,6 +204,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [217-a-java-library-shape](specs/217-a-java-library-shape/spec.md) — A Java library shape | P1 | done | 11 | #718 |
 | [218-a-net-service-shape](specs/218-a-net-service-shape/spec.md) — A .NET service shape | P1 | done | 11 | #719 |
 | [219-website-specs-get-a-ux-design-step](specs/219-website-specs-get-a-ux-design-step/spec.md) — Website specs get a UX design step | P1 | done | 11 | #715 |
+| [220-a-docs-only-land-does-not-wait-for-a](specs/220-a-docs-only-land-does-not-wait-for-a/spec.md) — A docs-only land does not wait for a code PR's catch-up e2e | P1 | done | 10 | #280 |
 | [222-the-ux-step-is-measured-on-website-plans](specs/222-the-ux-step-is-measured-on-website-plans/spec.md) — The UX step is measured on website plans | P1 | done | 11 | #1059, #1060 |
 | [005-report-a-platform-problem-without](specs/005-report-a-platform-problem-without/spec.md) — Report a platform problem without leaking secrets | P2 | done | 3 |  |
 | [026-guard-rails-before-merge-and-in-the](specs/026-guard-rails-before-merge-and-in-the/spec.md) — Guard rails before merge and in the cluster | P2 | done | 2 |  |
