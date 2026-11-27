@@ -1,5 +1,6 @@
 """Spec 205 (AC-205.5): `cplat quiet test-fast --red -- <test files>` runs the tests once and classes each one:
 `missing behaviour` (the code under test does not do it yet), `test error` (the test itself is broken) or `passes`.
+With `--spec <spec>` (AC-205.8) an amended spec's run judges only the tests of new or changed criteria (`red_scope`).
 
 The injected pytest plugin `cplat_red_check` records the exceptions; `classify` applies the rules (design.md, section 2).
 """
@@ -236,7 +237,10 @@ def classify(records: list[dict], root: Path, shape: str | None, files: list[str
 
 
 def _summary(rows: list[tuple[str, str, str]], log: Path) -> str:
+    import red_scope
     counts = [(c, sum(1 for _, k, _ in rows if k == c)) for c in (MISSING, ERROR, PASSES)]
+    counts.append(("passes (not judged)", sum(1 for _, k, _ in rows if k.startswith(red_scope.NOT_JUDGED))))
+    counts.append((red_scope.REGRESSION, sum(1 for _, k, _ in rows if k == red_scope.REGRESSION)))
     counts.append(("skipped", sum(1 for _, k, _ in rows if k == SKIPPED)))
     parts = [f"{n} {c}" for c, n in counts if n]
     return f"red check: {', '.join(parts) if parts else 'no test ran'} (log: {log})"
@@ -268,12 +272,26 @@ def _write_record(cwd: Path, files: list[str], code: int) -> None:
     (gd if gd.is_absolute() else cwd / gd).joinpath(RECORD_FILE).write_text(json.dumps(rec, indent=2) + "\n")
 
 
-def run(cwd: Path, args: list[str], *, raw: bool, on: bool) -> int:
+def _scope(cwd: Path, spec_ref: str):
+    """AC-205.8: the scope of an amended spec, None for a first build; PlatformError for an unknown spec or no done commit."""
+    import red_scope
+    import spec
+    return red_scope.scope(cwd.resolve(), spec.find(cwd.resolve(), spec_ref))
+
+
+def run(cwd: Path, args: list[str], *, raw: bool, on: bool, spec_ref: str | None = None) -> int:
     import quiet
     import quiet_limit
     if not runs_pytest(cwd):
         print(quiet.USAGE, file=sys.stderr)
         return 2
+    sc = None
+    if spec_ref is not None:
+        try:
+            sc = _scope(cwd, spec_ref)
+        except core.PlatformError as e:
+            print(f"red check: {e}", file=sys.stderr)
+            return 2
     cmd = ["devbox", "run", "test-fast", "--", *args]
     log = quiet._log_path(cwd, "test-fast-red")
     add, progress = quiet_limit.progress_env(log)
@@ -300,10 +318,15 @@ def run(cwd: Path, args: list[str], *, raw: bool, on: bool) -> int:
     import spec
     files = _file_args(cwd, args)
     rows = classify(records, cwd, spec.repo_shape(cwd.resolve()), files)
+    if sc is not None:
+        import red_scope
+        print(red_scope.scope_line(sc))
+        rows, rc = red_scope.apply(rows, sc, cwd.resolve(), files)
+    else:
+        judged = [r for r in rows if r[1] != SKIPPED]
+        rc = 0 if judged and all(r[1] == MISSING for r in judged) else 1
     for node, cls, why in rows:
         print(f"{node}: {cls}" + (f" — {why}" if why else ""))
     print(_summary(rows, log))
-    judged = [r for r in rows if r[1] != SKIPPED]
-    rc = 0 if judged and all(r[1] == MISSING for r in judged) else 1
     _write_record(cwd, files, rc)
     return rc

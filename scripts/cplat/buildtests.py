@@ -6,7 +6,8 @@
 
 Prints exactly one line: `cplat quiet test-fast -- <the task's test files>` in the shape's runner form, or for `--load`
 `cplat quiet test-fast --repeat 3 -- <files>`; a load run with nothing to repeat prints `none: <reason>`. `--red` prints
-`cplat quiet test-fast --red -- <the trace's test files>` (spec 205), or `none: <reason>` where test-fast runs no pytest.
+`cplat quiet test-fast --red [--spec <spec>] -- <the trace's test files>` (spec 205; `--spec` for a spec amended after a
+build, AC-205.8), or `none: <reason>` where test-fast runs no pytest.
 """
 from __future__ import annotations
 
@@ -97,14 +98,17 @@ def build_tests(root: Path, ref: str, task: str | None, load: bool, base: str | 
 
     if red:
         import quiet_red
+        import red_scope
         doc["red"] = True
+        doc["amended"] = red_scope.amended(sp)
         if not quiet_red.runs_pytest(root):
             doc["reason"] = "test-fast does not run pytest"
         else:
             doc["files"] = sorted({f for fs in trace.values() for f in fs if matches(f, globs)})
             if doc["files"]:
                 doc["args"] = list(doc["files"])
-                doc["command"] = "cplat quiet test-fast --red -- " + shlex.join(doc["args"])
+                scoped = f"--spec {shlex.quote(sp.id)} " if doc["amended"] else ""
+                doc["command"] = f"cplat quiet test-fast --red {scoped}-- " + shlex.join(doc["args"])
             else:
                 doc["reason"] = "no acceptance test files test-fast runs"
         return doc

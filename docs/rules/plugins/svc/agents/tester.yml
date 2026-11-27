@@ -9,7 +9,7 @@ rules:
     text: "Assert on parsed values, never on serialized text, because formatting and key order are no part of a contract"
     class: practice
   - id: R4
-    text: "every line must be `missing behaviour` (assertion failure, 404, missing module/symbol)"
+    text: "every judged line must be `missing behaviour`"
     source: spec 205
     class: practice
   - id: R5

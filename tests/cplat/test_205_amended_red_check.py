@@ -381,14 +381,25 @@ def _paragraph(text, needle):
 
 
 def test_phase_1_escalates_a_regression_with_cause_code_ac_205_8():  # AC-205.8
-    bullet = _paragraph(build_text(), "cplat component build tests <id> --red")
-    assert "`regression`" in bullet                       # interface: the label the red check prints
-    assert "--cause code" in bullet.split("`regression`", 1)[1]   # interface: the escalation flag the build runs
+    bullet = _paragraph(build_text(), "cplat component build tests <id> --red")  # interface: the red-check command line
+    assert "`regression`" in bullet                                   # the label the red check prints
+    assert "--cause code" in bullet.split("`regression`", 1)[1]       # the escalation flag the build runs
     assert "--wrong-failure" in build_text()
 
 
 def test_the_tester_leaves_unjudged_passes_alone_ac_205_8():  # AC-205.8
     text = (ROOT / "plugins" / "svc" / "agents" / "tester.md").read_text()
     step = _paragraph(text, "--red")
-    assert "not judged" in step and "`regression`" in step     # interface: the labels the red check prints
+    assert "not judged" in step and "`regression`" in step     # the labels the red check prints
 
+
+
+def test_node_ids_relative_to_a_nested_pytest_ini_are_traced_too_ac_205_8(amended, capsys):  # AC-205.8
+    world, _ = amended                                  # tests/cplat/pytest.ini in the platform repo: node ids lose `tests/`
+    world.put("tests/pytest.ini", "[pytest]\n")
+    capsys.readouterr()
+    rc = quiet.main(["test-fast", "--red", "--spec", SPEC_ID, "--", *ALL])
+    out = capsys.readouterr().out.splitlines()
+    assert "test_alerts.py::test_email_is_sent: " + NOT_JUDGED_1 in out
+    assert "test_alerts.py::test_one_email_ac_007_4: missing behaviour — AssertionError: assert 1 == 2" in out
+    assert rc == 0
