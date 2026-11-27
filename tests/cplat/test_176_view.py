@@ -196,7 +196,8 @@ def test_a_valid_row_of_each_class_is_accepted_ac_176_2(world):  # AC-176.2
     kinds = {1: ("bug", "P0"), 2: ("small-change", "P2"), 3: ("feature", "P1"), 4: ("question", None), 5: ("duplicate", None),
              6: ("wontfix", None), 7: ("needs-exploring", None), 8: ("needs-info", None)}
     rows = [row(n, **{"class": c, "priority": p, "comment": "text" if c in ("question", "duplicate", "wontfix", "needs-info") else None,
-                      "duplicate_of": 2 if c == "duplicate" else None, "expected": "ok" if c in ("bug", "small-change") else None})
+                      "duplicate_of": 2 if c == "duplicate" else None, "expected": "ok" if c in ("bug", "small-change") else None,
+                      **({"comment": "Thanks for the report. Which version?", "missing": ["version"]} if c == "needs-info" else {})})
             for n, (c, p) in kinds.items()]
     assert screen(world, rows).rc == 0
 
@@ -239,7 +240,7 @@ PLAN = """The plan (6 actions):
   #571  feature, P1 (P1: normal bug or feature): write a new spec, track the issue in it
   #562  bug, P1 (P1: normal bug or feature): queue the fix, it runs on its own
   #563  feature, P2 (P2: convenience): write a new spec, track the issue in it
-  #564  question: post the answer, label question
+  #564  question: post the answer, label question, close as not planned
   #548  tracked in spec 176: label tracked
 Choose: OK, do it / Change one / Cancel"""
 
@@ -272,7 +273,7 @@ def test_the_confirmation_json_has_lines_and_the_three_choices_ac_176_3(scene): 
     ("feature", {"spec": "201-existing", "new_spec": True}, "write a new spec, track the issue in it"),
     ("duplicate", {"comment": "same", "duplicate_of": 7, "priority": None}, "mark as duplicate of #7"),
     ("wontfix", {"comment": "no", "priority": None}, "explain why, label wontfix"),
-    ("needs-info", {"comment": "which?", "priority": None}, "ask the reporter, label needs-info"),
+    ("needs-info", {"comment": "Thanks for the report. Which version?", "missing": ["version"], "priority": None}, "ask the reporter, label needs-info"),
     ("needs-exploring", {"priority": None}, "nothing posted, explore it next"),
 ])
 def test_the_plan_phrase_by_class_ac_176_3(world, cls, extra, phrase):  # AC-176.3

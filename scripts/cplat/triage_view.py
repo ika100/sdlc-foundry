@@ -15,6 +15,8 @@ from pathlib import Path
 import priority as prio
 import triage
 import triage_batch
+import triage_facts
+import triage_reporter as rep
 from core import PlatformError
 
 CLASSES = ("bug", "small-change", "feature", "question", "duplicate", "wontfix", "needs-exploring", "needs-info")
@@ -26,7 +28,8 @@ SET_ON_ISSUE = "set on the issue"
 WIDTH = 80
 PAGE = 4
 CHOICES = ["OK, do it", "Change one", "Cancel"]
-HANDLED_ORDER = ("spec", "claimed", "fixed", "duplicate")
+CLOSE_CLASSES = ("question", "duplicate", "wontfix")
+HANDLED_ORDER = ("spec", "claimed", "fixed", "duplicate", "silent")
 GROUPS = (("decide", "Needs your decision"), ("clear", "Clear"), ("handled", "Already handled"))
 ACTION = {"bug": "fix on its own", "small-change": "fix on its own", "question": "answer in comment", "duplicate": "mark as duplicate",
           "wontfix": "explain, no work", "needs-exploring": "explore it first", "needs-info": "ask the reporter"}
@@ -72,7 +75,7 @@ def load_proposals(path: str | Path, batch: dict, *, for_act: bool = False, root
         if n not in seen:
             errors.append(f"#{n}: no row")
             continue
-        row, problems = _row(seen[n], issue, for_act, root or Path.cwd())
+        row, problems = _row(seen[n], issue, for_act, root or Path.cwd(), batch.get("forms") or [])
         errors += [f"#{n}: {p}" for p in problems]
         out.append(row)
     if errors:
@@ -99,7 +102,48 @@ def _priority_problems(row: dict) -> list[str]:
     return []
 
 
-def _row(src: dict, issue: dict, for_act: bool, root: Path) -> tuple[dict, list[str]]:
+def _form_error(forms: list[dict]) -> str:
+    return f"a needs-info row of an issue filed without a form needs form (one of {', '.join(f['id'] for f in forms)})"
+
+
+def _missing_problems(row: dict, issue: dict, forms: list[dict]) -> list[str]:
+    """The `missing` and `form` rules of a needs-info row (AC-177.1)."""
+    missing = row.get("missing")
+    if not (isinstance(missing, list) and missing and all(_text(m) for m in missing)):
+        return ["a needs-info row needs missing (the fields to ask the reporter for)"]
+    seen = issue.get("form") or {}
+    fid = seen.get("id") or row.get("form")
+    found = next((f for f in forms if f["id"] == fid), None)
+    if forms and not found:
+        return [_form_error(forms)]
+    bad: list[str] = []
+    if found:
+        labels = [f["label"] for f in found["fields"]]
+        bad += [f'missing names "{m}", not a field of {found["name"]}' for m in missing if m not in labels]
+        if seen.get("id"):
+            bad += [f'missing leaves out "{m}", empty in the form' for m in seen.get("missing") or [] if m not in missing]
+    return bad
+
+
+def _reporter_problems(row: dict, issue: dict, cls: str | None, forms: list[dict]) -> list[str]:
+    """The form fields and the plain-words rules of a comment (AC-177.1, AC-177.2); a writer gets no word rules."""
+    bad = _missing_problems(row, issue, forms) if cls == "needs-info" else []
+    comment = row.get("comment")
+    if cls not in COMMENT_CLASSES or not _text(comment) or triage_facts.is_writer(issue["role"]):
+        return bad
+    terms = rep.internal_terms(comment)
+    if terms:
+        bad.append(f"the comment to an outside reporter uses internal terms: {', '.join(terms)}; use plain words")
+    if cls == "needs-info":
+        if not rep.thanks(comment):
+            bad.append("the comment to an outside reporter does not thank them")
+        asked = row.get("missing")
+        if isinstance(asked, list):
+            bad += [f'the comment does not ask for "{m}"' for m in asked if _text(m) and m.lower() not in comment.lower()]
+    return bad
+
+
+def _row(src: dict, issue: dict, for_act: bool, root: Path, forms: list[dict] | None = None) -> tuple[dict, list[str]]:
     row, bad = dict(src), []
     engine = issue.get("engine")
     mismatch = False
@@ -136,6 +180,7 @@ def _row(src: dict, issue: dict, for_act: bool, root: Path) -> tuple[dict, list[
             bad.append("question needs a text and 1-4 options")
     if cls in COMMENT_CLASSES and not _text(row.get("comment")):
         bad.append(f"a {cls} row needs a comment")
+    bad += _reporter_problems(row, issue, cls, forms or [])
     if cls == "duplicate" and not isinstance(row.get("duplicate_of"), int):
         bad.append("a duplicate row needs duplicate_of")
     if cls in ("bug", "small-change") and not _text(row.get("expected")):
@@ -214,6 +259,10 @@ def _line(e: dict) -> str:
         parts = ["check" if row["mark"] == "check" else None, _from(issue)]
     else:
         parts = [row["class"], row.get("priority"), action_word(row), _from(issue)]
+    if row["class"] == "needs-info" and row.get("missing"):
+        parts.append("missing: " + ", ".join(row["missing"]))
+    if _closed(issue):
+        parts.append("reopened by the reporter")
     parts = [p for p in parts if p]
     return text + ("\n" + _wrap(", ".join(parts), " " * 8) if parts else "")
 
@@ -257,15 +306,22 @@ def _comment(row: dict) -> str:
     return text
 
 
-def actions(issue: dict, row: dict | None) -> dict:
-    """{"add", "remove", "comment"} of one issue as `act` makes them: only real changes, none for a row that needs no call."""
+def _closed(issue: dict) -> bool:
+    return issue.get("state") == "closed"
+
+
+def actions(issue: dict, row: dict | None, days: int = 14) -> dict:
+    """{"add", "remove", "comment", "close", "reopen"} of one issue as `act` makes them: only real changes, none for a row that needs no call."""
     have = set(issue["labels"])
     handled = (issue["handled"] or {}).get("kind")
-    comment = None
+    comment, close, reopen = None, False, False
     if handled:
         add, drop = {"spec": ["tracked"], "duplicate": ["duplicate"]}.get(handled, []), ["triage"] if handled in ("spec", "duplicate") else []
+        if handled == "silent":
+            comment, close = rep.final_comment(days), True
     else:
         cls = row["class"]
+        reopen = _closed(issue) and cls not in CLOSE_CLASSES
         if cls in ("bug", "small-change", "feature"):
             mine = "p" + row["priority"][1:]
             add = ["bug" if cls == "bug" else "enhancement", *(["tracked"] if cls == "feature" else []), "triaged", mine]
@@ -276,7 +332,13 @@ def actions(issue: dict, row: dict | None) -> dict:
         else:
             add, drop = [cls], ["triage"] + (["needs-info"] if cls != "needs-info" else [])
             comment = row["comment"]
-    return {"add": [x for x in add if x not in have], "remove": [x for x in drop if x in have], "comment": comment}
+            if cls == "needs-info":
+                comment += "\n\n" + rep.footer(days)
+            elif cls == "duplicate" and not comment.startswith(f"Duplicate of #{row['duplicate_of']}"):
+                comment = f"Duplicate of #{row['duplicate_of']}\n\n{comment}"
+            close = cls in CLOSE_CLASSES and not _closed(issue)
+    return {"add": [x for x in add if x not in have], "remove": [x for x in drop if x in have], "comment": comment,
+            "close": close, "reopen": reopen}
 
 
 def _plan_text(e: dict) -> tuple[str, str] | None:
@@ -287,6 +349,8 @@ def _plan_text(e: dict) -> tuple[str, str] | None:
             return "spec", f"tracked in spec {h['specs'][0]['number']}: label tracked"
         if kind == "duplicate":
             return "duplicate", f"duplicate of #{h['duplicate_of']}: label duplicate"
+        if kind == "silent":
+            return "needs-info", f"needs-info, silent {issue['handled']['line'].split()[1]} days: close as not planned with a final comment"
         return None
     cls = row["class"]
     head = cls
@@ -302,7 +366,12 @@ def _plan_text(e: dict) -> tuple[str, str] | None:
         phrase = f"mark as duplicate of #{row['duplicate_of']}"
     else:
         phrase = PLAN[cls]
-    return cls, f"{head}: {phrase}"
+    text = f"{head}: {phrase}"
+    if cls in CLOSE_CLASSES and not _closed(issue):
+        text += ", close as not planned"
+    elif _closed(issue) and cls not in CLOSE_CLASSES:
+        text = "reopen, " + text
+    return cls, text
 
 
 def _plan_row(e: dict, step: tuple[str, str]) -> dict:
@@ -334,9 +403,10 @@ def show(batch: dict, rows: list[dict], number: int) -> str:
     if number not in found:
         raise PlatformError(f"#{number} is not an issue of the batch")
     e = found[number]
-    a = actions(e["issue"], e["row"])
+    a = actions(e["issue"], e["row"], batch.get("close_after_days", 14))
+    state = "close as not planned" if a["close"] else "reopen" if a["reopen"] else "unchanged"
     labels = [f"+{x}" for x in a["add"]] + [f"-{x}" for x in a["remove"]]
-    return "\n".join([f"#{number}", "labels: " + (", ".join(labels) if labels else "none"),
+    return "\n".join([f"#{number}", f"state: {state}", "labels: " + (", ".join(labels) if labels else "none"),
                       "comment:\n" + a["comment"] if a["comment"] else "comment: none"])
 
 

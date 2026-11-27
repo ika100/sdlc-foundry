@@ -32,7 +32,7 @@ and run it for real. Everything that can be code is code (and has tests in tests
   cplat instance promote <component…|--all> --to <env> [--version V] [--sha S] [--pr]
   cplat instance secret set <component>/<env> <secret> <KEY> | list [--env dev]   remote secrets of the local cluster (values never go to git)
   cplat instance verify [ENV] [--base-url URL] [--spec SPEC] [--no-retry] [--json]   the repo's smoke tests against a deployment
-  cplat issue triage list|show|setup-labels|apply ...   issue intake (labels and comments only after you confirm; never closes)
+  cplat issue triage list|show|setup-labels|apply ...   issue intake (labels and comments only after you confirm; closes only confirmed rows)
   cplat platform doctor [--json]
   cplat platform versions [--json] [--diff REF] [--changelog]   the versions table of this release; what changed since REF
   cplat platform update [--migrate] [--data KEY=VALUE] [--dry-run]
