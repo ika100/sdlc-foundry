@@ -1,7 +1,7 @@
 ---
 spec_id: 221-a-net-library-shape
 title: A .NET library shape
-status: approved
+status: done
 priority: P1
 shape: platform
 tracks: [720]
@@ -118,3 +118,5 @@ none
 
 - 2026-11-23 created
 - 2026-11-23 approved
+- 2026-11-27 building
+- 2026-11-27 done

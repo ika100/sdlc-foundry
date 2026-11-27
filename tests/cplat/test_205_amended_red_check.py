@@ -403,3 +403,28 @@ def test_node_ids_relative_to_a_nested_pytest_ini_are_traced_too_ac_205_8(amende
     assert "test_alerts.py::test_email_is_sent: " + NOT_JUDGED_1 in out
     assert "test_alerts.py::test_one_email_ac_007_4: missing behaviour — AssertionError: assert 1 == 2" in out
     assert rc == 0
+
+
+# ---------------- AC-205.8: a test traces to its own criteria, not to the file's (spec 104 run, 2026-11-27) ----------------
+
+def test_a_test_naming_another_specs_criterion_is_not_judged_by_the_files_ids_ac_205_8(amended, capsys):  # AC-205.8
+    world, _ = amended                                  # a shared test file: another spec's test next to spec 007's
+    world.put("tests/test_alerts.py", ALERTS + "\n\ndef test_of_another_spec():  # AC-189.1\n    assert True\n")
+    rc, rows, lines, err = red(capsys, SPEC_ID, *ALL)
+    assert rows["test_of_another_spec"] == ("passes (not judged: no criterion of 007 unchanged)", "")
+    assert rc == 0, "\n".join(lines) + err
+
+
+def test_an_untagged_test_the_build_left_as_it_was_is_not_judged_ac_205_8(amended, capsys):  # AC-205.8
+    world, _ = amended                                  # the branch forks from origin/main, where the untagged tests exist
+    world.put("tests/test_alerts.py", ALERTS.replace("def test_without_its_own_id():\n    assert 1 == 2\n",
+                                                     "def test_without_its_own_id():\n    assert True\n"))
+    fork = world.commit("main: the untagged test passes")
+    git(world.root, "update-ref", "refs/remotes/origin/main", fork)
+    world.put("tests/test_alerts.py", ALERTS.replace("def test_without_its_own_id():\n    assert 1 == 2\n",
+                                                     "def test_without_its_own_id():\n    assert True\n")
+              + "\n\ndef test_added_by_the_build():\n    assert 1 == 2\n")
+    rc, rows, lines, err = red(capsys, SPEC_ID, *ALL)
+    assert rows["test_without_its_own_id"] == ("passes (not judged: no criterion of 007 unchanged)", "")
+    assert rows["test_added_by_the_build"][0] == "missing behaviour"           # new on the branch: the file's ids judge it
+    assert rc == 0, "\n".join(lines) + err
