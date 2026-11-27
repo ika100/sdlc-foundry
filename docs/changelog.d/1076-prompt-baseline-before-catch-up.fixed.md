@@ -1,0 +1,1 @@
+**A land checks the prompt bytes of the merged tree before it catches a PR up (#1076).** Inside the merge lock, when the base and the branch each fit the prompt baseline but together pass it, the land now stops before the update with a land problem that names the overshoot and the next step (shorten the prompts or rebaseline), instead of failing late on CI after the wait.
