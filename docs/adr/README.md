@@ -131,3 +131,5 @@ Decisions that shape how the platform works, with the context and the alternativ
 | [130](130-triage-closes-confirmed-issues.md) | Triage closes confirmed question, duplicate and wontfix issues and silent needs-info issues as not planned; comments to outside reporters use plain words. |
 | [131](131-an-amended-spec-judges-only-the-tests-of-its-changed-criteria.md) | The red check of an amended spec judges only the tests of criteria new or changed since its last done commit; every other test must pass or the build escalates as a regression |
 | [132](132-fix-entries-name-their-cause.md) | A platform fix entry names its cause in a closing Caused by: line; change-quality derives the change-failure rate from it |
+| [133](133-pytest-testmon-and-pytest-impact-are-not-adopted.md) | pytest-testmon and pytest-impact are rejected: change-aware test selection is built natively (spec 212, ADR-123) |
+| [134](134-codebase-memory-mcp-is-not-adopted.md) | Codebase-Memory MCP is rejected: in a live A/B the agents did not use it and no gain was measurable |

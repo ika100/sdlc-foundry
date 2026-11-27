@@ -31,6 +31,7 @@ import dispatch_answer
 import dispatch_budget
 import dispatch_cycle
 import dispatch_items
+import dispatch_platform
 import dispatch_policy
 import dispatch_sensor
 import dispatch_setup
@@ -49,6 +50,7 @@ INBOX_KINDS = ("approve", "answer", "escalation", "triage", "budget", "stuck")
 
 sleep = time.sleep         # seams for tests
 clock = time.monotonic
+execv = os.execv
 
 
 def _out(text: str) -> None:
@@ -101,14 +103,28 @@ def _start(repo: Path, once: bool) -> int:
 
         old = {s: signal.signal(s, handler) for s in (signal.SIGINT, signal.SIGTERM)}
         try:
-            _loop(repo, slug, policy, stop)
+            restart = _loop(repo, slug, policy, stop)
         finally:
             for s, h in old.items():
                 signal.signal(s, h)
+    if restart:        # the lock is released; the new process takes it again, all state is on disk (#1108)
+        _out("platform checkout moved: the loop restarts with the new code")
+        execv(sys.executable, [sys.executable, str(du.CPLAT), "dispatch", "start", "--repo", str(repo)])
     return 0
 
 
-def _loop(repo: Path, slug: str, policy, stop: dict) -> None:
+def _moved(repo: Path, started_at: str | None, live: set[int]) -> bool:
+    """True when the platform checkout is at another commit than when the loop started and no unit runs (#1108)."""
+    if started_at is None or live:
+        return False
+    doc = dispatch_platform.state(repo)
+    return bool(doc) and doc["commit"] != started_at
+
+
+def _loop(repo: Path, slug: str, policy, stop: dict) -> bool:
+    """Run cycles until stopped; True when the loop must re-execute itself because the platform checkout moved."""
+    doc = dispatch_platform.state(repo)
+    started_at = doc["commit"] if doc else None
     last_no_starts: str | None = None
     last_cycle = float("-inf")
     pids: set[int] = set()
@@ -131,10 +147,13 @@ def _loop(repo: Path, slug: str, policy, stop: dict) -> None:
             last_cycle = clock()
             live = _live_pids(repo, slug)
             steering = _steering(slug)
+            if not stop["now"] and _moved(repo, started_at, live):
+                return True
         pids = live
         end = clock() + TICK
         while not stop["now"] and clock() < end:
             sleep(min(0.5, max(0.0, end - clock())))
+    return False
 
 
 def spawn_loop(repo: Path, log: Path) -> int:   # tests replace this
