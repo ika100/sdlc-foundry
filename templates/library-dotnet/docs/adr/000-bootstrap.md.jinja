@@ -1,0 +1,25 @@
+# ADR-000: Bootstrap
+
+## Status
+
+Accepted on bootstrap.
+
+## Context
+
+`{{ project_name }}` was created from the `library-dotnet` Copier template at `ika100/sdlc-foundry`. The template encodes the platform's .NET library conventions (platform ADR-125, ADR-127, spec 221):
+
+- .NET {{ dotnet_major }} LTS SDK via devbox; C# with nullable reference types, central package versions and lock files
+- One packable project `src/{{ namespace }}` (NuGet package `{{ namespace }}`, target framework `net{{ dotnet_major }}.0`) and its test project
+- `dotnet format` + the .NET analyzers (warnings are errors) as the quality gate; trivy for the locked packages
+- xUnit with an 80 % line coverage gate (coverlet)
+- The release tag is the version: the tag's `publish` CI job packs the library and pushes it to GitHub Packages (`https://nuget.pkg.github.com/{{ github_org | lower }}/index.json`)
+- No container image and no deployment
+- Claude Code agents from the `sdlc-foundry` marketplace (`svc-dotnet` + `svc` + `shared`)
+
+## Decision
+
+We adopt the platform conventions verbatim. Any deviation must be justified in a new ADR.
+
+## Consequences
+
+Skeleton updates (CI, devbox recipes, .NET bump, build and analyzer settings) arrive through `copier update`; `src/`, `tests/`, `Directory.Packages.props`, the solution and `docs/adr/` are project-owned and never overwritten.

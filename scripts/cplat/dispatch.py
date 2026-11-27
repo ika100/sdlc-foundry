@@ -310,8 +310,12 @@ def _resume(repo: Path, item: str | None) -> int:
     if item:
         found = dispatch_items.resolve(repo, slug, item)
         ds.resume_item(slug, found.key)
+        removed, kept = _lift_label(repo, slug, found.key)
+        if kept:
+            _out(f"still held: {found.label}: " + "; ".join(f"#{n} {why}" for n, why in kept))
+            return 1
         _out(f"resumed: {found.label}")
-        for n in _lift_label(repo, slug, found.key):
+        for n in removed:
             _out(f"label removed: #{n}")
         return 0
     ds.resume(slug)
@@ -320,21 +324,44 @@ def _resume(repo: Path, item: str | None) -> int:
     return 0
 
 
-def _lift_label(repo: Path, slug: str, key: str) -> list[int]:
-    """Remove `needs-decision` from the open issues of the item that carry it (a fix: its issue; a spec: the issues its unit tracks)."""
-    worktree = ds.worktree_path(slug, key)
-    unit = ds.read_unit(worktree) if worktree.is_dir() else None
-    numbers = [int(key.split("-", 1)[1])] if key.startswith("issue-") else (du._issues_of(unit) if unit else [])
-    removed = []
-    for n in numbers:
+def _tracked(slug: str, key: str) -> list[int]:
+    """The issues of an item: a fix its issue; a spec the issues of its units (ended ones too) and the issues its spec tracks."""
+    if key.startswith("issue-"):
+        return [int(key.split("-", 1)[1])]
+    numbers: list[int] = []
+    for unit in ds.all_units(slug):
+        if (unit.get("key") or ds.unit_key(str(unit.get("unit") or ""))) == key:
+            numbers += du._issues_of(unit)
+    snap = dispatch_items._snapshot(slug)
+    if snap is not None:
+        want = key.split("-", 1)[1].lstrip("0")
+        for row in [*snap.specs, *snap.drafts]:
+            if str(row.get("id") or "").split("-", 1)[0].lstrip("0") == want:
+                numbers += [int(n) for n in row.get("tracks") or []]
+    return list(dict.fromkeys(numbers))
+
+
+def _lift_label(repo: Path, slug: str, key: str) -> tuple[list[int], list[tuple[int, str]]]:
+    """Remove `needs-decision` from the open issues of the item that carry it and hold the dispatcher's own escalation comment.
+    Returns the issues lifted and those that stay held, each with the reason."""
+    removed: list[int] = []
+    kept: list[tuple[int, str]] = []
+    for n in _tracked(slug, key):
         try:
-            doc = json.loads(du.gh(["issue", "view", str(n), "--json", "state,labels"], cwd=repo) or "{}")
+            doc = json.loads(du.gh(["issue", "view", str(n), "--json", "state,labels,comments"], cwd=repo) or "{}")
         except ValueError:
+            kept.append((n, "cannot be read"))
             continue
         has = any(label.get("name") == du.NEEDS_DECISION for label in doc.get("labels") or [])
-        if doc.get("state") == "OPEN" and has and du.gh(["issue", "edit", str(n), "--remove-label", du.NEEDS_DECISION], cwd=repo) is not None:
+        if doc.get("state") != "OPEN" or not has:
+            continue
+        if key.startswith("spec-") and not any(du.ESCALATION_MARK in str(c.get("body") or "") for c in doc.get("comments") or []):
+            kept.append((n, f"carries {du.NEEDS_DECISION} that a person set: remove it yourself"))
+        elif du.gh(["issue", "edit", str(n), "--remove-label", du.NEEDS_DECISION], cwd=repo) is None:
+            kept.append((n, f"{du.NEEDS_DECISION} could not be removed (gh failed)"))
+        else:
             removed.append(n)
-    return removed
+    return removed, kept
 
 
 def _slots(repo: Path, n: int) -> int:

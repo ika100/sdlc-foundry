@@ -1,5 +1,5 @@
 ---
-description: "Create a component repo from its template plus a private GitHub repo. Usage: /component:new <name> <description> [--type service|website|library] [--lang python|java|go|typescript] [--system OWNER/REPO] [--public] [--data k=v]"
+description: "Create a component repo from its template plus a private GitHub repo. Usage: /component:new <name> <description> [--type service|website|library] [--lang python|java|go|typescript|csharp] [--system OWNER/REPO] [--public] [--data k=v]"
 ---
 
 Create a repo with the platform script (all logic and tests live in `scripts/cplat`). **Request:** $ARGUMENTS

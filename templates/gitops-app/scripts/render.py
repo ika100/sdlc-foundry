@@ -63,7 +63,7 @@ system.yaml (every value explicit and reviewable; the model is described in docs
   components:
     todo-api:
       type: service                  # service | website | library, required with lang
-      lang: python                   # python | java | go | typescript (service, website or library) | unknown (migrated 4.x entries)
+      lang: python                   # python | java | go | typescript | csharp (service, website or library) | unknown (migrated 4.x entries)
       repo: org/todo-api             # where the image is built
       image: ghcr.io/org/todo-api    # no tag: the tag is pinned in the overlay (dev: latest)
       port: 8080
@@ -176,8 +176,8 @@ MANAGED_PREFIXES = ("externalsecret-", "credentials-")
 TOP_KEYS = ["system", "owner", "environments", "components", "apis", "resources", "gateway", "secretStore", "registries", "autonomy"]
 ENV_KEYS = ["host", "url", "policy", "promote", "observability", "operators", "backup", "autonomy", "cluster"]
 # Valid type/lang pairs (the languages of shapes.yml); service/unknown is what the migration writes for a 4.x entry without a known shape.
-VALID_PAIRS = [("service", "python"), ("service", "java"), ("service", "go"), ("service", "typescript"), ("website", "typescript"),
-               ("library", "python"), ("library", "typescript"),
+VALID_PAIRS = [("service", "python"), ("service", "java"), ("service", "go"), ("service", "typescript"), ("service", "csharp"),
+               ("website", "typescript"), ("library", "python"), ("library", "typescript"), ("library", "csharp"), ("library", "java"),
                ("service", "unknown")]
 PAIR_TEXT = ", ".join(f"{t}/{lang}" for t, lang in VALID_PAIRS if lang != "unknown")
 COMMON_KEYS = ["type", "lang", "repo"]
@@ -2467,8 +2467,10 @@ def wait_job(base: str, what: str, script: str, env: list[dict], labels: dict, h
     return {
         "apiVersion": "batch/v1", "kind": "Job",
         "metadata": {"name": f"{base[:50].rstrip('-')}-{what}", "labels": dict(labels),
-                     "annotations": {**hook, "argocd.argoproj.io/hook-delete-policy": "BeforeHookCreation,HookSucceeded"}},
-        "spec": {"backoffLimit": 1, "activeDeadlineSeconds": 900,
+                     # no HookSucceeded (#1010): Argo CD then waited for the foreground deletion of the finished Job and its pod, minutes
+                     # on a first sync; the TTL controller removes it in the background, BeforeHookCreation clears a leftover at the next sync
+                     "annotations": {**hook, "argocd.argoproj.io/hook-delete-policy": "BeforeHookCreation"}},
+        "spec": {"backoffLimit": 1, "activeDeadlineSeconds": 900, "ttlSecondsAfterFinished": 300,
                  # the pod must not match the database's selectors (app.kubernetes.io/name): its own name, part-of and managed-by
                  "template": {"metadata": {"labels": {"app.kubernetes.io/name": f"{base}-{what}", **kept,
                                                       "app.kubernetes.io/component": what}},

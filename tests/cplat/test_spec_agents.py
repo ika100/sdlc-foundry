@@ -276,7 +276,7 @@ def test_app_plan_pushes_the_spec_branch_and_opens_the_pr():
 
 def test_app_ship_checks_the_plan_is_on_main():
     """AC-050.2: /system:ship publishes the spec and plan to main (a PR merged on green) before any repo starts."""
-    text = (APP / "commands" / "ship.md").read_text()
+    text = (APP / "references" / "ship-loop.md").read_text()
     assert "## Phase `publish`" in text and "not on `main`" in text
     assert "origin/main" in (ROOT / "scripts" / "cplat" / "appship.py").read_text()
 

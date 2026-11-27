@@ -26,7 +26,7 @@ Agents: tester `agents.tester`, release `agents.release` (ADR-012), all in the f
 
 ## Phase 1 — Release target
 
-`cplat component release target`; show its lines verbatim. Exit 1 starts with `REFUSED:` and names the next step: **stop** there and run no gate, tag or PR. Otherwise read `cplat component release target --json`: `commit` (`TAG_COMMIT`), `source` (`staging` or `main`), `version` (`VERSION`), `previous` (`PREVIOUS`, empty for the first release), `version_file.file` and `.next` (`VERSION_FILE`, `NEXT_DEV`; both `none` when `version_file` is null). Use these values throughout; never compute a version or pick another commit, because the tag, the gates and the staged image must name one commit.
+`cplat component release target --json`: show its `lines` verbatim. Exit 1 (`REFUSED:`, names the next step): **stop**, run no gate, tag or PR. Otherwise read from the same result: `commit` (`TAG_COMMIT`), `source` (`staging` or `main`), `version` (`VERSION`), `previous` (`PREVIOUS`, empty for the first release), `version_file.file` and `.next` (`VERSION_FILE`, `NEXT_DEV`; both `none` when `version_file` is null). Use these values throughout; never compute a version or pick another commit, because the tag, the gates and the staged image must name one commit.
 
 `git status --porcelain` must be empty so that the gates check only what is released (else stop: "Working tree has uncommitted changes — commit or stash before releasing."). Then `git switch --detach <TAG_COMMIT>`.
 

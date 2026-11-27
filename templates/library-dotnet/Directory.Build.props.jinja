@@ -1,0 +1,21 @@
+<Project>
+  <!-- Platform-owned build settings (ADR-127, spec 221): every project of the solution builds with them. -->
+  <PropertyGroup>
+    <TargetFramework>net{{ dotnet_major }}.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <!-- The quality gate: compiler and analyzer warnings, including code style, fail the build. -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <!-- Reproducible restores: packages.lock.json per project, restored in locked mode by `devbox run install`. -->
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <!-- Vulnerable packages are the security gate's finding (`devbox run audit`), not a compile error. -->
+    <NuGetAudit>true</NuGetAudit>
+    <NuGetAuditMode>all</NuGetAuditMode>
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);NU1901;NU1902;NU1903;NU1904</WarningsNotAsErrors>
+  </PropertyGroup>
+</Project>

@@ -1,0 +1,11 @@
+namespace {{ namespace }};
+
+/// <summary>A sample of the library's public API; replace it with your own code.</summary>
+public static class Greetings
+{
+    /// <summary>Greets <paramref name="name"/>, or the world when the name is blank.</summary>
+    /// <param name="name">Who to greet.</param>
+    /// <returns>The greeting.</returns>
+    public static string Greet(string? name) =>
+        string.IsNullOrWhiteSpace(name) ? "Hello, world!" : $"Hello, {name.Trim()}!";
+}

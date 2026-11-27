@@ -1,0 +1,107 @@
+using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Logging.Abstractions;
+using Testcontainers.PostgreSql;
+
+namespace {{ namespace }}.Tests;
+
+/// <summary>Integration tests against a real PostgreSQL in a container (Testcontainers; needs Docker).</summary>
+public sealed class DatabaseTests : IAsyncLifetime
+{
+    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder("postgres:17").Build();
+
+    public async ValueTask InitializeAsync() => await _postgres.StartAsync(TestContext.Current.CancellationToken);
+
+    public async ValueTask DisposeAsync() => await _postgres.DisposeAsync();
+
+    private DatabaseSettings Running() => new(_postgres.Hostname, _postgres.GetMappedPublicPort(5432), "postgres", "postgres", "postgres");
+
+    private static readonly DatabaseSettings Down = new("localhost", 1, "none", "app", null);
+
+    private static ServiceProvider Services(DatabaseSettings settings) =>
+        new ServiceCollection().AddLogging().AddSingleton<IHostApplicationLifetime, NoLifetime>().AddDatabase(settings).BuildServiceProvider();
+
+    private static Task<HealthReport> Readiness(ServiceProvider services) =>
+        services.GetRequiredService<HealthCheckService>().CheckHealthAsync(r => r.Tags.Contains(ServiceApp.ReadyTag), TestContext.Current.CancellationToken);
+
+    [Fact]
+    public async Task The_migrations_are_applied_and_the_service_is_ready()
+    {
+        await using var services = Services(Running());
+        var migrator = services.GetServices<IHostedService>().OfType<DatabaseMigrator>().Single();
+
+        Assert.Equal(HealthStatus.Unhealthy, (await Readiness(services)).Status);
+        await migrator.StartAsync(TestContext.Current.CancellationToken);
+        await migrator.ExecuteTask!;
+
+        Assert.Equal(HealthStatus.Healthy, (await Readiness(services)).Status);
+    }
+
+    [Fact]
+    public async Task The_service_is_not_ready_while_the_database_is_unreachable()
+    {
+        await using var services = Services(Down);
+        services.GetRequiredService<MigrationState>().MarkApplied();
+
+        var report = await Readiness(services);
+
+        Assert.Equal(HealthStatus.Unhealthy, report.Entries["database"].Status);
+    }
+
+    [Fact]
+    public async Task The_migration_gives_up_after_the_last_attempt()
+    {
+        await using var services = Services(Down);
+        var migrator = new DatabaseMigrator(services.GetRequiredService<IServiceScopeFactory>(), new MigrationState(), new NoLifetime(),
+            NullLogger<DatabaseMigrator>.Instance)
+        { Attempts = 2, Delay = TimeSpan.FromMilliseconds(10) };
+
+        await Assert.ThrowsAnyAsync<Exception>(() => migrator.MigrateWithRetryAsync(TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task A_failed_migration_stops_the_service()
+    {
+        await using var services = Services(Down);
+        var lifetime = new NoLifetime();
+        var migrator = new DatabaseMigrator(services.GetRequiredService<IServiceScopeFactory>(), new MigrationState(), lifetime,
+            NullLogger<DatabaseMigrator>.Instance)
+        { Attempts = 1 };
+
+        await migrator.StartAsync(TestContext.Current.CancellationToken);
+        await migrator.ExecuteTask!;
+
+        Assert.True(lifetime.Stopped);
+        Environment.ExitCode = 0;
+    }
+
+    [Fact]
+    public void The_settings_are_the_pg_variables_of_the_postgres_resource()
+    {
+        var settings = DatabaseSettings.FromEnvironment(new Dictionary<string, string?>
+        {
+            ["PGHOST"] = "db",
+            ["PGPORT"] = "6543",
+            ["PGDATABASE"] = "d",
+            ["PGUSER"] = "u",
+            ["PGPASSWORD"] = "p",
+        });
+
+        Assert.Equal(new DatabaseSettings("db", 6543, "d", "u", "p"), settings);
+        Assert.Equal(new DatabaseSettings("localhost", 5432, "{{ project_name | replace('-', '_') }}", "app", null),
+            DatabaseSettings.FromEnvironment(new Dictionary<string, string?>()));
+        Assert.Contains("Host=db", settings.ConnectionString, StringComparison.Ordinal);
+    }
+
+    private sealed class NoLifetime : IHostApplicationLifetime
+    {
+        public bool Stopped { get; private set; }
+
+        public CancellationToken ApplicationStarted => CancellationToken.None;
+
+        public CancellationToken ApplicationStopping => CancellationToken.None;
+
+        public CancellationToken ApplicationStopped => CancellationToken.None;
+
+        public void StopApplication() => Stopped = true;
+    }
+}

@@ -1,7 +1,7 @@
 """`triage`: the mechanical half of /issue:triage (ADR-025): list the intake queue, show an issue, set up labels, apply a decision.
 
-Judgement (classification, questions, wording) lives in the slash command. This module never closes an issue, only
-reads issues and edits labels / posts comments the user already confirmed. Issue text is untrusted input: it is
+Judgement (classification, questions, wording) lives in the slash command. This module closes only the rows the user
+confirmed; otherwise it reads issues and edits labels / posts comments the user already confirmed. Issue text is untrusted input: it is
 redacted (tokens, e-mail addresses, home directories) and fenced so a prompt cannot mistake it for instructions.
 """
 from __future__ import annotations
@@ -71,7 +71,7 @@ def build_parser() -> argparse.ArgumentParser:
     co.add_argument("--show", type=int, metavar="N")
     co.add_argument("--set", action="append", default=[], metavar="N=P", help="the priority the user chose for issue N (P0, P1 or P2); repeatable")
     co.add_argument("--json", action="store_true")
-    ac = sub.add_parser("act", help="apply exactly the confirmed rows of the proposals and print the hand-over summary; never closes")
+    ac = sub.add_parser("act", help="apply exactly the confirmed rows of the proposals and print the hand-over summary; closes only the confirmed rows")
     ac.add_argument("--proposals", required=True, metavar="FILE")
     ac.add_argument("--rows", required=True, metavar="all|N,N", help="`all` or the issue numbers the user confirmed")
     ac.add_argument("--dry-run", action="store_true")
@@ -208,6 +208,37 @@ def refuse_unattended_priority(changed: list[str]) -> None:
     """A priority label is the user's decision: an unattended run (CPLAT_HEADLESS=1) never changes one (spec 196)."""
     if os.environ.get("CPLAT_HEADLESS") == "1" and any(x in PRIORITY_LABELS for x in changed):
         raise PlatformError("a priority label needs the user's confirmation", hint="run /issue:triage in a Claude Code session")
+
+
+def refuse_unattended_close() -> None:
+    """Closing an issue is the user's decision: an unattended run (CPLAT_HEADLESS=1) never closes one (spec 177)."""
+    if os.environ.get("CPLAT_HEADLESS") == "1":
+        raise PlatformError("closing an issue needs the user's confirmation", hint="run /issue:triage in a Claude Code session")
+
+
+def close_one(repo: str | None, number: int, dry_run: bool) -> Report:
+    """Close one issue as not planned; the undo reopens it."""
+    r = Report(title=f"close #{number}" + ("  (dry run)" if dry_run else ""))
+    refuse_unattended_close()
+    if dry_run:
+        r.will_do.append("[outward] close as not planned")
+        return r
+    gh(["issue", "close", str(number), *_rargs(repo), "--reason", "not planned"])
+    r.did.append("closed as not planned")
+    r.undo.append(f"gh issue reopen {number}")
+    return r
+
+
+def reopen_one(repo: str | None, number: int, dry_run: bool) -> Report:
+    """Reopen one issue; the undo closes it again as not planned."""
+    r = Report(title=f"reopen #{number}" + ("  (dry run)" if dry_run else ""))
+    if dry_run:
+        r.will_do.append("[outward] reopen")
+        return r
+    gh(["issue", "reopen", str(number), *_rargs(repo)])
+    r.did.append("reopened")
+    r.undo.append(f'gh issue close {number} --reason "not planned"')
+    return r
 
 
 def apply(ns: argparse.Namespace) -> Report:

@@ -12,7 +12,7 @@ and run it for real. Everything that can be code is code (and has tests in tests
   cplat system ship start|status|phase|publish|next|repo|entry|complete|escalate|finish|gate ...   /system:ship: a product spec → every repo → dev
   cplat system wait --env ENV [<component>…] [--revision SHA] [--refresh] [--timeout S] [--context C]   until Argo CD runs main's head (spec 143)
   cplat system autonomy show|set|pause|resume|undo|approve ...   /system:autonomy: autonomy per environment, pause, undo, approve
-  cplat component new <name> <description…> [--type service|website|library] [--lang python|java|go|typescript] [--system OWNER/REPO] [--dry-run]
+  cplat component new <name> <description…> [--type service|website|library] [--lang python|java|go|typescript|csharp] [--system OWNER/REPO] [--dry-run]
   cplat component add|set|remove <component…> [--type T] [--lang L] [--expose] [--env K=V] [--instance ENV --replicas N] [--from-k8s] [--pr]
   cplat component ship start|status|phase|pr|land|deploy|wait|escalate|finish|gate ...   /component:ship: spec → merged PR → dev
   cplat component build schedule|merge|tests|state|replan-commit|replan-abort|resolved ...   /component:build Phase 2
@@ -32,7 +32,7 @@ and run it for real. Everything that can be code is code (and has tests in tests
   cplat instance promote <component…|--all> --to <env> [--version V] [--sha S] [--pr]
   cplat instance secret set <component>/<env> <secret> <KEY> | list [--env dev]   remote secrets of the local cluster (values never go to git)
   cplat instance verify [ENV] [--base-url URL] [--spec SPEC] [--no-retry] [--json]   the repo's smoke tests against a deployment
-  cplat issue triage list|show|setup-labels|apply ...   issue intake (labels and comments only after you confirm; never closes)
+  cplat issue triage list|show|setup-labels|apply ...   issue intake (labels and comments only after you confirm; closes only confirmed rows)
   cplat platform doctor [--json]
   cplat platform versions [--json] [--diff REF] [--changelog]   the versions table of this release; what changed since REF
   cplat platform update [--migrate] [--data KEY=VALUE] [--dry-run]

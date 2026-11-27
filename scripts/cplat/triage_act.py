@@ -1,7 +1,8 @@
 """`triage_act`: apply the confirmed rows of a triage run, print the hand-over summary, publish the new specs (spec 176).
 
-`act` validates every named issue first, then makes the labels and the `Triage:` comment of each row through `triage.apply_one`
-(never a close, never a fix: a fix is queued by its labels and runs on its own). The summary lists what was done per group, the
+`act` validates every named issue first, then reopens (a closed issue its reporter answered), makes the labels and the `Triage:`
+comment of each row through `triage.apply_one` and closes as not planned the confirmed question, duplicate, wontfix and silent
+needs-info rows, only those named in `--rows` (never a fix: a fix is queued by its labels and runs on its own). The summary lists what was done per group, the
 next step per kind of result with who takes it, how to undo each change and the person's own next step as a choice. `publish_specs`
 commits the new specs of the run on one `docs/triage-<date>` branch and opens or updates one draft PR for them.
 """
@@ -25,7 +26,7 @@ FIX_POINTER = "(cplat dispatch status, or the console Board)"
 MARKER = "<!-- cplat:triage-specs -->"
 BRANCH = re.compile(r"^docs/triage-(\d{4}-\d{2}-\d{2})(?:-\d+)?$")
 FIX_CLASSES = ("bug", "small-change")
-DONE_TEXT = {"question": "answered, labelled question", "duplicate": "marked as duplicate", "wontfix": "explained, labelled wontfix",
+DONE_TEXT = {"question": "answered and closed", "duplicate": "marked as duplicate", "wontfix": "explained and closed",
              "needs-info": "asked the reporter", "needs-exploring": "left to explore"}
 
 
@@ -61,14 +62,20 @@ def _numbers(batch: dict, numbers: str) -> list[int]:
 def _phrase(e: dict) -> str:
     issue, row = e["issue"], e["row"]
     handled = (issue["handled"] or {}).get("kind")
+    if handled == "silent":
+        return f"closed after {issue['handled']['line'].split()[1]} days without an answer"
     if handled:
         return f"labelled {'tracked' if handled == 'spec' else 'duplicate'}"
     cls = row["class"]
+    closed = view._closed(issue)
+    reopened = "reopened, " if closed and cls not in view.CLOSE_CLASSES else ""
     if cls in FIX_CLASSES:
-        return f"queued for a fix ({cls}, {row['priority']})"
+        return f"{reopened}queued for a fix ({cls}, {row['priority']})"
     if cls == "feature":
-        return f"tracked in spec {view._number(row['spec'])}"
-    return DONE_TEXT[cls]
+        return f"{reopened}tracked in spec {view._number(row['spec'])}"
+    if cls == "duplicate" and not closed:
+        return f"closed as duplicate of #{row['duplicate_of']}"
+    return reopened + DONE_TEXT[cls]
 
 
 def _wrap(text: str, first: str, rest: str) -> list[str]:
@@ -150,17 +157,20 @@ def act(slug: str, batch: dict, rows: list[dict], numbers: str, dry_run: bool) -
     for n in sorted(named):
         e = entries[n]
         if e["row"]:
-            errors += [f"#{n}: {p}" for p in view._row(e["row"], e["issue"], True, Path.cwd())[1]]
+            errors += [f"#{n}: {p}" for p in view._row(e["row"], e["issue"], True, Path.cwd(), batch.get("forms"))[1]]
     if errors:
         raise PlatformError("the proposals file is not valid for these rows", hint="\n".join(errors))
     notes = []
-    for n in sorted(named):   # compute every action first: an unattended priority change refuses before the first write
+    days = batch.get("close_after_days", 14)
+    for n in sorted(named):   # compute every action first: an unattended priority change or close refuses before the first write
         e = entries[n]
         handled = (e["issue"]["handled"] or {}).get("kind")
         if handled in ("claimed", "fixed") or (e["row"] and e["row"]["class"] == "needs-exploring"):
             continue
-        a = view.actions(e["issue"], e["row"])
+        a = view.actions(e["issue"], e["row"], days)
         triage.refuse_unattended_priority(a["add"] + a["remove"])
+        if a["close"]:
+            triage.refuse_unattended_close()
         note = _priority_note(n, e["row"]) if not handled else None
         if note:
             notes.append(note)
@@ -175,12 +185,18 @@ def act(slug: str, batch: dict, rows: list[dict], numbers: str, dry_run: bool) -
                 if not handled:
                     done.append({"number": n, "group": name, "class": "needs-exploring", "added": [], "removed": [], "commented": False})
                 continue
-            a = view.actions(e["issue"], e["row"])
+            a = view.actions(e["issue"], e["row"], days)
+            reports = []
+            if a["reopen"]:
+                reports.append(triage.reopen_one(slug, n, dry_run))
             if a["add"] or a["remove"] or a["comment"]:
-                report = triage.apply_one(slug, n, a["add"], a["remove"], a["comment"] or "", dry_run)
-                undo += [f"#{n}: {u}" for u in report.undo]
+                reports.append(triage.apply_one(slug, n, a["add"], a["remove"], a["comment"] or "", dry_run))
+            if a["close"]:
+                reports.append(triage.close_one(slug, n, dry_run))
+            undo += [f"#{n}: {u}" for r in reports for u in r.undo]
             done.append({"number": n, "group": name, "class": (e["row"] or {}).get("class") or handled,
-                         "added": a["add"], "removed": a["remove"], "commented": bool(a["comment"])})
+                         "added": a["add"], "removed": a["remove"], "commented": bool(a["comment"]),
+                         "closed": a["close"], "reopened": a["reopen"]})
     specs_pr = batch.get("specs_pr")
     if specs_pr and not dry_run:
         undo.append(f"specs: close draft PR #{specs_pr['number']} and delete branch {specs_pr['branch']}")
@@ -192,7 +208,8 @@ def render(result: dict, dry_run: bool) -> str:
     entries, specs_pr = result["_entries"], result["_specs_pr"]
     out = ["Will do" if dry_run else "Done"]
     for _, name in view.GROUPS:
-        items = [f"#{d['number']} {_phrase(entries[d['number']])}" for d in result["done"] if d["group"] == name]
+        items = [f"#{d['number']} {_phrase(entries[d['number']])}" + (" (close as not planned)" if dry_run and d.get("closed") else "")
+                 for d in result["done"] if d["group"] == name]
         if items:
             out += _wrap(f"{name}: " + "; ".join(items), "  ", " " * 6)
     if result["priority_notes"]:

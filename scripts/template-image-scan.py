@@ -21,7 +21,7 @@ from pathlib import Path
 
 import yaml
 
-TEMPLATES = ["service-python", "service-java", "service-go", "service-typescript", "web-nextjs"]
+TEMPLATES = ["service-python", "service-java", "service-go", "service-typescript", "service-dotnet", "web-nextjs"]
 SELF_PATHS = {
     "scripts/template-image-scan.py",
     ".github/image-scan-accepted.yml",

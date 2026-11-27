@@ -17,7 +17,7 @@ from structure import points_to
 
 ROOT = core.PLATFORM_ROOT
 TEMPLATES = ROOT / "templates"
-SHAPES = ["service-python", "library-python", "service-java", "service-go", "web-nextjs", "service-typescript"]
+SHAPES = ["service-python", "library-python", "service-java", "service-go", "web-nextjs", "service-typescript", "service-dotnet"]
 FINDINGS = r'"deps-findings":\s*"bash scripts/deps\.sh findings \\"\$@\\""'
 BUMP = r'"deps-bump":\s*"bash scripts/deps\.sh bump \\"\$@\\""'
 
@@ -230,6 +230,8 @@ def test_pnpm_transitive_bump_adds_exactly_one_override(tmp_path):  # AC-095.2
 
 @pytest.mark.slow
 @pytest.mark.skipif(not (shutil.which("mvn") and shutil.which("java")), reason="needs mvn and java")
+@pytest.mark.skipif(os.environ.get("GITHUB_EVENT_NAME") == "pull_request" and not os.environ.get("CPLAT_NETWORK_TESTS"),
+                    reason="resolves from Maven Central (often > 120 s on a runner): runs on pushes to main, not in PR shards")
 def test_maven_transitive_bump_adds_one_dependency_management_entry(tmp_path):  # AC-095.2
     work = tmp_path / "work"
     work.mkdir()
