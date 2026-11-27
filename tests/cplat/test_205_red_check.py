@@ -323,3 +323,62 @@ def test_the_usage_line_names_the_flag_for_every_refusal_ac_205_5(world, capsys)
     capsys.readouterr()
     assert quiet.main(["test-fast", "tests/a.py"]) == 2
     assert capsys.readouterr().err.strip() == USAGE
+
+
+def test_a_suite_that_unsets_the_cplat_variables_in_its_tests_is_still_judged_1048(world, capsys):
+    world.put("tests/conftest.py", "import os\n\nimport pytest\n\n\n@pytest.fixture(autouse=True)\n"
+              "def no_run_environment(monkeypatch):\n    for n in [n for n in os.environ if n.startswith('CPLAT_')]:\n"
+              "        monkeypatch.delenv(n, raising=False)\n")
+    world.put("tests/test_red.py", HELPERS + "\n\ndef test_a():\n    pkg.boom()\n")
+    rc, judged, lines = red(capsys, "tests/test_red.py")
+    assert by_name(judged)["test_a"][0] == "missing behaviour" and rc == 0
+
+
+# ---------------- #1062: a module the plan creates is missing behaviour, wherever it will live ----------------
+
+CONFTEST_PATH = "import sys\nfrom pathlib import Path\n\nsys.path.insert(0, str(Path(__file__).parent.parent / 'scripts' / 'cplat'))\n"
+
+
+def plan_files(monkeypatch, *files):
+    import spec
+
+    class Stub:
+        plan = [{"tasks": [{"files": list(files)}]}]
+
+    monkeypatch.setattr(spec, "judged_specs", lambda root: [Stub()])
+
+
+def test_a_module_the_plan_creates_in_scripts_cplat_is_missing_behaviour_1062(world, capsys, monkeypatch):
+    world.put("scripts/cplat/existing.py", "")
+    world.put("tests/conftest.py", CONFTEST_PATH)
+    world.put("tests/test_red.py", "def test_a():\n    import e2e_gate_1062  # noqa: F401\n")
+    plan_files(monkeypatch, "scripts/cplat/e2e_gate_1062.py")
+    rc, judged, _ = red(capsys, "tests/test_red.py")
+    assert by_name(judged)["test_a"] == ("missing behaviour", "ModuleNotFoundError: No module named 'e2e_gate_1062'")
+    assert rc == 0
+
+
+def test_a_planned_module_is_missing_behaviour_at_collection_1062(world, capsys, monkeypatch):
+    world.put("scripts/cplat/existing.py", "")
+    world.put("tests/conftest.py", CONFTEST_PATH)
+    world.put("tests/test_new.py", "import e2e_gate_1062\n\n\ndef test_one():\n    assert e2e_gate_1062.x\n")
+    plan_files(monkeypatch, "scripts/cplat/e2e_gate_1062.py")
+    rc, judged, _ = red(capsys, "tests/test_new.py")
+    assert by_name(judged, "tests/test_new.py")["test_one"][0] == "missing behaviour" and rc == 0
+
+
+def test_a_planned_package_of_a_component_is_missing_behaviour_1062(world, capsys, monkeypatch):
+    world.put("tests/test_red.py", "def test_a():\n    from newpkg_1062 import thing  # noqa: F401\n")
+    plan_files(monkeypatch, "src/newpkg_1062/thing.py")
+    rc, judged, _ = red(capsys, "tests/test_red.py")
+    assert by_name(judged)["test_a"][0] == "missing behaviour" and rc == 0
+
+
+def test_a_third_party_name_stays_not_installed_with_a_plan_1062(world, capsys, monkeypatch):
+    world.put("scripts/cplat/existing.py", "")
+    world.put("tests/conftest.py", CONFTEST_PATH)
+    world.put("tests/test_red.py", "def test_a():\n    import testcontainers_1062  # noqa: F401\n")
+    plan_files(monkeypatch, "scripts/cplat/e2e_gate_1062.py")
+    rc, judged, _ = red(capsys, "tests/test_red.py")
+    assert by_name(judged)["test_a"] == ("test error", "testcontainers_1062 is not installed: add it to the dev dependencies")
+    assert rc == 1

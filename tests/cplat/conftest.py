@@ -51,6 +51,28 @@ def _gh_guard_dir(tmp_path_factory):
 
 
 @pytest.fixture(autouse=True)
+def _trace_of_every_spec_reads_each_file_once(request, monkeypatch):
+    """AC-180.4 traces all ~220 specs over the same ~650 test files: 150 000 opens and 300 000 `relative_to` calls, 13 s alone and
+    over the 120 s timeout when the machine is loaded. Within that one test each file is read once and each path judged once; the
+    answers are the same as without the cache."""
+    if request.node.path.name != "test_180_repo_rules.py":
+        return
+    import functools
+
+    import spec
+    real_read, real_ignored = Path.read_text, spec._ignored
+    read = functools.lru_cache(maxsize=None)(lambda p, errors: real_read(p, errors=errors))
+
+    def read_text(self, encoding=None, errors=None, newline=None):
+        if encoding is None and newline is None and ROOT in self.parents:
+            return read(self, errors)
+        return real_read(self, encoding, errors, newline)
+
+    monkeypatch.setattr(Path, "read_text", read_text)
+    monkeypatch.setattr(spec, "_ignored", functools.lru_cache(maxsize=None)(real_ignored))
+
+
+@pytest.fixture(autouse=True)
 def no_real_github(monkeypatch, _gh_guard_dir):
     """Issue #905: a test that reached the real `gh` hit the account's rate limit and slept in `core.run`'s retry until the
     test timeout. The first `gh` on PATH is a guard that fails at once (exit 127, "tests never call GitHub"); tests that

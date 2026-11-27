@@ -117,8 +117,9 @@ def slots_doc(slug: str, policy, st: dict | None = None) -> dict:
     st = st or ds.load(slug)
     total = int(st["steering"].get("slots") or policy.values["slots"])
     manual = manual_rows(slug)
-    running = len(_running(slug)) + len(manual)
-    return {"total": total, "running": running, "free": max(total - running, 0), "manual": manual}
+    units = _running(slug)
+    used = dispatch_units.occupied(units, total) + len(manual)
+    return {"total": total, "running": len(units) + len(manual), "free": max(total - used, 0), "manual": manual}
 
 
 def plan_doc(repo: Path | str, slug: str, policy, candidates: list[dict], *, read_at: str | None = None,
@@ -260,13 +261,22 @@ def _held_text(h: dict) -> str:
     return f"{h.get('reason')}" + (f" ({h['detail']})" if h.get("detail") else "")
 
 
+def _slots_line(slots: dict) -> str:
+    """`slots: 2 of 3 building, 3 landing` when a unit lands (#1033), else `slots: 2 of 3 in use`."""
+    landing = sum(1 for u in slots["units"] if u["phase"] in ("landing", "land"))
+    if not landing:
+        return f"slots: {len(slots['units']) + len(slots['manual'])} of {slots['total']} in use"
+    building = len(slots["units"]) - landing + len(slots["manual"])
+    return f"slots: {building} of {slots['total']} building, {landing} landing"
+
+
 def render_status(doc: dict) -> str:
     loop = doc["loop"]
     head = f"dispatcher: {'running (pid ' + str(loop['pid']) + ')' if loop['running'] else 'not running'}"
     if doc["paused"]:
         head += f"  [{doc['paused']}]"
     hold = doc.get("release_hold")
-    lines = [head, *([_hold_line(hold)] if hold else []), f"slots: {len(doc['slots']['units']) + len(doc['slots']['manual'])} of {doc['slots']['total']} in use"]
+    lines = [head, *([_hold_line(hold)] if hold else []), _slots_line(doc["slots"])]
     for u in doc["slots"]["units"]:
         pr = f"  {u['pr']}" if u.get("pr") else ""
         phase = u["phase"]

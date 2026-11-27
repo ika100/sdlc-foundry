@@ -22,7 +22,7 @@ from core import PlatformError, Report, run
 TOP_KEYS = {"system", "owner", "org", "visibility", "components"}
 COMPONENT_KEYS = {"name", "description", "type", "lang", "data"}
 # creation order after the gitops-app repo: libraries before the services that use them, web frontends last
-SHAPE_ORDER = {"service-python": 1, "service-java": 2, "service-go": 3, "service-typescript": 3, "web-nextjs": 4}
+SHAPE_ORDER = {"service-python": 1, "service-java": 2, "service-go": 3, "service-typescript": 3, "service-dotnet": 3, "web-nextjs": 4}
 
 
 def build_parser() -> argparse.ArgumentParser:

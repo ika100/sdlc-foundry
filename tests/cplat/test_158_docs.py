@@ -27,7 +27,7 @@ def test_the_release_command_has_no_hand_written_issue_close_ac_158_5():  # AC-1
 
 
 def test_the_four_commands_say_cplat_posts_the_milestone_comments_ac_158_8():  # AC-158.8
-    for rel in ("component/commands/spec.md", "component/commands/ship.md", "component/commands/release.md", "system/commands/ship.md"):
+    for rel in ("component/commands/spec.md", "component/commands/ship.md", "component/commands/release.md", "system/references/ship-loop.md"):
         path = ROOT / "plugins" / rel
         assert path.is_file(), rel
         body = [ln for ln in path.read_text().splitlines() if not ln.startswith(">")]   # outside the closing note

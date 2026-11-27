@@ -32,8 +32,12 @@ TEST_FAST: dict[str, tuple[list[str], str]] = {
     "service-go": (["**/*_test.go"], "go"),
     "service-java": (["src/test/**/*Test.java", "src/test/**/Test*.java", "src/test/**/*Tests.java",
                       "src/test/**/*TestCase.java"], "java"),
+    "service-dotnet": (["tests/**/*.cs"], "dotnet"),
 }
+TEST_FAST["library-dotnet"] = TEST_FAST["service-dotnet"]
+TEST_FAST["library-java"] = TEST_FAST["service-java"]
 GO_TEST = re.compile(r"^func (Test\w+)\(", re.M)
+DOTNET_CLASS = re.compile(r"\b(?:class|record)\s+(\w+)")
 
 
 def _task_paths(root: Path, entries: list) -> set[str]:
@@ -61,6 +65,13 @@ def _args(root: Path, kind: str, files: list[str]) -> list[str]:
             if p.is_file():
                 names += [n for n in GO_TEST.findall(p.read_text(errors="ignore")) if n not in names]
         return ["-run", "^(" + "|".join(names) + ")$"] if names else []
+    if kind == "dotnet":
+        classes: list[str] = []
+        for f in files:
+            p = root / f
+            if p.is_file():
+                classes += [n for n in DOTNET_CLASS.findall(p.read_text(errors="ignore")) if n not in classes]
+        return ["--filter", "|".join(f"FullyQualifiedName~.{n}." for n in classes)] if classes else []
     stems = sorted({Path(f).stem for f in files})
     return [f"-Dtest={','.join(stems)}", "-Dsurefire.failIfNoSpecifiedTests=false"] if stems else []
 
@@ -102,7 +113,9 @@ def build_tests(root: Path, ref: str, task: str | None, load: bool, base: str | 
         if not entry:
             doc["reason"] = f"{repo_shape} runs no test runner in test-fast"
         elif kind == "java":
-            doc["reason"] = "service-java runs share target/, so they cannot run at once (ADR-094)"
+            doc["reason"] = f"{repo_shape} runs share target/, so they cannot run at once (ADR-094)"
+        elif kind == "dotnet":
+            doc["reason"] = f"{repo_shape} runs share bin/ and obj/, so they cannot run at once (ADR-094)"
         else:
             ref_base = base or _git(root, "merge-base", "main", "HEAD").strip()
             changed = {f for f in _git(root, "diff", "--name-only", f"{ref_base}..HEAD").splitlines()

@@ -41,6 +41,8 @@ from core import PlatformError, run
 
 OUTCOMES = ("passed", "passed-on-retry", "red", "timed-out", "not-run")
 LIMIT_S, RETRY_DELAY_S, TAIL_LINES = 600, 30, 60
+# #1021: a probe that times out right after a rollout is tried again this often, this far apart; a refused connection is not
+PROBE_RETRIES, PROBE_DELAY_S = 3, 10.0
 ENV_ATTEMPTS = 3                    # spec 105: an environment failure is tried up to 3 times in total
 GATEWAY = {502, 503, 504}
 RECIPE_FAILED = "(smoke recipe)"
@@ -233,6 +235,17 @@ def reachable(url: str, timeout: float = 10.0) -> str | None:
     return None
 
 
+def _probe(url: str) -> str | None:
+    """`reachable`, tried again PROBE_RETRIES times while it times out (#1021: the first request after a rollout can be slow)."""
+    err = reachable(url)
+    for _ in range(PROBE_RETRIES):
+        if not err or "timed out" not in err.lower():
+            break
+        sleep(PROBE_DELAY_S)
+        err = reachable(url)
+    return err
+
+
 def status(url: str, timeout: float = 10.0) -> int | str:
     """The HTTP status `url` answers with, or the error text when it does not answer (tests replace this)."""
     try:
@@ -310,7 +323,7 @@ def run_smoke(repo: Path, base_url: str, *, env: str = "dev", spec: specmod.Spec
     base_url = base_url.rstrip("/")
     if not has_recipe(repo):
         return not_run(env, "the repo has no smoke recipe (update it with /platform:update)", acs)
-    if probe and (err := reachable(base_url + probe)):
+    if probe and (err := _probe(base_url + probe)):
         return not_run(env, f"dev URL {base_url} is not reachable: {err}" if env == "dev" else f"{env} URL {base_url} is not reachable: {err}", acs)
     t0 = monotonic()
     first = run_recipe(repo, base_url, timeout, env)

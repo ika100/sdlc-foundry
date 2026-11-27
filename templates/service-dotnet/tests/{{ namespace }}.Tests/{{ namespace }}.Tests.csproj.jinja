@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>{{ namespace }}.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <OutputType>Exe</OutputType>
+    <!-- coverlet.msbuild: `devbox run test` collects line coverage of the service and fails below 80 %. -->
+    <Include>[{{ namespace }}]*</Include>
+    <ExcludeByFile>**/Migrations/*.cs</ExcludeByFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3.mtp-off" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="coverlet.msbuild" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+{%- if needs_database %}
+    <PackageReference Include="Testcontainers.PostgreSql" />
+{%- endif %}
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Microsoft.Extensions.DependencyInjection" />
+    <Using Include="Microsoft.Extensions.Hosting" />
+    <Using Include="Microsoft.Extensions.Logging" />
+    <Using Include="Xunit" />
+{%- if needs_database %}
+    <Using Include="{{ namespace }}.Data" />
+{%- endif %}
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/{{ namespace }}/{{ namespace }}.csproj" />
+  </ItemGroup>
+
+</Project>

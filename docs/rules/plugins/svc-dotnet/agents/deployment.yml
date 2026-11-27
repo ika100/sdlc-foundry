@@ -1,0 +1,22 @@
+rules:
+- id: R1
+  text: never create `k8s/` or run `kubectl apply` here, because the gitops-app repo owns every manifest and the cluster state.
+  class: hard
+  hard: gitops-owns-the-cluster
+- id: R2
+  text: '**Shell rule:** run every tool through `devbox run <script>`, never `docker`, `trivy` or the language tools directly, so that versions and flags match CI; add a missing recipe to `devbox.json` first.'
+  class: practice
+- id: R3
+  text: '**Container rules** (each one caused a real outage in the e2e test): `USER` must be **numeric**, because Kubernetes cannot verify `runAsNonRoot` for a name; the service must run with a **read-only root filesystem**, writing only to `/tmp` (or a mounted volume the gitops entry declares); the runtime stage holds the `dotnet publish` output and nothing else, with `DOTNET_EnableDiagnostics=0` so that the runtime opens no IPC socket on the read-only filesystem; keep the .NET major identical in the target framework, `global.json`, `devbox.json` and both Dockerfile images (ADR-005), because a mismatch builds against one runtime and runs on another.'
+  class: practice
+- id: R4
+  text: never put plaintext secrets in the image, the repo or CI logs, because a leak cannot be recalled.
+  class: hard
+  hard: no-secrets-in-git
+- id: R5
+  text: Image tags follow the template's scheme (`1.2.3`, `1.2`, `1`, `latest`, `sha-<40>`, and `sha-<7>` for one more release); do not invent others, so that pins and promotions find them.
+  class: practice
+- id: R6
+  text: never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033).
+  class: hard
+  hard: issue-filing-needs-consent
