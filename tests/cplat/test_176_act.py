@@ -64,8 +64,9 @@ def test_a_fix_is_never_started_and_nothing_is_closed_ac_176_8(world):  # AC-176
     n = len(world.calls)                                     # the batch read is not part of the act
     act(world, rows)
     after = world.calls[n:]
-    assert {tuple(c[:2]) for c in after} <= {("issue", "view"), ("label", "list"), ("issue", "edit"), ("issue", "comment")}
-    assert not any("close" in c for c in after)
+    assert {tuple(c[:2]) for c in after} <= {("issue", "view"), ("label", "list"), ("issue", "edit"), ("issue", "comment"), ("issue", "close")}
+    closed = {int(c[2]) for c in after if c[:2] == ["issue", "close"]}    # spec 177: only the rows of the closing classes
+    assert closed <= {r["number"] for r in rows if r["class"] in ("question", "duplicate", "wontfix")}
 
 
 def test_only_real_label_changes_are_made_and_another_priority_is_replaced_ac_176_8(world):  # AC-176.8
@@ -83,14 +84,14 @@ def test_question_duplicate_wontfix_and_needs_info_label_and_comment_ac_176_3(wo
         else:
             world.issue(n, labels=("triage",))
     world.batch()
-    extra = {"priority": None, "expected": None, "comment": "the text"}
+    extra = {"priority": None, "expected": None, "comment": "Thanks for the report. Which version?"}
     rows = [row(1, **{"class": "question", **extra}), row(2, **{"class": "duplicate", "duplicate_of": 9, **extra}),
-            row(3, **{"class": "wontfix", **extra}), row(4, **{"class": "needs-info", **extra})]
+            row(3, **{"class": "wontfix", **extra}), row(4, **{"class": "needs-info", "missing": ["version"], **extra})]
     act(world, rows)
     edits = world.edits()
     assert edits[1] == ({"question"}, {"triage", "needs-info"}) and edits[2] == ({"duplicate"}, {"triage"})
     assert edits[3] == ({"wontfix"}, {"triage"}) and edits[4] == ({"needs-info"}, {"triage"})
-    assert set(world.comments().values()) == {"the text"} and len(world.comments()) == 4
+    assert all("Thanks for the report. Which version?" in c for c in world.comments().values()) and len(world.comments()) == 4
 
 
 def test_a_row_to_explore_makes_no_call_at_all_ac_176_3(world):  # AC-176.3
@@ -231,7 +232,7 @@ def test_a_row_to_explore_names_the_command_for_the_person_ac_176_15(world):  # 
 def test_a_question_to_the_reporter_is_waiting_for_the_reporter_ac_176_15(world):  # AC-176.15
     world.issue(8)
     world.batch()
-    data = act(world, [row(8, **{"class": "needs-info", "priority": None, "expected": None, "comment": "Which version?"})], "--json").json()
+    data = act(world, [row(8, **{"class": "needs-info", "priority": None, "expected": None, "comment": "Thanks for the report. Which version?", "missing": ["version"]})], "--json").json()
     assert [(n["kind"], n["who"], n["numbers"]) for n in data["next"]] == [("reporter answers", "reporter", [8])]
 
 

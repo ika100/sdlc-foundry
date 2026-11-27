@@ -11,7 +11,7 @@ rules:
     text: "Do not guess requirements, because a wrong guess becomes a wrong fix."
     class: practice
   - id: R4
-    text: "Never close an issue, because a closed issue leaves the queue unseen."
+    text: "Never close an issue without the user's confirmation, because a closed issue leaves the queue unseen."
     class: hard
     hard: triage-never-closes
   - id: R5
@@ -20,8 +20,12 @@ rules:
     hard: issue-filing-needs-consent
     source: "ADR-033, ADR-122"
   - id: R7
-    text: "Do not label it, because a label would hide it from the next triage while it stays in the queue until it is explored and specced."
+    text: "Do not label it, because a label would hide it while it stays in the queue."
     class: practice
+  - id: R8
+    text: "It closes only the confirmed question, duplicate and wontfix rows, because a close hides the issue."
+    class: practice
+    source: "ADR-130"
   - id: R6
     text: "do not start a second pipeline before the first PR is open"
     class: retired

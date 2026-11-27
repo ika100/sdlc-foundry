@@ -5,7 +5,8 @@ experience or not a rule; hard, practice and experience sentences state a reason
 behind a bare condition and an instruction with a condition is never classed not a rule (`hidden-rule`, spec 172); hard rules are marked and enforced (or an intentional prose rule); every agent and command prompt
 carries the statement once; retired entries are valid and gone from the prompt; the prompts stay within the baseline bytes. Spec 180 adds: every link, anchor, `cplat` command and slash command a prompt
 names resolves (`broken-link`, `broken-anchor`, `unknown-cplat`, `unknown-slash`), and no test pins prompt wording
-(`sentence-pin`, `short-interface`, `stray-interface`) unless marked `# interface: <reason>`.
+(`sentence-pin`, `short-interface`, `stray-interface`) unless marked `# interface: <reason>`. A test that globs docs/changelog.d without reading docs/CHANGELOG.md fails
+(`changelog-glob`, issue #1071): use `changelog_entry` of tests/cplat/changelog_support.py.
 `cplat platform rules rebaseline --reason "<why>"` raises the byte baseline (rules_rebaseline).
 
 `--only` limits the per-file checks to prompt files equal to or under PATH and their register files, and skips the global
@@ -23,6 +24,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 import briefing
+import changelogpins
 import promptpins
 import promptrefs
 import promptrules as pr
@@ -249,6 +251,8 @@ def check(root: Path, only: list[str] | None = None) -> Result:
         counts["interface_pins"] = scan.interface_pins
         for kind, file, line, text, message in scan.failures:
             fails.append(Failure(kind, file, line, text, message))
+        for file, line, message in changelogpins.scan(root):
+            fails.append(Failure("changelog-glob", file, line, "", message))
         if len(reg.hard) > MAX_HARD:
             fails.append(Failure("too-many-hard", REGISTER, reg.hard_line, "",
                                  f"{len(reg.hard)} distinct hard rules, at most {MAX_HARD} are allowed"))

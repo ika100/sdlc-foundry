@@ -71,13 +71,13 @@ def test_list_json_reports_explored_for_every_spec_ac_188_7(repo, capsys):  # AC
 
 
 def test_check_rejects_an_explored_that_is_not_a_boolean_ac_188_7(repo, capsys):  # AC-188.7
-    d = add_spec(repo, "177-odd")
+    d = add_spec(repo, "901-odd")
     p = d / "spec.md"
     p.write_text(p.read_text().replace("status: draft\n", "status: draft\nexplored: maybe\n"))
-    rc, out, err = run(repo, capsys, "check", "177-odd")
+    rc, out, err = run(repo, capsys, "check", "901-odd")
     assert rc != 0 and "spec.md: explored must be true or false" in out + err
     p.write_text(p.read_text().replace("explored: maybe", "explored: true"))
-    assert run(repo, capsys, "check", "177-odd")[0] == 0
+    assert run(repo, capsys, "check", "901-odd")[0] == 0
 
 
 def test_discard_removes_a_never_committed_draft_ac_188_9(repo, capsys):  # AC-188.9
@@ -103,9 +103,9 @@ def test_discard_refuses_a_committed_or_a_non_draft_spec_ac_188_9(repo, capsys):
     rc, out, err = run(repo, capsys, "discard", "175-base")          # a draft, but committed
     assert rc == 1 and (err + out).startswith("ERROR:") and "fix:" in err + out
     assert (repo / "docs" / "specs" / "175-base").is_dir()
-    d = add_spec(repo, "177-approved")
+    d = add_spec(repo, "901-approved")
     (d / "spec.md").write_text((d / "spec.md").read_text().replace("status: draft", "status: approved"))
-    rc, out, err = run(repo, capsys, "discard", "177-approved")       # never committed, but not a draft
+    rc, out, err = run(repo, capsys, "discard", "901-approved")       # never committed, but not a draft
     assert rc == 1 and "ERROR:" in err + out and d.is_dir()
     commit_all(repo)
 
@@ -117,20 +117,20 @@ NOTES = SPEC_TEXT.replace(
 
 
 def spec_of(repo, text):
-    d = add_spec(repo, "177-notes", text)
+    d = add_spec(repo, "901-notes", text)
     return spec.read(d)
 
 
 def test_a_notes_for_the_architect_section_passes_check_ac_188_5(repo, capsys):  # AC-188.5
-    spec_of(repo, NOTES.format(name="177-notes", num="177", title="Notes"))
-    rc, out, err = run(repo, capsys, "check", "177-notes")
+    spec_of(repo, NOTES.format(name="901-notes", num="901", title="Notes"))
+    rc, out, err = run(repo, capsys, "check", "901-notes")
     assert rc == 0, out + err
 
 
 def test_notes_bullets_are_no_criteria_and_outside_the_hash_ac_188_5(repo):  # AC-188.5
-    with_notes = spec_of(repo, NOTES.format(name="177-notes", num="177", title="Notes"))
+    with_notes = spec_of(repo, NOTES.format(name="901-notes", num="901", title="Notes"))
     plain = spec.Spec(with_notes.dir, with_notes.meta, with_notes.body.split("## Notes for the architect")[0] + "## Non-goals"  # interface: the section heading cplat spec splits on
                       + with_notes.body.split("## Non-goals", 1)[1])
-    assert with_notes.active_acs() == ["AC-177.1"] == plain.active_acs()
+    assert with_notes.active_acs() == ["AC-901.1"] == plain.active_acs()
     assert with_notes.ac_hash() == plain.ac_hash()
     assert "notes for the architect" in spec.sections(with_notes.body)
