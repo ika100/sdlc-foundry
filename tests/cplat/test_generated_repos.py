@@ -66,11 +66,21 @@ def test_python_rendered_dockerfile_is_strict(py_on, py_off):  # AC-104.1
         assert "uv.lock*" not in text
 
 
-def test_web_dockerfile_installs_strictly(web):  # AC-104.2
-    """AC-104.2: pnpm install --frozen-lockfile without a fallback; the lock file is required."""
-    text = (web / "Dockerfile").read_text()
+@pytest.fixture()
+def svc_ts(shared_renders, tmp_path):
+    return _copy(shared_renders, tmp_path, "service-typescript", "svc-ts")
+
+
+STRICT_TS_INSTALL = "RUN --mount=type=secret,id=PACKAGES_READ_TOKEN,env=NODE_AUTH_TOKEN pnpm install --frozen-lockfile"
+
+
+@pytest.mark.parametrize("fixture", ["web", "svc_ts"])
+def test_ts_dockerfile_installs_strictly(fixture, request):  # AC-104.2
+    """AC-104.2: one pnpm install --frozen-lockfile without a fallback (the secret mount of AC-104.11 is allowed); the lock file is required."""
+    repo = request.getfixturevalue(fixture)
+    text = (repo / "Dockerfile").read_text()
     installs = [ln for ln in text.splitlines() if "pnpm install" in ln]
-    assert installs == ["RUN pnpm install --frozen-lockfile"]
+    assert installs == [STRICT_TS_INSTALL]
     copy = next(ln for ln in text.splitlines() if ln.startswith("COPY package.json"))
     assert "pnpm-lock.yaml" in copy and "pnpm-lock.yaml*" not in copy
 
@@ -101,7 +111,7 @@ def test_slim_runtime_images_take_the_debian_security_updates():
     assert "apt-get update && apt-get upgrade -y --no-install-recommends && rm -rf /var/lib/apt/lists/*" in runtime
 
 
-@pytest.mark.parametrize("template", ["service-python", "web-nextjs"])
+@pytest.mark.parametrize("template", ["service-python", "web-nextjs", "service-typescript"])
 def test_dockerfile_is_template_owned(template):  # AC-104.3
     """AC-104.3: /shared:update-service must bring the strict install, so the Dockerfile is not in _skip_if_exists."""
     conf = yaml.safe_load((TEMPLATES / template / "copier.yml").read_text())
