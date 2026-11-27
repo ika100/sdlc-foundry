@@ -24,12 +24,24 @@ def feed(store, *records):
 
 def report_json(capsys):
     assert runs.main(["report", "--json", "--since", "7"]) == 0
-    return json.loads(capsys.readouterr().out)
+    data = json.loads(capsys.readouterr().out)
+    assert "chains" in data
+    return data
+
+
+def only(found):
+    assert len(found) == 1, found
+    return found[0]
+
+
+def line_of(capsys, prefix):
+    return only([ln for ln in chains_block(capsys) if ln.startswith(prefix)])
 
 
 def chains_block(capsys):
     assert runs.main(["report", "--since", "7"]) == 0
     lines = capsys.readouterr().out.splitlines()
+    assert "Chains:" in lines
     start = lines.index("Chains:")
     block = []
     for ln in lines[start + 1:]:
@@ -40,8 +52,7 @@ def chains_block(capsys):
 
 
 def item(data, ident="131", repo="acme/a"):
-    [one] = [i for i in data["chains"]["items"] if i["id"] == ident and i["repo"] == repo]
-    return one
+    return only([i for i in data["chains"]["items"] if i["id"] == ident and i["repo"] == repo])
 
 
 def spec_131(store, child_cost=0.0):
@@ -58,7 +69,7 @@ def spec_131(store, child_cost=0.0):
 def test_a_chain_shows_attempts_cost_and_the_share_outside_the_success_ac_223_7(store, capsys):  # AC-223.7
     spec_131(store)
     block = chains_block(capsys)
-    [line] = [ln for ln in block if ln.startswith("acme/a spec 131:")]
+    line = only([ln for ln in block if ln.startswith("acme/a spec 131:")])
     for part in ("3 attempts", "1 escalation", "1 abandon", "0 failed", "attempts to done: 3", "chain cost $7.50", "successful run $2.00",
                  "spent outside the successful run: 73%"):
         assert part in line, line
@@ -87,7 +98,7 @@ def test_a_failed_attempt_is_counted_apart_ac_223_7(store, capsys):  # AC-223.7
          run_rec("f2", "done", 1.0, spec="140", started="2026-10-21T01:00:00Z", ended="2026-10-21T09:00:00Z"))
     one = item(report_json(capsys), "140")
     assert one["attempts"] == 2 and one["failed"] == 1 and one["escalations"] == 0 and one["attempts_to_done"] == 2
-    [line] = [ln for ln in chains_block(capsys) if ln.startswith("acme/a spec 140:")]
+    line = line_of(capsys, "acme/a spec 140:")
     assert "1 failed" in line and "0 escalations" in line
 
 
@@ -111,7 +122,7 @@ def test_the_text_summary_per_delivered_item_ac_223_8(store, capsys):  # AC-223.
     mixed(store)
     block = chains_block(capsys)
     assert any(ln.startswith("acme/a issue 42:") and "not done" in ln for ln in block)
-    [summary] = [ln for ln in block if ln.startswith("done 2, not done 2")]
+    summary = only([ln for ln in block if ln.startswith("done 2, not done 2")])
     assert "median attempts to done: 2" in summary
     assert "cost per delivered item: $5.25 (median successful run $2.50)" in summary
     assert "spend of chains not done: $2.00" in summary
@@ -138,7 +149,7 @@ def test_an_unreadable_cost_is_unknown_never_zero_ac_223_9(store, capsys):  # AC
     one = item(data, "140")
     assert one["cost_complete"] is False and one["cost_usd"] == pytest.approx(1.2) and one["outside_pct"] is None
     assert data["chains"]["cost_per_delivered"] is None and data["chains"]["done"] == 1
-    [line] = [ln for ln in chains_block(capsys) if ln.startswith("acme/a spec 140:")]
+    line = line_of(capsys, "acme/a spec 140:")
     assert "chain cost >= $1.20 +unknown" in line and "$0.00" not in line
 
 
@@ -147,15 +158,14 @@ def test_a_chain_begun_before_the_window_is_partial_ac_223_9(store, capsys):  # 
          run_rec("p2", "done", 1.0, spec="151", started="2026-10-20T01:00:00Z"))
     data = report_json(capsys)
     assert item(data, "150")["partial"] is True and item(data, "151")["partial"] is False
-    [line] = [ln for ln in chains_block(capsys) if ln.startswith("acme/a spec 150:")]
-    assert "partial" in line
-    assert "partial" not in next(ln for ln in chains_block(capsys) if ln.startswith("acme/a spec 151:"))
+    assert "partial" in line_of(capsys, "acme/a spec 150:")
+    assert "partial" not in line_of(capsys, "acme/a spec 151:")
 
 
 def test_records_without_spec_or_issue_are_unchained_ac_223_9(store, capsys):  # AC-223.9
     feed(store, run_rec("n1", "done", 1.0, spec=None), run_rec("n2", "escalated", 1.0, spec=None, kind="build"))
     data = report_json(capsys)
-    assert data["chains"]["items"] == [] and data["chains"]["unchained"] == 2
+    assert data["chains"]["items"] == [] and data["chains"]["unchained"] == 2   # report_json asserted the key
     assert runs.main(["report", "--since", "7"]) == 0
     lines = capsys.readouterr().out.splitlines()
     assert "Chains: none" in lines and "  unchained: 2" in lines

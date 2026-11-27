@@ -49,6 +49,12 @@ def check(repo, notes=None, rules=("fragment",)):
                              notes=notes if notes is not None else [])
 
 
+def one_problem(repo):
+    problems = check(repo)[1]
+    assert len(problems) == 1, problems
+    return problems[0]
+
+
 def fixed(repo, cause, name="900-thing.fixed.md", text=FIXED):
     commit(repo, f"{FRAG}/{name}", text + (cause + "\n" if cause is not None else ""))
     return name
@@ -92,7 +98,9 @@ def test_form_error_is_none_for_added_and_changed_fragments_ac_223_1():  # AC-22
 def test_entries_and_numbers_of_a_fixed_section_ac_223_1():  # AC-223.1
     import fixcause
     section = "**A.** Text (#10).\nCaused by: #5\n\n**B.** Other (#11), (#12).\n\nCaused by: v5.1.0\n\n**C.** Third.\n"
-    one, two, three = fixcause.entries(section)
+    found = fixcause.entries(section)
+    assert len(found) == 3
+    one, two, three = found
     assert one.endswith("Caused by: #5") and two.endswith("Caused by: v5.1.0") and three.startswith("**C.**")
     assert fixcause.numbers(one) == {10} and fixcause.numbers(two) == {11, 12}
     assert fixcause.numbers(three, "900") == {900}
@@ -101,7 +109,7 @@ def test_entries_and_numbers_of_a_fixed_section_ac_223_1():  # AC-223.1
 @pytest.mark.parametrize("cause", [None, "Caused by: 812", "Caused by: #812,#815", "Caused by: V5.1.0", "Caused by: v5.1", "caused by: #1"])
 def test_a_fixed_fragment_without_a_valid_cause_line_is_one_error_ac_223_1(repo, fake_gh, cause):  # AC-223.1
     name = fixed(repo, cause)
-    [problem] = check(repo)[1]
+    problem = one_problem(repo)
     assert problem.startswith("changelog fragment:") and name in problem and FORM in problem
 
 
@@ -128,7 +136,7 @@ def test_added_and_changed_fragments_need_no_cause_line_ac_223_1(repo, fake_gh, 
     commit(repo, f"{FRAG}/901-new.{kind}.md", "**A change (spec 901).** Text.\n")
     assert check(repo)[1] == []
     name = fixed(repo, None)                       # only the fixed one is refused
-    [problem] = check(repo)[1]
+    problem = one_problem(repo)
     assert name in problem and "901-new" not in problem
 
 
@@ -140,7 +148,7 @@ def test_a_fragment_already_on_the_base_is_never_checked_ac_223_1(repo, fake_gh)
     commit(repo, f"{FRAG}/901-new.added.md", "**New (spec 901).** Text.\n")
     assert check(repo)[1] == []
     name = fixed(repo, None)                       # a fragment this branch adds is checked, the old one is not
-    [problem] = check(repo)[1]
+    problem = one_problem(repo)
     assert name in problem and "800-old" not in problem
 
 
@@ -179,7 +187,7 @@ def test_a_merged_pr_and_an_existing_tag_pass_ac_223_2(repo, fake_gh):  # AC-223
     notes: list = []
     assert check(repo, notes)[1] == [] and notes == []
     name = fixed(repo, "Caused by: #999", name="902-c.fixed.md")       # not merged: only this one fails
-    [problem] = check(repo)[1]
+    problem = one_problem(repo)
     assert name in problem and "#999" in problem
 
 
@@ -187,7 +195,7 @@ def test_a_merged_pr_and_an_existing_tag_pass_ac_223_2(repo, fake_gh):  # AC-223
 def test_a_pr_that_is_not_merged_is_an_error_ac_223_2(repo, fake_gh, state):  # AC-223.2
     fake_gh.set(prs=state)
     name = fixed(repo, "Caused by: #813")
-    [problem] = check(repo)[1]
+    problem = one_problem(repo)
     assert problem.startswith("changelog fragment:") and name in problem
     assert "#813" in problem and "is not a merged PR of " + SLUG in problem
 
@@ -195,7 +203,7 @@ def test_a_pr_that_is_not_merged_is_an_error_ac_223_2(repo, fake_gh, state):  # 
 def test_a_tag_that_does_not_exist_is_an_error_ac_223_2(repo, fake_gh):  # AC-223.2
     fake_gh.set(tags=["v5.23.0"])
     name = fixed(repo, "Caused by: v9.9.9")
-    [problem] = check(repo)[1]
+    problem = one_problem(repo)
     assert name in problem and "v9.9.9" in problem and f"names no tag of {SLUG}" in problem
 
 
@@ -243,6 +251,8 @@ def test_the_released_entry_keeps_the_cause_line_ac_223_3():  # AC-223.3
     body = cl.section_body(out, "5.5.0")
     assert "### Fixed" in body
     section = body.split("### Fixed", 1)[1]
-    [entry] = fixcause.entries(section)
+    found = fixcause.entries(section)
+    assert len(found) == 1
+    entry = found[0]
     assert entry.strip().splitlines()[-1] == "Caused by: #812"
     assert fixcause.parse_cause(entry).prs == (812,)

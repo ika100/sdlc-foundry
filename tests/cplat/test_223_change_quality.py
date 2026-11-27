@@ -141,7 +141,8 @@ def test_a_version_without_a_heading_is_an_error_ac_223_4(world, capsys):  # AC-
 def test_an_unreleased_fixed_fragment_is_a_carrier_too_ac_223_4(world, capsys):  # AC-223.4
     (world / "docs/changelog.d/870-x.fixed.md").write_text("**Fix x (#870).** Text.\nCaused by: #850\n")
     data = json.loads(report(world, capsys, "--json"))
-    [caused] = data["releases"][2]["caused"]
+    assert len(data["releases"][2]["caused"]) == 1
+    caused = data["releases"][2]["caused"][0]
     assert caused["carrier"] == "Unreleased" and caused["cause"] == "#850"
     assert data["change_failure_rate"]["failed"] == 2
 
