@@ -176,6 +176,10 @@ jobs:
       - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
       - name: the changelog lists every changed versions row, and a major move is a major release
         run: uv run scripts/release-check.py rows
+      - name: every added fixed fragment names its cause (spec 223)
+        run: |
+          if [ -n "$GITHUB_BASE_REF" ]; then BASE="origin/$GITHUB_BASE_REF"; else BASE="HEAD~1"; fi
+          uv run scripts/release-check.py fragments --base "$BASE"
 
   platform-tests:
     name: cplat unit + integration tests (shard ${{ matrix.shard }}/4)
