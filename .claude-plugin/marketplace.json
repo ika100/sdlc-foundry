@@ -10,7 +10,7 @@
     {
       "name": "svc",
       "source": "./plugins/svc",
-      "version": "4.15.1",
+      "version": "4.15.2",
       "description": "Spec-driven pipeline for every service shape: spec → plan → failing acceptance tests → parallel coders → quality ‖ tests ‖ security → verify against the spec → PR.",
       "category": "agents",
       "tags": [
@@ -192,7 +192,7 @@
     {
       "name": "issue",
       "source": "./plugins/issue",
-      "version": "1.6.1",
+      "version": "1.7.0",
       "description": "The issue noun: /issue:triage routes GitHub issues to specs and fixes; /issue:report files a platform issue.",
       "category": "agents",
       "tags": [

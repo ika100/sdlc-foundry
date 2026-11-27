@@ -15,9 +15,11 @@ from pathlib import Path
 import dispatch_state
 import feedback
 import priority
+import settings
 import spec as specs
 import triage
 import triage_facts as facts
+import triage_reporter
 from core import PlatformError
 
 MAX_AGE = 7200
@@ -38,6 +40,11 @@ QUERY = """query($owner: String!, $name: String!) {
     }
     merged: pullRequests(states: MERGED, first: 50, orderBy: {field: UPDATED_AT, direction: DESC}) {
       nodes { number title body url closingIssuesReferences(first: 20) { nodes { number } } }
+    }
+    waiting_closed: issues(states: CLOSED, labels: ["needs-info"], first: 50, orderBy: {field: UPDATED_AT, direction: DESC}) {
+      nodes { number title body url createdAt closedAt stateReason authorAssociation author { login }
+              labels(first: 30) { nodes { name } }
+              comments(last: 50) { nodes { author { login } authorAssociation body createdAt } } }
     }
   }
 }"""
@@ -74,10 +81,11 @@ def read(slug: str) -> dict:
     open_ = repo["open"]
     nodes = [normalise(n) for n in open_["nodes"]]
     return {"open": nodes, "open_total": open_.get("totalCount", len(nodes)), "closed": repo["closed"]["nodes"],
-            "merged": repo["merged"]["nodes"], "labels": [x["name"] for x in repo["labels"]["nodes"]]}
+            "merged": repo["merged"]["nodes"],
+            "waiting_closed": [normalise(n) for n in (repo.get("waiting_closed") or {}).get("nodes") or []], "labels": [x["name"] for x in repo["labels"]["nodes"]]}
 
 
-def _entry(issue: dict, now: datetime, ctx: dict) -> dict:
+def _entry(issue: dict, now: datetime, ctx: dict, state: str = "open", silent: str = "") -> dict:
     reply = facts.reply(issue, now)
     fresh = {id(c) for c in facts.new_since(issue, reply)} if reply else set()
     status = facts.status(issue, ctx["specs"], ctx["open_numbers"], ctx["merged"])
@@ -91,7 +99,8 @@ def _entry(issue: dict, now: datetime, ctx: dict) -> dict:
                       "new": id(c) in fresh, "text": triage.fenced(c.get("body") or "", triage.COMMENT_LIMIT)}
                      for c in issue["comments"]],
         "duplicates": facts.duplicates(issue, ctx["open"], ctx["closed"], now), "engine": facts.engine(issue), "reply": reply,
-        "status": status, "handled": facts.handled(status),
+        "status": status, "handled": facts.handled(status) or ({"kind": "silent", "line": silent} if silent else None),
+        "state": state, "form": triage_reporter.form_of(issue.get("body") or "", ctx["forms"]),
     }
 
 
@@ -99,8 +108,11 @@ def build(raw: dict, *, new: bool, root: Path, now: datetime, slug: str = "") ->
     """The batch: the queue (plus answered `needs-info` issues), what was skipped, facts per issue, the missing labels."""
     issues = raw["open"]
     ctx = {"open": issues, "closed": raw["closed"], "merged": raw["merged"], "open_numbers": {i["number"] for i in issues},
-           "specs": specs.all_specs(root)}
+           "specs": specs.all_specs(root), "forms": triage_reporter.forms(root)}
+    days = settings.needs_info_close_days(root)
     queued = {i["number"]: i for i in triage.queue(issues, new=new)}
+    silent: dict[int, str] = {}
+    reopened = set()
     skipped = []
     for issue in sorted(issues, key=lambda i: i["number"]):
         if "needs-info" not in {lb["name"] for lb in issue["labels"]}:
@@ -109,13 +121,27 @@ def build(raw: dict, *, new: bool, root: Path, now: datetime, slug: str = "") ->
         if reply and reply["state"] == "answered":
             queued[issue["number"]] = issue
         elif reply:
-            skipped.append({"number": issue["number"], "reason": f"silent {reply['age']}"})
+            waited = (now - facts._time(reply["since"])).days
+            status = facts.status(issue, ctx["specs"], ctx["open_numbers"], ctx["merged"])
+            if waited >= days and not facts.handled(status):
+                queued[issue["number"]] = issue
+                silent[issue["number"]] = f"silent {waited} days: close with a final comment"
+            else:
+                skipped.append({"number": issue["number"], "reason": f"silent {reply['age']}"})
+    for issue in raw.get("waiting_closed") or []:
+        closed_at = facts._time(issue.get("closedAt"))
+        if issue.get("stateReason") == "NOT_PLANNED" and any(
+                c.get("author") == issue["author"] and facts._time(c.get("createdAt")) > closed_at for c in issue["comments"]):
+            queued[issue["number"]] = issue
+            reopened.add(issue["number"])
     more = raw["open_total"] - len(issues)
     if more > 0:
         skipped.append({"number": None, "reason": f"{more} more open issues not read (limit {READ_LIMIT})"})
     ordered = sorted(queued.values(), key=lambda i: (i.get("createdAt", ""), i["number"]))
     return {"repo": slug, "read_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "batch_file": "",
-            "issues": [_entry(i, now, ctx) for i in ordered], "skipped": skipped,
+            "close_after_days": days, "forms": ctx["forms"],
+            "issues": [_entry(i, now, ctx, "closed" if i["number"] in reopened else "open", silent.get(i["number"], ""))
+                       for i in ordered], "skipped": skipped,
             "missing_labels": sorted(set(triage.LABELS) - set(raw["labels"])), "specs_pr": None,
             "priority_levels": priority.levels_json()}
 

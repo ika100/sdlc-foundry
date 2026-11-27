@@ -21,6 +21,7 @@ from pathlib import Path
 import dispatch_budget
 import dispatch_gate
 import dispatch_pace
+import dispatch_platform
 import dispatch_policy
 import dispatch_state as ds
 import dispatch_units
@@ -187,7 +188,7 @@ def status_doc(repo: Path | str, slug: str, policy, gate: dispatch_gate.Gate | N
                       "manual": manual_rows(slug)},
             "queue": [dict(q) for q in cycle.get("queue") or []], "held": [dict(h) for h in cycle.get("held") or []],
             "escalated": _escalated_today(slug), "tokens": tokens_doc(slug, policy, st), "last_cycle": cycle.get("at"),
-            "release_hold": release_hold.view(slug), **budget_docs(g)}
+            "release_hold": release_hold.view(slug), "platform": dispatch_platform.state(repo), **budget_docs(g)}
 
 
 def _hold_line(hold: dict) -> str:
@@ -299,6 +300,8 @@ def render_status(doc: dict) -> str:
     if t["unknown"]:
         lines.append("usage unknown: " + ", ".join(t["unknown"]))
     lines.append(f"last cycle: {doc['last_cycle'] or 'never'}")
+    if doc.get("platform"):
+        lines.append(dispatch_platform.line(doc["platform"]))
     return "\n".join(lines)
 
 

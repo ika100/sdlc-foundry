@@ -448,6 +448,8 @@ jobs:
     needs: changes
     if: needs.changes.outputs.web == 'true'
     runs-on: ubuntu-latest
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
@@ -505,6 +507,12 @@ jobs:
             echo "pnpm install --frozen-lockfile accepted a stale lock"; exit 1
           fi
           grep -q "ERR_PNPM_OUTDATED_LOCKFILE" /tmp/stale.out || { cat /tmp/stale.out; echo "failed for another reason"; exit 1; }
+      - name: Log in to Docker Hub (anonymous pulls are rate-limited, #1045)
+        if: env.DOCKERHUB_USERNAME != ''   # forks and a repo without the secrets build anonymously
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
       - name: image builds and starts (non-root, read-only root filesystem)
         working-directory: /tmp/test-web
         run: |
@@ -548,6 +556,8 @@ jobs:
     needs: changes
     if: needs.changes.outputs.go == 'true'
     runs-on: ubuntu-latest
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
     strategy:
       fail-fast: false   # spec 084: independent variants; one flaky job must not cancel the rest
       matrix:
@@ -603,6 +613,12 @@ jobs:
         with:
           working-directory: /tmp/test-go
           version: latest
+      - name: Log in to Docker Hub (anonymous pulls are rate-limited, #1045)
+        if: env.DOCKERHUB_USERNAME != ''   # forks and a repo without the secrets build anonymously
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
       - name: image builds and starts (non-root, read-only root filesystem)
         working-directory: /tmp/test-go
         run: |
@@ -620,6 +636,8 @@ jobs:
     needs: changes
     if: needs.changes.outputs.ts == 'true'
     runs-on: ubuntu-latest
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
     strategy:
       fail-fast: false   # spec 084: independent variants; one flaky job must not cancel the rest
       matrix:
@@ -680,6 +698,12 @@ jobs:
           fi
           cat /tmp/neg.err
           grep -Fx "test-fast: checked nothing: 0 tests ran - add at least one test" /tmp/neg.err
+      - name: Log in to Docker Hub (anonymous pulls are rate-limited, #1045)
+        if: env.DOCKERHUB_USERNAME != ''   # forks and a repo without the secrets build anonymously
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
       - name: image builds and starts (non-root, read-only root filesystem)
         working-directory: /tmp/test-ts
         env:
@@ -744,6 +768,7 @@ jobs:
           - {observability: true, database: true}     # PostgreSQL support: EF Core, migrations at startup, Testcontainers
           - {observability: false, database: true}
     env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DOTNET_CLI_TELEMETRY_OPTOUT: "1"
       DOTNET_NOLOGO: "1"
     steps:
@@ -796,6 +821,12 @@ jobs:
           fi
           cat /tmp/neg.err
           grep -Fx "test-fast: checked nothing: 0 tests ran - add at least one test" /tmp/neg.err
+      - name: Log in to Docker Hub (anonymous pulls are rate-limited, #1045)
+        if: env.DOCKERHUB_USERNAME != ''   # forks and a repo without the secrets build anonymously
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
       - name: image builds and starts (non-root, read-only root filesystem)
         working-directory: /tmp/test-dotnet
         env:
@@ -994,6 +1025,7 @@ jobs:
     if: needs.changes.outputs.java == 'true'
     runs-on: ubuntu-latest
     env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       MAVEN_OPTS: -Daether.connector.http.retryHandler.count=3   # spec 084: a dropped download is retried, not a red job
     strategy:
       fail-fast: false   # spec 084: independent variants; one flaky job must not cancel the rest
@@ -1049,6 +1081,12 @@ jobs:
           fi
           cat /tmp/neg.err
           grep -Fx "test-fast: checked nothing: 0 tests ran - add at least one test" /tmp/neg.err
+      - name: Log in to Docker Hub (anonymous pulls are rate-limited, #1045)
+        if: env.DOCKERHUB_USERNAME != ''   # forks and a repo without the secrets build anonymously
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
       - name: image builds and starts (non-root, read-only root filesystem)
         working-directory: /tmp/test-java
         run: |
@@ -1171,6 +1209,7 @@ jobs:
     if: needs.changes.outputs.java == 'true'
     runs-on: ubuntu-latest
     env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       MAVEN_OPTS: -Daether.connector.http.retryHandler.count=3   # spec 084: a dropped download is retried, not a red job
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -1209,6 +1248,12 @@ jobs:
         run: |
           python3 "$GITHUB_WORKSPACE/scripts/template-lint.py" service-java .
           sh -c "$(jq -r '.shell.scripts["test"]' devbox.json)"
+      - name: Log in to Docker Hub (anonymous pulls are rate-limited, #1045)
+        if: env.DOCKERHUB_USERNAME != ''   # forks and a repo without the secrets build anonymously
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
       - name: image builds and starts on the new base (non-root, read-only root filesystem)
         working-directory: /tmp/upd
         run: |

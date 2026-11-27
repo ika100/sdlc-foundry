@@ -77,6 +77,8 @@ root=$(cd "$(dirname "$0")/../.." && pwd)
 . "$root/tests/e2e/lib/probe.sh"   # probe_run: probe pods with a component's own variables (#323)
 # shellcheck source=SCRIPTDIR/lib/uv-cache.sh
 . "$root/tests/e2e/lib/uv-cache.sh"   # a throwaway uv cache per script run (spec 208)
+# shellcheck source=SCRIPTDIR/lib/docker-build.sh
+. "$root/tests/e2e/lib/docker-build.sh"   # e2e_docker_build: docker build, retried once on a registry 429 (#1045)
 work="${E2E_WORK:-$(mktemp -d)}"
 e2e_uv_cache_start
 port="${E2E_PORT:-8099}"
@@ -207,12 +209,14 @@ step "Build and push the images"
 node_image=$(sed -n 's/^FROM \(node:[^ ]*\).*/\1/p' "$work/e2e-web/Dockerfile" | head -1)
 docker run --rm -v "$work/e2e-web:/app" -w /app "$node_image" sh -c 'corepack enable && pnpm install --lockfile-only --silent' >/dev/null
 for svc in e2e-api e2e-web; do
-  docker build -q -t "localhost:$regport/$svc:latest" "$work/$svc" >/dev/null
+  e2e_docker_build -q -t "localhost:$regport/$svc:latest" "$work/$svc" >/dev/null
   docker push -q "localhost:$regport/$svc:latest" >/dev/null
 done
 if in_part "the broker images (e2e-natsprobe, e2e-worker)" core scaling; then
 # the broker steps probe with what a component uses (nats-py, spec 119): python:3.13-slim + nats-py, built from a Dockerfile on stdin
-printf 'FROM python:3.13-slim\nRUN pip install --no-cache-dir nats-py==2.16.0\n' | docker build -q -t "localhost:$regport/e2e-natsprobe:1" - >/dev/null
+mkdir -p "$work/e2e-natsprobe-ctx"   # a directory, not stdin: the retry on a 429 builds it again
+printf 'FROM python:3.13-slim\nRUN pip install --no-cache-dir nats-py==2.16.0\n' > "$work/e2e-natsprobe-ctx/Dockerfile"
+e2e_docker_build -q -t "localhost:$regport/e2e-natsprobe:1" "$work/e2e-natsprobe-ctx" >/dev/null
 docker push -q "localhost:$regport/e2e-natsprobe:1" >/dev/null
 # the scaling steps (spec 120) need a consumer that works off a queue: e2e-worker answers 200 to every GET on $PORT, pulls from its durable
 # consumer with the component's NATS_* and EVENTS_JOBS_* variables, sleeps WORK_SECONDS per message and acknowledges (FROM the probe image)
@@ -264,7 +268,7 @@ async def main():
 asyncio.run(main())
 PY
 printf 'FROM localhost:%s/e2e-natsprobe:1\nCOPY worker.py /worker.py\nUSER 1000\nCMD ["python", "-u", "/worker.py"]\n' "$regport" > "$work/e2e-worker-ctx/Dockerfile"
-docker build -q -t "localhost:$regport/e2e-worker:latest" "$work/e2e-worker-ctx" >/dev/null
+e2e_docker_build -q -t "localhost:$regport/e2e-worker:latest" "$work/e2e-worker-ctx" >/dev/null
 docker push -q "localhost:$regport/e2e-worker:latest" >/dev/null
 fi  # end part
 
