@@ -16,7 +16,6 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 |---|---|---|---|---|
 | [104-generated-repos-build-and-observe](specs/104-generated-repos-build-and-observe/spec.md) — Generated repos build and observe reliably | P1 | approved | 12 | #143, #965 |
 | [107-open-source-tools-are-adopted-on](specs/107-open-source-tools-are-adopted-on/spec.md) — Open-source tools are adopted on measured value | P1 | approved | 11 | #164 |
-| [221-a-net-library-shape](specs/221-a-net-library-shape/spec.md) — A .NET library shape | P1 | approved | 11 | #720 |
 | [001-create-a-repo-of-any-shape-with-one](specs/001-create-a-repo-of-any-shape-with-one/spec.md) — Create a repo of any shape with one command | P0 | done | 9 |  |
 | [002-generated-repos-enable-their-plugins](specs/002-generated-repos-enable-their-plugins/spec.md) — Generated repos enable their plugins automatically | P0 | done | 2 |  |
 | [003-pull-template-updates-into-an-existing](specs/003-pull-template-updates-into-an-existing/spec.md) — Pull template updates into an existing repo safely | P0 | done | 5 |  |
@@ -204,6 +203,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [218-a-net-service-shape](specs/218-a-net-service-shape/spec.md) — A .NET service shape | P1 | done | 11 | #719 |
 | [219-website-specs-get-a-ux-design-step](specs/219-website-specs-get-a-ux-design-step/spec.md) — Website specs get a UX design step | P1 | done | 11 | #715 |
 | [220-a-docs-only-land-does-not-wait-for-a](specs/220-a-docs-only-land-does-not-wait-for-a/spec.md) — A docs-only land does not wait for a code PR's catch-up e2e | P1 | done | 10 | #280 |
+| [221-a-net-library-shape](specs/221-a-net-library-shape/spec.md) — A .NET library shape | P1 | done | 11 | #720 |
 | [222-the-ux-step-is-measured-on-website-plans](specs/222-the-ux-step-is-measured-on-website-plans/spec.md) — The UX step is measured on website plans | P1 | done | 11 | #1059, #1060 |
 | [223-change-quality-fix-causes-and-attempts](specs/223-change-quality-fix-causes-and-attempts/spec.md) — Change quality: fix causes and attempts to done | P1 | done | 9 | #1099 |
 | [005-report-a-platform-problem-without](specs/005-report-a-platform-problem-without/spec.md) — Report a platform problem without leaking secrets | P2 | done | 3 |  |
