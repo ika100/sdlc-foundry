@@ -14,6 +14,8 @@ set -euo pipefail
 root=$(cd "$(dirname "$0")/../.." && pwd)
 # shellcheck source=SCRIPTDIR/lib/uv-cache.sh
 . "$root/tests/e2e/lib/uv-cache.sh"   # a throwaway uv cache per script run (spec 208)
+# shellcheck source=SCRIPTDIR/lib/docker-build.sh
+. "$root/tests/e2e/lib/docker-build.sh"   # e2e_docker_build: docker build, retried once on a registry 429 (#1045)
 work="${E2E_WORK:-$(mktemp -d)}"
 e2e_uv_cache_start
 export PATH="$PATH:$HOME/.local/bin"
@@ -184,7 +186,7 @@ printf '%s\n' \
   "for _ in 1 2 3 4 5 6 7 8 9 10; do [ -S /run/fcgiwrap.sock ] && break; sleep 1; done" \
   "chmod 666 /run/fcgiwrap.sock" \
   "exec nginx -g 'daemon off;'" > "$ctx_dir/start.sh"
-docker build -q -t "$git_image" "$ctx_dir" >/dev/null
+e2e_docker_build -q -t "$git_image" "$ctx_dir" >/dev/null
 docker create --name "$git_name" "$git_image" >/dev/null
 docker cp "$work/git/." "$git_name:/srv/git/"
 docker start "$git_name" >/dev/null

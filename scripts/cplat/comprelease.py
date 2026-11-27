@@ -364,7 +364,7 @@ def main(argv: list[str]) -> int:
             return code, waits.RESULTS[code]
         return waits.record(repo, "component release wait", body)
     d = target(Path(ns.repo).resolve())
-    print(json.dumps(d, indent=2) if ns.json else "\n".join(lines(d)))
+    print(json.dumps({**d, "lines": lines(d)}, indent=2) if ns.json else "\n".join(lines(d)))
     return 0 if d["ok"] else 1
 
 
