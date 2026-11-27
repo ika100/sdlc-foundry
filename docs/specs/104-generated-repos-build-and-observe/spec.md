@@ -1,7 +1,7 @@
 ---
 spec_id: 104-generated-repos-build-and-observe
 title: Generated repos build and observe reliably
-status: draft
+status: approved
 priority: P1
 tracks: [143, 965]
 ---
@@ -53,8 +53,8 @@ As a platform maintainer, I want the platform's own tests to generate a repo and
 - ~~Confirm: the metric label for unmatched paths is one shared value, and the route pattern replaces the concrete path.~~ Answered: yes, see AC-104.5.
 - ~~Confirm: the added CI time of the generated-repo checks is capped at 2 minutes.~~ Answered: yes, see AC-104.10.
 
-- Should `/component:new` also warn at creation time, or is `/platform:doctor` enough? Suggested: doctor only, since a new repo has no private dependency yet.
-- Does AC-104.11 need a real private-package build in the platform's CI, or is a rendered-Dockerfile check plus a build without the secret enough? Suggested: the rendered check plus a no-secret build (no test package to publish).
+- ~~Should `/component:new` also warn at creation time, or is `/platform:doctor` enough?~~ Answered: doctor only, since a new repo has no private dependency yet (AC-104.12).
+- ~~Does AC-104.11 need a real private-package build in the platform's CI?~~ Answered: no; the rendered-Dockerfile check plus a build without the secret is enough (no test package to publish).
 
 ## Changelog
 
@@ -65,3 +65,5 @@ As a platform maintainer, I want the platform's own tests to generate a repo and
 - 2026-10-28 done
 - 2026-11-27 draft: amend: private package token in image builds and missing-secret message (#965)
 - 2026-11-27 amended: private packages in image builds and the missing-secret message (issue 965); needs a new approval and a new plan.
+- 2026-11-27 amended: the user answered both open questions as suggested.
+- 2026-11-27 approved; the old plan is plan.v1.md
