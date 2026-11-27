@@ -1,0 +1,91 @@
+# Copier template: library-java
+# Java library published as a Maven jar `<group_id>:<project_name>` to GitHub Packages on the release tag (spec 217,
+# ADR-125): JDK 21 and Maven via devbox, Spotless (google-java-format) + Checkstyle, JUnit 5, JaCoCo — the service-java
+# template's tooling (ADR-009) without Spring Boot, the Dockerfile or the GitOps deployment.
+#
+# Usage:
+#   copier copy <platform-checkout>/templates/library-java ./<project> --data project_name=<name>
+
+_min_copier_version: "9.0.0"
+
+# Only *.jinja files are rendered: GitHub Actions (${{ }}) shares Jinja's delimiters.
+_templates_suffix: .jinja
+
+_answers_file: .copier-answers.yml
+
+# Project-owned once generated: /platform:update must not overwrite these.
+_skip_if_exists:
+  - .secrets.baseline.json    # repo-owned once created: it records the repo's own false positives (seeded when missing)
+  - .claude/project-notes.md   # repo-owned notes, loaded by CLAUDE.md (spec 086)
+  - README.md                # project-owned after creation (spec 060)
+  - .github/ISSUE_TEMPLATE/**
+  - pom.xml
+  - src/**
+  - config/**
+  - .trivyignore
+  - docs/adr/**
+  - docs/backlog.md
+  - docs/plan/**
+  - docs/specs/**
+
+_exclude:
+  - "copier.yml"
+  - ".git"
+
+_tasks:
+  - "git init -q -b main"
+  - "devbox install"
+  - "git add -A && git -c user.email=bootstrap@ika100 -c user.name=bootstrap commit -q -m 'chore: bootstrap from library-java template'"
+  - "echo 'Bootstrap complete. Repo committed at HEAD. Run: cd {{ project_name }} && devbox run quality'"
+
+project_name:
+  type: str
+  help: "Project name (kebab-case, e.g. 'shared-utils'). Used as the Maven artifactId."
+  validator: >-
+    {%- if not (project_name | regex_search('^[a-z][a-z0-9-]{1,39}$')) -%}
+    project_name must match ^[a-z][a-z0-9-]{1,39}$
+    {%- endif -%}
+
+description:
+  type: str
+  help: "One-line description of the library."
+  default: "A Java library"
+
+github_org:
+  type: str
+  help: "GitHub organization or user that will own the repo (and the GitHub Packages registry it publishes to)."
+  default: "ika100"
+
+group_id:
+  type: str
+  help: "Maven groupId / Java package prefix (lowercase, dot-separated)."
+  default: "io.github.{{ github_org | lower | replace('-', '') }}"
+  validator: >-
+    {%- if not (group_id | regex_search('^[a-z][a-z0-9]*(\.[a-z][a-z0-9]*)*$')) -%}
+    group_id must be a valid lowercase Java package prefix
+    {%- endif -%}
+
+package_name:
+  type: str
+  when: false
+  default: "{{ group_id }}.{{ project_name | replace('-', '') }}"
+
+package_path:
+  type: str
+  when: false
+  default: "{{ package_name | replace('.', '/') }}"
+
+owner_team:
+  type: str
+  help: "Owning team or individual."
+  default: "@{{ github_org }}"
+
+java_version:
+  type: str
+  help: "JDK major version (LTS; pinned in pom.xml and devbox.json; bumped via /platform:update). Consumers need this JDK or newer."
+  default: "21"
+
+platform_marketplace_ref:
+  type: str
+  help: "Git ref of ika100/sdlc-foundry to pin the plugin marketplace to (branch, tag, or commit)."
+  default: "main"

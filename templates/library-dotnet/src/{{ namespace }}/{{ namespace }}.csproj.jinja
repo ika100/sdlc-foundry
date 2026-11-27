@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>{{ namespace }}</RootNamespace>
+    <AssemblyName>{{ namespace }}</AssemblyName>
+    <!-- The NuGet package (spec 221, ADR-125): the release tag is the version, `devbox run publish vX.Y.Z` packs it. -->
+    <IsPackable>true</IsPackable>
+    <PackageId>{{ namespace }}</PackageId>
+    <Version>0.0.0-dev</Version>
+    <Description>{{ description }}</Description>
+    <Authors>{{ github_org }}</Authors>
+    <RepositoryUrl>https://github.com/{{ github_org }}/{{ project_name }}</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageProjectUrl>https://github.com/{{ github_org }}/{{ project_name }}</PackageProjectUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="../../README.md" Pack="true" PackagePath="/" />
+    <InternalsVisibleTo Include="{{ namespace }}.Tests" />
+  </ItemGroup>
+
+</Project>

@@ -97,7 +97,7 @@ hard:
     source: ADR-025
   triage-never-closes:
     enforced_by: cplat issue triage
-    source: "ADR-025, ADR-129"
+    source: "ADR-025, ADR-130"
   gitops-owns-the-cluster:
     intentional_prose_rule: no component-repo check rejects manifests or kubectl calls yet; a follow-up spec adds one
     source: ADR-017

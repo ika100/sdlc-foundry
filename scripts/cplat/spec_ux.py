@@ -3,6 +3,8 @@
 Only a shape that declares `ux_designer` in shapes.yml has the step. There a spec's `ux: needed|none` decides; without it,
 an active criterion or a story that names something a user sees or does on screen makes it `needed`. A `ux.md` written for
 the current criteria (its `spec_hash`) is `done`; one written for earlier criteria is stale and designed again.
+Spec 222 tuned the words on the journey and demo website specs (tests/cplat/fixtures/ux_cases.json): server and build
+wording (a container image, JSON fields, a page size, a response header, what logs show) does not count as visible.
 """
 from __future__ import annotations
 
@@ -19,11 +21,33 @@ VALUES = ("needed", "none")
 SECTIONS = ("Flows", "Screens", "States", "Accessibility")
 UX_FILE = "ux.md"
 AC_REF = re.compile(r"\bAC-\d{3,}\.\d+\b")
-# Things a user sees or does on screen; a word here in a criterion or story is what makes a spec change the UI.
+# Things a user sees or does on screen; a word here in a criterion or story is what makes a spec change the UI (spec 219,
+# widened by spec 222 from the journey and demo website specs).
 VISIBLE = re.compile(
     r"\b(pages?|screens?|views?|forms?|buttons?|links?|menus?|dialogs?|modals?|banners?|toasts?|tooltips?|tabs?|"
     r"navigation|sidebar|layout|cards?|fields?|checkbox(?:es)?|dropdowns?|icons?|images?|placeholder|spinner|"
+    r"inputs?|rows?|labels?|headings?|header|footer|edit mode|empty state|loading state|keyboard|focus(?:ed)?|"
+    r"screen readers?|accessible names?|colou?rs?|themes?|dark mode|appears?|appeared|"
     r"shown|shows|displays?|displayed|visible|sees?|clicks?|clicked|taps?|hovers?|scrolls?)\b", re.I)
+# A person acting in the browser; looked for after VISIBLE, so that the reason names the thing on screen when there is one.
+ACTING = re.compile(r"\b(?:user|person|visitor|they) (?:types?|press(?:es)?|enters?|selects?|submits?|choose[s]?|opens?|saves?)\b", re.I)
+# Phrases where those words mean something no one sees in the browser (spec 222): removed before VISIBLE is searched.
+NOT_VISIBLE = re.compile(
+    r"`page`|[?&]page=|`\s*headers?\b|\b(?:(?:container|docker|base|oci|runtime) images?|images? (?:tags?|digests?|scans?|sizes?)|"
+    r"(?:json|request|response|body|query|payload|schema) fields?|fields? (?:of|in) the (?:json|request|response|body|payload)|"
+    r"(?:has|with) the fields? `|(?:missing|unknown|extra) fields?|"
+    r"page[ _](?:size|number|token|cursor|param(?:eter)?)|per page|(?:http|request|response) headers?|"
+    r"(?:database|table|db) rows?|(?:kubernetes|pod|github|issue) labels?|appears? in the (?:server )?logs?|"
+    r"(?:an? )?(?:html|static) pages?|serv(?:es|ing|ed) (?:its |the )?pages?|"
+    r"pages? (?:stays?|keeps?|is|are) (?:reachable|served|deployed|up)|"
+    r"(?:logs?|metrics?|traces?|dashboards?) (?:shows?|displays?))\b", re.I)
+
+
+def visible_word(text: str) -> str | None:
+    """The first word of `text` that names something a user sees, after the phrases of NOT_VISIBLE are removed."""
+    text = NOT_VISIBLE.sub(" ", text)
+    m = VISIBLE.search(text) or ACTING.search(text)
+    return m.group(0).lower() if m else None
 
 
 def field_errors(meta: dict) -> list[str]:
@@ -78,8 +102,8 @@ def _visible_word(spec: specmod.Spec) -> str | None:
     active = [ln for ln in parts.get("acceptance criteria", "").splitlines()
               if (m := specmod.AC_LINE.match(ln)) and not m.group(1)]
     for text in (*active, parts.get("stories", "")):
-        if m := VISIBLE.search(text):
-            return m.group(0).lower()
+        if word := visible_word(text):
+            return word
     return None
 
 
@@ -106,7 +130,10 @@ def decide(root: Path, spec: specmod.Spec) -> dict:
 
 
 def add_parser(sub) -> None:
-    p = sub.add_parser("ux", help="does the spec get the UX design step of /component:plan: needed, none or done (spec 219)")
+    p = sub.add_parser("ux", help="does the spec get the UX design step of /component:plan: needed, none or done (spec 219)",
+                       description="Without a `ux:` field, a criterion or story naming something a user sees or does in the browser "
+                                   "means needed. Image, field, page, header and log wording of a server or build (a container image, "
+                                   "JSON fields, a page size, a response header, what the logs show) does not count as visible (spec 222).")
     p.add_argument("id")
     p.add_argument("--json", action="store_true")
 

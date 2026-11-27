@@ -3,6 +3,9 @@
   <PropertyGroup>
     <RootNamespace>{{ namespace }}</RootNamespace>
     <AssemblyName>{{ namespace }}</AssemblyName>
+    <!-- The image ships what runs (#1057): no IIS web.config and no API documentation file; the PDB stays for line numbers in stack traces. -->
+    <IsTransformWebConfigDisabled>true</IsTransformWebConfigDisabled>
+    <PublishDocumentationFile>false</PublishDocumentationFile>
   </PropertyGroup>
 {%- if needs_observability or needs_database %}
 

@@ -25,7 +25,7 @@ rules:
   - id: R8
     text: "It closes only the confirmed question, duplicate and wontfix rows, because a close hides the issue."
     class: practice
-    source: "ADR-129"
+    source: "ADR-130"
   - id: R6
     text: "do not start a second pipeline before the first PR is open"
     class: retired

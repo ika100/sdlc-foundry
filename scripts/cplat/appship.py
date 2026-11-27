@@ -25,6 +25,11 @@ Run in the gitops-app repo (`--repo DIR`, default `.`). State: <git dir>/cplat-a
   cplat system ship complete [--timeout S]                 spec done + plan completed through a PR merged on green; prints the report
   cplat system ship escalate <reason> --cause C            end the run escalated
   cplat system ship finish                                 archive the state (an unrecorded run is recorded abandoned)
+  cplat system ship drive                                  spec 216: start the detached driver (publish, repos, land, complete, finish
+                                                           without a model); CPLAT_SYSTEM_DRIVER=0 leaves the loop to the session
+  cplat system ship drive --loop                           (hidden) the driver process itself
+  cplat system ship wait [--timeout T]                     spec 216: a line per driver step, then one result (DONE, ENTRY, WAIT,
+                                                           ESCALATED, STOPPED, ENDED, TIMEOUT); exit 0, 1 or 2
   cplat system ship gate                                   Stop hook (reads the hook's JSON on stdin)
 """
 from __future__ import annotations
@@ -438,6 +443,11 @@ def main(argv: list[str]) -> int:
     p.add_argument("reason", nargs="+")
     p.add_argument("--cause", default=None)
     sub.add_parser("finish")
+    p = sub.add_parser("drive")
+    p.add_argument("--loop", action="store_true", help=argparse.SUPPRESS)
+    p = sub.add_parser("wait")
+    p.add_argument("--timeout", type=float, default=540.0)
+    p.add_argument("--interval", type=float, default=5.0, help=argparse.SUPPRESS)
     p = sub.add_parser("gate")
     ns = ap.parse_args(argv)
     repo = Path(ns.repo).resolve()
@@ -452,6 +462,16 @@ def main(argv: list[str]) -> int:
         if answer:
             print(json.dumps(answer))
         return 0
+    if ns.cmd == "drive":
+        import appship_driver
+        return appship_driver.loop(repo) if ns.loop else appship_driver.drive(repo)
+    if ns.cmd == "wait":
+        import appship_wait
+        import waits
+        with waits.running("cplat system ship wait", repo):
+            code, lines = appship_wait.wait(repo, ns.timeout, ns.interval)
+        say(lines)
+        return code
     if ns.cmd == "start":
         st = state.start(repo, ns.spec, ns.max, ns.context, ns.budget, ns.until)
         show(st)
@@ -464,7 +484,9 @@ def main(argv: list[str]) -> int:
     if ns.cmd == "status":
         st = state.require_state(repo)
         if ns.json:
-            print(json.dumps({**st, "next": state.next_step(st), "scheduler": appship_sched.next_action(repo, st)}, indent=2))
+            import appship_driver
+            print(json.dumps({**st, "next": state.next_step(st), "scheduler": appship_sched.next_action(repo, st),
+                              "driver_progress": appship_driver.progress(repo, st)}, indent=2))
         else:
             show(st)
         return 0

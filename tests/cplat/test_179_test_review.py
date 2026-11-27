@@ -249,8 +249,7 @@ def phase(n):
 def test_phase_1_reviews_the_tests_once_then_freezes_at_the_reviewed_commit_ac_179_5():  # AC-179.5
     p1 = phase(1)
     low = p1.lower()
-    order = ["cplat spec trace", "test-review mode", "build reviewed",
-             "red=$(git log -1 --format=%h --grep 'acceptance tests for')"]
+    order = ["cplat spec trace", "test-review mode", "build reviewed"]  # AC-211.6: test-diff finds the red commit, no RED=
     at = [low.index(x) for x in order]
     assert at == sorted(at), dict(zip(order, at))
     assert low.index("cplat quiet lint-fix") < low.index("build reviewed")

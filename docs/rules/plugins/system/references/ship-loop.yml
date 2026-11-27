@@ -1,0 +1,19 @@
+rules:
+  - id: R14
+    text: "one repo's decision need not wait for another's build, and only the user approves answers (suggested ones in the spec)."
+    class: experience
+    source: "#684"
+  - id: R9
+    text: "one call per action, never a shell loop, because each action changes what the next call returns."
+    class: practice
+  - id: R10
+    text: "You start no subagent for a component repo and never work in its clone, because its own session owns it."
+    class: practice
+    source: spec 155
+  - id: R11
+    text: "Never write a polling loop on `cplat component ship status`, `kubectl` or `gh`, because the wait ends at the first state change."
+    class: practice
+  - id: R16
+    text: "On exit 0 (`WAIT:`) or exit 2 (`TIMEOUT:`) run the same wait again; escalate only after three `TIMEOUT:` in a row (a `WAIT:` resets the count): `cplat system ship escalate '<the TIMEOUT line>' --cause environment`, stop, because a stuck repo means runner or cluster."
+    class: practice
+    source: spec 194

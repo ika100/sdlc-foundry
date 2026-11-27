@@ -315,6 +315,8 @@ def finish(repo: Path) -> Path:
 
 def next_step(st: dict) -> str:
     sid = st["spec"]
+    if st.get("driver") and st["phase"] != "done":      # spec 216: the driver works the run, the session waits for it
+        return "`cplat system ship wait`, then act on its result as /system:ship says"
     return {
         "plan": f"plan the product unattended (/system:plan {sid}), then `cplat system ship phase publish`",
         "publish": "publish the spec and plan: `cplat system ship publish`",
@@ -367,7 +369,12 @@ def _mark(repo: Path, st: dict) -> dict:
             sh = ship.load_state(clone) or {}
             at = run(["git", "rev-parse", "HEAD"], cwd=clone, check=False).stdout.strip()
             repos[i] = f"running {sh.get('phase') or '-'} {at[:12]}"
-    return {"head": head, "phase": f"{st['phase']} {json.dumps(repos)}"}
+    phase = f"{st['phase']} {json.dumps(repos)}"
+    if st.get("driver"):                                # spec 216: the driver's ended steps are progress
+        import appship_driver
+        steps = (appship_driver.progress(repo, st) or {}).get("steps") or []
+        phase += f" driver {sum(1 for x in steps if isinstance(x, dict) and x.get('ended'))}"
+    return {"head": head, "phase": phase}
 
 
 def gate(repo: Path, hook_input: dict) -> dict | None:
@@ -387,7 +394,7 @@ def gate(repo: Path, hook_input: dict) -> dict | None:
         return None
     mark = _mark(repo, st)
     running = stopgate.running_agents(hook_input)
-    waiting = waits.live(repo)
+    waiting = waits.live(repo, session)
     box: dict = {}
 
     def change(s: dict) -> None:

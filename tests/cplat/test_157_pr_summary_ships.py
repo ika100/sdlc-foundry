@@ -176,7 +176,7 @@ def test_the_entry_pr_starts_with_the_block_ac_157_6(tmp_path, monkeypatch, caps
 
 # ---------------- AC-157.7: the docs ----------------
 
-COMMANDS = ["plugins/component/commands/build.md", "plugins/component/commands/ship.md", "plugins/system/commands/ship.md"]
+COMMANDS = ["plugins/component/commands/build.md", "plugins/component/commands/ship.md", "plugins/system/references/ship-loop.md"]
 
 
 @pytest.mark.parametrize("path", COMMANDS)

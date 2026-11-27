@@ -21,7 +21,7 @@
 - `plugins/issue/commands/triage.md` last paragraph: to stay within the byte budget the newline before `> If a platform template…` was dropped, so the escalation line is now glued to the end of the step 6 text (`…show fix runs.> If…`) and no longer renders as a blockquote. The text and its hard rule are still there. **Acceptable, cosmetic.** A fix should put the newline back.
 - `triage.md:38` calls the silent proposal a "`silent` row", but a silent issue needs no row (contract). This is a wording slip with no effect on behaviour. **Acceptable.**
 - The R8 practice rule names only question, duplicate and wontfix. Silent `needs-info` closes are covered by the next prompt line and by the code. **Acceptable.**
-- ADR-129 and its README index entry came from the planning commit (82d790f1), before the build range. **Acceptable.**
+- ADR-130 and its README index entry came from the planning commit (82d790f1), before the build range. **Acceptable.**
 
 ## Contract
 

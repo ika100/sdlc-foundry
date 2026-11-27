@@ -63,19 +63,6 @@ def _flaky(cwd: Path, summary) -> bool:
         return False
 
 
-def _record_ci(cwd: Path, result: str) -> None:
-    """#869: the whole CI gate's result is the run's security gate and the budget's `ci` stage; recorded here, so the
-    build makes no `runs gate security` and `budget stage ci` calls of its own. Never changes the result."""
-    try:
-        import budget
-        import runs
-        if runs.record_gate(cwd, "security", result):
-            budget.record_stage(cwd.resolve(), "ci", result)
-            print(f"recorded: gate security {result}, stage ci {result}")
-    except Exception:  # noqa: BLE001
-        pass
-
-
 USAGE = ("usage: cplat quiet [--raw] <devbox-script> | cplat quiet [--raw] test-fast [--repeat N | --red] -- <test args>   "
          "(a key of shell.scripts in ./devbox.json; only test-fast takes arguments, after --)")
 
@@ -106,7 +93,36 @@ def _parse(args: list[str], scripts: dict) -> tuple[str, int | str | None, list[
     return script, n, targs
 
 
+def _record_ci(cwd: Path, rc: int) -> None:
+    """Spec 211 (AC-211.7): a finished `ci` run records the security gate and the ci stage on the active build run.
+    Red records the stage only. Never raises and never changes the exit code."""
+    try:
+        import budget
+        import runs
+        rid = runs.build_run(cwd)
+        if not rid:
+            return
+        if rc == 0:
+            runs.record_gate(cwd, "security", "passed")
+            budget.record_stage(cwd, "ci", "passed")
+            print(f"recorded for build run {rid}: gate security passed, budget stage ci passed")
+        else:
+            budget.record_stage(cwd, "ci", "failed")
+            print(f"recorded for build run {rid}: budget stage ci failed")
+    except Exception:  # noqa: BLE001  (recording never changes the result)
+        pass
+
+
 def main(argv: list[str]) -> int:
+    ran: list[bool] = []
+    rc = _main(argv, ran)
+    args = argv[1:] if argv and argv[0] == "--raw" else argv
+    if args == ["ci"] and ran and rc != 124:
+        _record_ci(Path.cwd(), rc)
+    return rc
+
+
+def _main(argv: list[str], ran: list[bool] | None = None) -> int:
     cwd = Path.cwd()
     raw = bool(argv) and argv[0] == "--raw"
     args = argv[1:] if raw else argv
@@ -129,6 +145,8 @@ def main(argv: list[str]) -> int:
         import quiet_repeat
         return quiet_repeat.run(cwd, repeat, targs, raw=raw, on=on)
     cmd = ["devbox", "run", script] + (["--", *targs] if targs else [])
+    if ran is not None:
+        ran.append(True)  # quiet's own refusals returned above; from here the exit code is the script's
     log = _log_path(cwd, script)
     if script == "test-fast":
         import quiet_limit
@@ -150,8 +168,6 @@ def main(argv: list[str]) -> int:
             rc = subprocess.run(cmd, cwd=cwd, stdout=fh, stderr=subprocess.STDOUT, env=repo_env()).returncode
     lines = log.read_text(errors="replace").splitlines()
     nonempty = [ln for ln in lines if ln.strip()]
-    if script == "ci" and not raw:
-        _record_ci(cwd, "passed" if rc == 0 else "failed")
     if rc == 0:
         print(f"ok: devbox run {script} ({len(lines)} lines, log: {log})")
         if nonempty:

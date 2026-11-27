@@ -1,6 +1,6 @@
 {
   "name": "svc-dotnet",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Agents for .NET service repos (ASP.NET Core minimal APIs, xUnit, optional EF Core/PostgreSQL, chiseled .NET image): coder, tester, deployment, observability, and release. Used by the /component:* orchestrators when the repo shape is service-dotnet. Requires devbox recipes from the matching Copier template.",
   "author": {
     "name": "Eike Hensler",

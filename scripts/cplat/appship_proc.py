@@ -34,6 +34,7 @@ def spawn(clone: Path, spec_id: str, gitops: Path, parent_run: str | None, start
     if parent_run:
         env["CPLAT_RUN_PARENT"] = parent_run
     env.pop("CPLAT_SHIP_ANSWER", None)
+    env.pop("CPLAT_SYSTEM_DRIVER_RUN", None)     # spec 216: the repo session is not the driver
     if answer is not None:
         env["CPLAT_SHIP_ANSWER"] = answer
     with open(log, "ab") as out:
@@ -42,7 +43,7 @@ def spawn(clone: Path, spec_id: str, gitops: Path, parent_run: str | None, start
     return {"pid": p.pid, "log": str(log), "started": dt.datetime.now().isoformat(timespec="seconds"), "starts": starts}
 
 
-def alive(pid: int | None) -> bool:
+def alive(pid: int | None, marker: str = "headless") -> bool:
     """True while the process runs (a finished child of this process is reaped, so it does not count as running)."""
     if not pid:
         return False
@@ -61,4 +62,4 @@ def alive(pid: int | None) -> bool:
     except PermissionError:
         return True
     out = subprocess.run(["ps", "-ww", "-o", "command=", "-p", str(pid)], capture_output=True, text=True, check=False)
-    return out.returncode != 0 or "headless" in out.stdout      # a reused pid runs something else
+    return out.returncode != 0 or marker in out.stdout      # a reused pid runs something else

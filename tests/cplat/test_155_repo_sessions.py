@@ -322,7 +322,7 @@ def test_the_merge_slot_is_untouched_ac_155_8():  # AC-155.8
 # ---------------- AC-155.10: one path, documented ----------------
 
 def test_the_command_file_has_no_subagent_per_repo_path_ac_155_10():  # AC-155.10
-    text = (ROOT / "plugins" / "system" / "commands" / "ship.md").read_text()
+    text = (ROOT / "plugins" / "system" / "references" / "ship-loop.md").read_text()
     assert "one foreground subagent per repo" not in text
     assert "own session" in text and "spec 155" in text
 

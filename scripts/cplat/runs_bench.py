@@ -1,5 +1,6 @@
-"""`cplat platform runs benchmark <quick-task|build|ship|fix-rounds> [--reset-first] [--plugins DIR]` (spec 099, ADR-035): one fixed task on a clean clone of the
+"""`cplat platform runs benchmark <quick-task|build|ship|fix-rounds|ux-plan> [--reset-first] [--plugins DIR]` (spec 099, ADR-035): one fixed task on a clean clone of the
 sample repo (one fixed, trusted folder per workflow), run through `cplat headless`, recorded as a run of kind `benchmark` with its usage, and the sample repo reset.
+`ux-plan` (spec 222) plans a website spec on system-ship's `bench-files-web` clone and pin (`--dir`), so the UX step is measured.
 
 The tasks and the pinned sample revision are in benchmark/tasks.json. Every git / gh call goes through `run`, which tests replace.
 """
@@ -90,7 +91,48 @@ def snapshot(repo: str, clone: Path) -> dict:
 
 
 EXPECTED = {"quick-task": "open", "build": "open", "ship": "merged", "fix-rounds": "open", "explore-stop": "unchanged",
-            "spec-environments": "spec"}
+            "spec-environments": "spec", "ux-plan": "ux"}
+
+
+def sample_of(tasks: dict, task: dict) -> tuple[str, str]:
+    """(repo, pinned rev) of a workflow: its `sample_component` among system-ship's components (spec 222), else the sample."""
+    name = task.get("sample_component")
+    if not name:
+        return tasks["sample"]["repo"], tasks["sample"]["rev"]
+    for c in tasks["workflows"]["system-ship"]["system"]["components"]:
+        if c["repo"] == name:
+            return c["repo"], c["rev"]
+    raise PlatformError(f"benchmark sample {name} is not a system-ship component in benchmark/tasks.json")
+
+
+def clone_of(workflow: str, task: dict, system_dir: str | None) -> Path:
+    """The workflow's own folder; a system-ship component's clone lives in that benchmark's folder, whose trust it reuses."""
+    if not task.get("sample_component"):
+        return runs.state_dir() / "benchmark" / workflow
+    base = Path(system_dir).expanduser() if system_dir else runs.state_dir() / "benchmark" / "system-ship"
+    return base / task["sample_component"].split("/")[-1]
+
+
+def ux_planned(task: dict, clone: Path) -> str | None:
+    """ux-plan (spec 222, AC-222.3): the plan branch holds a current, valid ux.md that the architect's design names."""
+    import spec as specmod
+    import spec_ux
+    sid = task["spec_id"]
+    code, out, err = run(["git", "checkout", "-f", f"feature/{sid}"], cwd=clone)
+    if code != 0:
+        return f"no plan branch feature/{sid}: {_why(out, err)}"[:200]
+    sdir = clone / "docs" / "specs" / sid
+    if not (sdir / spec_ux.UX_FILE).is_file():
+        return f"the plan wrote no {spec_ux.UX_FILE}"
+    spec = specmod.read(sdir)
+    decided = spec_ux.decide(clone, spec)
+    if decided["ux"] != "done":
+        return f"cplat spec ux answers {decided['ux']}: {decided['reason']}"[:200]
+    errs = specmod.check(spec)
+    if errs:
+        return f"cplat spec check: {errs[0]}"[:200]
+    named = any(spec_ux.UX_FILE in (sdir / f).read_text() for f in ("design.md", "plan.md") if (sdir / f).is_file())
+    return None if named else f"neither design.md nor plan.md names {spec_ux.UX_FILE}"
 
 
 def unchanged(repo: str, keep: dict, clone: Path) -> str | None:
@@ -142,10 +184,13 @@ def environments_kept(keep: dict, clone: Path) -> str | None:
     return None
 
 
-def result(workflow: str, repo: str, keep: dict, clone: Path | None = None) -> str | None:
+def result(workflow: str, repo: str, keep: dict, clone: Path | None = None, task: dict | None = None) -> str | None:
     """Why the run did not deliver, or None when it did: quick-task and build end at a new open PR, ship at a new merged one,
-    explore-stop with the clone and the repo as they were, spec-environments with a spec that limits no environment."""
+    explore-stop with the clone and the repo as they were, spec-environments with a spec that limits no environment,
+    ux-plan with a plan that designed the screens."""
     state = EXPECTED[workflow]
+    if state == "ux":
+        return ux_planned(task or {}, clone)
     if state == "unchanged":
         return unchanged(repo, keep, clone)
     if state == "spec":
@@ -448,13 +493,16 @@ def main(argv: list[str]) -> int:
         import runs_bench_system
         return runs_bench_system.main(argv[1:])
     ap = argparse.ArgumentParser(prog="cplat platform runs benchmark", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("workflow", choices=["quick-task", "build", "ship", "fix-rounds", "explore-stop", "spec-environments"])
+    ap.add_argument("workflow", choices=["quick-task", "build", "ship", "fix-rounds", "explore-stop", "spec-environments", "ux-plan"])
     ap.add_argument("--reset-first", action="store_true", help="put the sample repo back to the pinned revision before starting")
     ap.add_argument("--model", help="coordinator model for the run (sonnet, opus, haiku); else the settings files, else sonnet")
     ap.add_argument("--plugins", metavar="DIR", help="run with the plugins in DIR (this worktree's plugins/) instead of the installed ones")
     ap.add_argument("--compare-validation", action="store_true",
                     help="run the task twice, change-aware validation on and then off (CPLAT_VALIDATION=full), and compare (spec 103)")
     ap.add_argument("--arm", metavar="NAME", help="apply benchmark/arms/NAME.json to the sample repo before the session (spec 107)")
+    ap.add_argument("--dir", default=os.environ.get("CPLAT_BENCH_SYSTEM_DIR"),
+                    help="ux-plan: the system-ship folder that holds the trusted bench-files-web clone "
+                         "(default $CPLAT_BENCH_SYSTEM_DIR, else <state dir>/benchmark/system-ship)")
     ap.add_argument("--recall", action="store_true",
                     help="after the session run the full suite in the clone; a failing test fails the record (spec 107)")
     ns = ap.parse_args(argv)
@@ -464,8 +512,8 @@ def main(argv: list[str]) -> int:
     arm = load_arm(ns.arm, ns.workflow) if ns.arm else None
     seed = load_seed(ns.workflow) if ns.workflow == "fix-rounds" else None
     tasks = json.loads((BENCH_DIR / "tasks.json").read_text())
-    repo, rev = tasks["sample"]["repo"], tasks["sample"]["rev"]
     task = tasks["workflows"][ns.workflow]
+    repo, rev = sample_of(tasks, task)
     url = f"https://github.com/{repo}"
     try:
         main_now = _remote_main(url)
@@ -474,7 +522,10 @@ def main(argv: list[str]) -> int:
     if main_now != rev and not ns.reset_first:
         raise PlatformError(f"sample repo {repo}: main is at {main_now[:7] or 'nothing'}, not the pinned {rev[:7]}",
                             hint=f"cplat platform runs benchmark {ns.workflow} --reset-first")
-    clone = runs.state_dir() / "benchmark" / ns.workflow
+    clone = clone_of(ns.workflow, task, ns.dir)
+    if task.get("sample_component") and not (clone / ".git").exists():
+        raise PlatformError(f"the {ns.workflow} benchmark reuses system-ship's clone {clone}, which does not exist",
+                            hint="set up the system-ship sample (scripts/cplat/benchmark/README.md) or pass --dir <its folder>")
     try:
         _prepare(url, rev, task, clone, spec=arm is None)
         if arm:
@@ -522,7 +573,7 @@ def main(argv: list[str]) -> int:
                                      "--max-minutes", str(task["max_minutes"]), *model_flags, *plugin_flags, prompt], rid, platform)
                 if out != "done":
                     return out, f"step {name} did not finish"
-            missing = result(ns.workflow, repo, keep, clone)
+            missing = result(ns.workflow, repo, keep, clone, task)
             if missing:
                 return "failed", missing
             if ns.recall and out == "done":   # spec 107: the full suite after the session, in every pass
