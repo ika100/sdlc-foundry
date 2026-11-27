@@ -19,16 +19,24 @@ def seam(tmp_path):
     return Seam(tmp_path)
 
 
+@pytest.fixture(scope="module")
+def shipped(tmp_path_factory):
+    """One plain ship, run once and read by every test that asserts on the unchanged run (#1115): four of them each ran it again."""
+    world = Seam(tmp_path_factory.mktemp("seam178"))
+    began = time.monotonic()
+    world.res = world.headless()
+    world.took = time.monotonic() - began
+    return world
+
+
 def result_line(res) -> str:
     return next((ln for ln in res.stdout.splitlines() if ln.startswith("HEADLESS ")), "")
 
 
 # ---------------- AC-178.7: from preflight to land ----------------
 
-def test_a_ship_runs_from_preflight_to_land_and_the_units_commits_are_on_main(seam):  # AC-178.7
-    began = time.monotonic()
-    res = seam.headless()
-    took = time.monotonic() - began
+def test_a_ship_runs_from_preflight_to_land_and_the_units_commits_are_on_main(shipped):  # AC-178.7
+    seam, res, took = shipped, shipped.res, shipped.took
     assert res.returncode == 0, res.stdout + res.stderr
     assert result_line(res).startswith(f"HEADLESS shop-api: shipped {SPEC_ID}"), res.stdout
     [record] = [r for r in seam.records() if r.get("kind") == "headless"]
@@ -41,8 +49,8 @@ def test_a_ship_runs_from_preflight_to_land_and_the_units_commits_are_on_main(se
     assert took <= 120, f"the seam test took {took:.0f}s"
 
 
-def test_every_session_calls_the_configured_hooks_and_none_is_blocked(seam):  # AC-178.7
-    res = seam.headless()
+def test_every_session_calls_the_configured_hooks_and_none_is_blocked(shipped):  # AC-178.7
+    seam, res = shipped, shipped.res
     assert res.returncode == 0, res.stdout + res.stderr
     hooks = seam.lines("hooks.jsonl")
     for unit in UNITS:
@@ -52,8 +60,8 @@ def test_every_session_calls_the_configured_hooks_and_none_is_blocked(seam):  # 
     assert seam.lines("blocked.jsonl") == []
 
 
-def test_the_unit_runs_its_real_commands_and_the_pr_is_landed_through_the_land_command(seam):  # AC-178.7
-    res = seam.headless()
+def test_the_unit_runs_its_real_commands_and_the_pr_is_landed_through_the_land_command(shipped):  # AC-178.7
+    seam, res = shipped, shipped.res
     assert res.returncode == 0, res.stdout + res.stderr
     ran = [c["argv"][:3] for c in seam.lines("commands.jsonl")]
     for expected in (["component", "ship", "start"], ["spec", "task-done", SPEC_ID], ["spec", "trace", SPEC_ID], ["component", "ship", "pr"],
@@ -65,8 +73,8 @@ def test_the_unit_runs_its_real_commands_and_the_pr_is_landed_through_the_land_c
 
 # ---------------- AC-178.8: each seam, broken, fails a variant ----------------
 
-def test_a_cplat_variable_of_the_outer_run_does_not_reach_the_test_command(seam):  # AC-178.8
-    res = seam.headless()
+def test_a_cplat_variable_of_the_outer_run_does_not_reach_the_test_command(shipped):  # AC-178.8
+    seam, res = shipped, shipped.res
     assert res.returncode == 0, res.stdout + res.stderr
     runs = seam.devbox_runs()
     scripts = {next(a for i, a in enumerate(r["args"][1:], 1) if a not in ("-e", "--env") and r["args"][i - 1] not in ("-e", "--env"))
