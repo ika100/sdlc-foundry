@@ -36,6 +36,8 @@ jobs:
         with:
           enable-cache: true
       - run: devbox run install
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.PACKAGES_READ_TOKEN }}
       - run: devbox run quality
 
   test:
@@ -48,6 +50,8 @@ jobs:
         with:
           enable-cache: true
       - run: devbox run install
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.PACKAGES_READ_TOKEN }}
       - run: devbox run test
 
   security:
@@ -60,6 +64,8 @@ jobs:
         with:
           enable-cache: true
       - run: devbox run install
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.PACKAGES_READ_TOKEN }}
       - run: devbox run security
 
   ci-extra:
@@ -82,6 +88,8 @@ jobs:
           enable-cache: true
       - run: devbox run install
         if: steps.recipe.outputs.defined == 'true'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.PACKAGES_READ_TOKEN }}
       - run: devbox run ci-extra
         if: steps.recipe.outputs.defined == 'true'
 
@@ -152,10 +160,14 @@ jobs:
         id: build-try
         continue-on-error: ${{ env.PUBLISH == 'true' }}
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        env:
+          PACKAGES_READ_TOKEN: ${{ secrets.PACKAGES_READ_TOKEN }}
         with:
           context: .
           platforms: linux/${{ matrix.arch }}
           outputs: type=image,name=ghcr.io/${{ github.repository }},push-by-digest=true,name-canonical=true,push=${{ env.PUBLISH }}
+          # a build secret (never `secrets:`, which rejects an empty value): private packages install, no token in the image (spec 104)
+          secret-envs: PACKAGES_READ_TOKEN=PACKAGES_READ_TOKEN
           # the GitHub Actions cache only on GitHub-hosted runners: on self-hosted ones exporting every layer over the
           # site's uplink costs more than it saves (docs/self-hosted-runners.md)
           cache-from: ${{ runner.environment == 'github-hosted' && format('type=gha,scope={0}', matrix.arch) || '' }}
@@ -169,10 +181,13 @@ jobs:
         id: build-retry
         if: steps.build-try.outcome == 'failure'
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        env:
+          PACKAGES_READ_TOKEN: ${{ secrets.PACKAGES_READ_TOKEN }}
         with:
           context: .
           platforms: linux/${{ matrix.arch }}
           outputs: type=image,name=ghcr.io/${{ github.repository }},push-by-digest=true,name-canonical=true,push=${{ env.PUBLISH }}
+          secret-envs: PACKAGES_READ_TOKEN=PACKAGES_READ_TOKEN
           # the GitHub Actions cache only on GitHub-hosted runners: on self-hosted ones exporting every layer over the
           # site's uplink costs more than it saves (docs/self-hosted-runners.md)
           cache-from: ${{ runner.environment == 'github-hosted' && format('type=gha,scope={0}', matrix.arch) || '' }}

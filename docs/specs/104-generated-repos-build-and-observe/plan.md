@@ -10,6 +10,7 @@ tasks:
     covers: [AC-104.2, AC-104.3, AC-104.11]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: service-typescript - secret-mounted strict install, .npmrc in the deps stage, CI and image-build pass the token
     files: [templates/service-typescript/Dockerfile.jinja, templates/service-typescript/.github/workflows/ci.yml, templates/service-typescript/devbox.json.jinja, templates/service-typescript/CLAUDE.md.jinja]
