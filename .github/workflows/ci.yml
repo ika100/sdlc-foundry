@@ -676,6 +676,8 @@ jobs:
           grep -Fx "test-fast: checked nothing: 0 tests ran - add at least one test" /tmp/neg.err
       - name: image builds and starts (non-root, read-only root filesystem)
         working-directory: /tmp/test-ts
+        env:
+          IMAGE_BUDGET_BYTES: 250000000   # #968: the distroless Node runtime plus the production node_modules; tighten to the measured size + 10 %
         run: |
           docker build -t smoke:ts .
           db_env=""
@@ -687,6 +689,14 @@ jobs:
           fi
           # the image contract: no shell, numeric non-root user, read-only root, the pinned Node major
           if docker run --rm --entrypoint sh smoke:ts -c true 2>/dev/null; then echo "the image has a shell"; exit 1; fi
+          # #968: the unpacked filesystem stays within the budget: a bundle of every auto-instrumentation or a fatter base exceeds it
+          docker create --name size smoke:ts >/dev/null
+          bytes=$(docker export size | wc -c)
+          docker rm size >/dev/null
+          echo "image filesystem: $bytes bytes (budget $IMAGE_BUDGET_BYTES)"
+          if [ "$bytes" -gt "$IMAGE_BUDGET_BYTES" ]; then
+            echo "the image filesystem is $bytes bytes, over the budget of $IMAGE_BUDGET_BYTES"; exit 1
+          fi
           # shellcheck disable=SC2086
           docker run -d --name smoke --read-only -p 8080:8080 $db_env smoke:ts
           for probe in health ready; do
