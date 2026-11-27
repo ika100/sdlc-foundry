@@ -59,7 +59,7 @@ def test_the_confirmation_line_names_the_priority_and_its_reason_ac_196_1(world)
 
 
 @pytest.mark.parametrize("cls,extra", [("question", {"comment": "see docs"}), ("duplicate", {"comment": "same", "duplicate_of": 2}),
-                                       ("wontfix", {"comment": "no"}), ("needs-exploring", {}), ("needs-info", {"comment": "which?"})])
+                                       ("wontfix", {"comment": "no"}), ("needs-exploring", {}), ("needs-info", {"comment": "Thanks for the report. Which version?", "missing": ["version"]})])
 def test_the_other_classes_show_no_priority_ac_196_1(world, cls, extra):  # AC-196.1
     world.issue(1)
     world.issue(2)
@@ -223,11 +223,11 @@ def test_an_unattended_act_with_a_priority_change_refuses_before_any_write_ac_19
 
 def test_an_unattended_act_without_a_priority_change_still_works_ac_196_4(world, monkeypatch):  # AC-196.4
     monkeypatch.setenv("CPLAT_HEADLESS", "1")
-    world.issue(1)
+    world.issue(1, labels=("triage", "p1"))
     world.batch()
-    assert world.run("act", "--proposals", world.proposals([row(1, **{"class": "question", **no_priority(comment="see docs")})]),
+    assert world.run("act", "--proposals", world.proposals([row(1, **{"class": "bug", "comment": "see docs"})]),
                      "--rows", "all").rc == 0
-    assert world.edits()[1][0] == {"question"}
+    assert "bug" in world.edits()[1][0] and not (world.edits()[1][0] & PRIORITY_LABELS)
 
 
 # ---------------- AC-196.5: exactly one priority label afterwards ----------------

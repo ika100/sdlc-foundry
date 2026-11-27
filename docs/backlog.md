@@ -233,6 +233,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [153-fewer-waits-after-a-merge](specs/153-fewer-waits-after-a-merge/spec.md) — Fewer waits after a merge | P2 | done | 2 |  |
 | [170-release-wait-names-a-commit-of-another-repo](specs/170-release-wait-names-a-commit-of-another-repo/spec.md) — Release wait names a commit of another repo | P2 | done | 2 | #614 |
 | [173-the-guides-read-without-spec-numbers](specs/173-the-guides-read-without-spec-numbers/spec.md) — The guides read without spec numbers | P2 | done | 3 |  |
+| [177-triage-asks-reporters-plainly-and-closes](specs/177-triage-asks-reporters-plainly-and-closes/spec.md) — Triage asks reporters plainly and closes what needs no work | P2 | done | 4 |  |
 | [209-inline-scripts-add-no-uv-environment-per](specs/209-inline-scripts-add-no-uv-environment-per/spec.md) — Inline scripts add no uv environment per worktree | P2 | done | 7 |  |
 <!-- spec-index:end -->
 

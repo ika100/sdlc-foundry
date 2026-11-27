@@ -68,7 +68,8 @@ def wait(repo: Path, pr: str, merge: bool, timeout: float, interval: float, queu
     rid = runs.attach_point(repo)
     own = None if rid else runs.start("pr-wait", repo=slug or runs.repo_slug(repo))
     try:
-        ok, lines, section = _wait(repo, pr, merge, timeout, interval, queue_timeout, rid or own, mode)
+        with core.network_patience(timeout):    # #1077: a lost network is waited out up to the wait's own timeout
+            ok, lines, section = _wait(repo, pr, merge, timeout, interval, queue_timeout, rid or own, mode)
     except BaseException as e:
         if own:
             runs.finish(own, "failed", fields={"pr_wait": _failure_section(e)})

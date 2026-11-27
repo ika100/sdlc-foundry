@@ -31,6 +31,8 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import yaml
+
 import core
 import dispatch_state
 import e2e_gate
@@ -378,6 +380,41 @@ def await_change(watch: ship.CheckWatch, old: str, timeout: float, interval: flo
         ship.sleep(interval)
 
 
+class PromptsOver(PlatformError):
+    """The base and the branch each fit the prompt byte baseline, the two together do not (#1076)."""
+
+    def __init__(self, url: str, base: str, total: int, baseline: int):
+        super().__init__(f"{url} merged with {base} would make the prompts {total} bytes, {total - baseline} more than the "
+                         f"baseline {baseline}; the update is not made",
+                         hint=f"shorten the prompts on the branch by {total - baseline} bytes or more (or rebaseline them), push, "
+                              "then run the land again")
+
+
+def _merged_prompt_bytes(repo: Path, base: str, head: str) -> tuple[int, int] | None:
+    """(prompt bytes, baseline) of the tree the update would make, from `git merge-tree` without touching the checkout;
+    None when it cannot be told (no remote, a conflict, an old git): the update then goes on as before."""
+    import promptrules
+    try:
+        if run(["git", "fetch", "-q", "origin", base, head], cwd=repo, check=False).returncode != 0:
+            return None
+        res = run(["git", "merge-tree", "--write-tree", f"origin/{base}", head], cwd=repo, check=False)
+        if res.returncode != 0:
+            return None
+        tree = (res.stdout or "").split()[0]
+        files = run(["git", "ls-tree", "-r", "-l", tree, "--", "plugins"], cwd=repo, check=False).stdout or ""
+        total = 0
+        for line in files.splitlines():
+            meta, _, path = line.partition("\t")
+            if promptrules.PROMPT.match(path):
+                total += int(meta.split()[3])
+        reg = run(["git", "show", f"{tree}:{promptrules.REGISTER}"], cwd=repo, check=False)
+        data = yaml.safe_load(reg.stdout or "") if reg.returncode == 0 else None
+        limit = ((data or {}).get("baseline") or {}).get("prompt_bytes") if isinstance(data, dict) else None
+    except Exception:  # noqa: BLE001
+        return None
+    return (total, int(limit)) if isinstance(limit, int) and total else None
+
+
 def _verdict(r: e2e_gate.Range, e2e_head: str, new: str) -> tuple[bool, str, str]:
     """(kept, "out" | "in" | "unknown", the line to print) for the base commits since the head whose e2e ran."""
     scope = r.scope
@@ -420,6 +457,9 @@ def catch_up(repo: Path, url: str, watch: ship.CheckWatch, timeout: float, inter
     while True:
         if not allow:
             raise Behind(base, behind)
+        merged = _merged_prompt_bytes(repo, base, head)
+        if merged and merged[0] > merged[1]:
+            raise PromptsOver(url, base, *merged)
         scope = e2e_gate.range_scope(repo, url, base, e2e_head) if e2e_head else None
         watch.expect_from_current()
         res = run(["gh", "pr", "update-branch", url], cwd=repo, check=False)

@@ -9,6 +9,7 @@ import re
 
 import pytest
 
+from waiting import with_prelude
 from dispatch_world import world  # noqa: F401  (fixture)
 from support_210 import M, read_json, run_status_line, sensor_env, status_input, usage_dir
 
@@ -162,3 +163,18 @@ def test_plan_shows_the_reading_the_sensor_recorded_ac_210_5(world, cfg):  # AC-
     assert doc["source"] == "reading"
     assert doc["five_hour"]["used"] == 33 and doc["seven_day"]["used"] == 12
     assert re.search(r"plan usage: 5h 33 % .*week 12 % .*reading 4 min old", world.run("plan").out), world.run("plan").out
+
+
+def test_install_skips_uv_cache_pythons_and_refuses_a_command_that_does_not_run(world, cfg, monkeypatch, tmp_path):  # issue #1095
+    import dispatch_sensor as dsn
+    tmp = tmp_path / "uv" / "builds-v0" / ".tmpX" / "bin"
+    tmp.mkdir(parents=True)
+    (tmp / "python3").write_text(with_prelude("#!/bin/sh\nexit 1\n"))
+    (tmp / "python3").chmod(0o755)
+    monkeypatch.setenv("PATH", f"{tmp}:{__import__('os').environ['PATH']}")
+    assert "builds-v0" not in dsn._stable_python()
+    _install(world)
+    assert "builds-v0" not in _command(cfg)
+    monkeypatch.setattr(dsn, "_stable_python", lambda: "/nonexistent/python3")
+    r = world.run("sensor", "install")
+    assert r.rc != 0, r
