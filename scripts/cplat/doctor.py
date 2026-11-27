@@ -966,10 +966,11 @@ def check_retro_schedule() -> list[dict]:
 
 
 def run_checks(repo: Path, contexts: dict[str, str] | None = None) -> list[dict]:
+    import doctor_packages
     import gates
     import notify_config
     return [*check_tools(), *check_gh(), *check_docker(), *check_kube(), *check_kube_envs(repo), *check_plugins(), *check_platform_source(), *check_session(Path.cwd()), *check_migration(repo), *(check_repo(repo, contexts) if contexts else check_repo(repo)),
-            *gates.check_gates(repo), *check_gitops_token(repo),
+            *gates.check_gates(repo), *check_gitops_token(repo), *doctor_packages.check_packages_token(repo),
             *check_service_repos_token(repo), *check_alerts_token(repo), check_run_store(), *check_retro_schedule(), *notify_config.doctor_checks()]
 
 

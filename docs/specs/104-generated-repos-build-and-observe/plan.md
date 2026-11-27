@@ -24,6 +24,7 @@ tasks:
     covers: [AC-104.12]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t4
     title: Platform smoke jobs - service-typescript stale-lock step and the marker-secret build of both TypeScript images
     files: [.github/workflows/ci.yml]
