@@ -10,6 +10,7 @@ tasks:
     covers: [AC-223.1, AC-223.2, AC-223.3]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: "CI fragment check: release-check.py fragments --base REF in the release-check job"
     files: [scripts/release-check.py, .github/workflows/ci.yml]
@@ -22,6 +23,7 @@ tasks:
     covers: [AC-223.4, AC-223.5]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t4
     title: "cplat platform change-quality: attribution, blast radius, change-failure rate, text and JSON"
     files: [scripts/cplat/changequality.py, scripts/cplat/cplat.py]
@@ -34,6 +36,7 @@ tasks:
     covers: [AC-223.7, AC-223.8, AC-223.9]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t6
     title: "Contributor docs for the cause line and the changelog fragment of spec 223"
     files: [CONTRIBUTING.md, .github/PULL_REQUEST_TEMPLATE.md, docs/changelog.d/223-change-quality-fix-causes-and-attempts.added.md]
