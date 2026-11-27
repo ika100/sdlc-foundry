@@ -644,7 +644,7 @@ def _main(argv: list[str], stack: contextlib.ExitStack) -> int:
             elif reason == "escalated":
                 cause = state.get("cause") or escalation_rules.resolve(None, state["result"]).cause
             write_dispatch_result({**dispatch_record, "ended_at": clock().isoformat(timespec="seconds"), "result": state["result"],
-                                   "stop_reason": reason, "outcome": outcome, "cause": cause, "code": state["code"], "tokens": tokens, "cost_usd": cost})
+                                   "stop_reason": reason, "outcome": outcome, "cause": cause, "message": state.get("message"), "code": state["code"], "tokens": tokens, "cost_usd": cost})
 
 
 def stop_of(result: str, code: int) -> tuple[str, str]:
@@ -761,6 +761,8 @@ def _drive(ns: argparse.Namespace, repo: Path, prompt: str, window, cmd: list[st
         pauser.resumed()
         if st is None:
             result = ended
+            if result == "finished" and message:        # #1107: the dispatcher reports the session's own reason, not "finished"
+                state["message"] = stopgate.excerpt(message)
             break
         key = progress_key(repo, st)
         if waited:                                      # spec 202: waiting is not standing still

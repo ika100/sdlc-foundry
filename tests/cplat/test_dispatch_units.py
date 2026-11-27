@@ -156,6 +156,24 @@ def test_a_finished_fix_without_a_pull_request_escalates_as_a_decision(env):
     assert ds.read_unit(res.unit["worktree"])["cause"] == "decision"
 
 
+def test_a_red_reason_names_the_first_red_check_and_its_summary_line():       # #1107
+    lines = ["RED: 2 of 5 check(s) failed on #7: ci-success, unit", "== check: ci-success | format: unknown | exit: 1 | log: none",
+             "every needed job passed or was skipped", '"result": "success",',
+             "== check: unit | format: pytest | exit: 1 | log: /tmp/x.log | entries: 1", "- tests/test_a.py::test_b | failed | assert 1 == 2"]
+    assert du.red_reason(lines) == "check unit is red: tests/test_a.py::test_b | failed | assert 1 == 2"
+    assert du.red_reason(["RED: summaries off"]) is None
+
+
+def test_a_finished_fix_without_a_pull_request_reports_the_sessions_own_message(env):
+    res = begin(env, mode="now", then="done", pr=False)
+    env.wait_ended("issue-1.1")
+    wt = res.unit["worktree"]
+    ds.write_json(ds.result_path(wt), {**ds.read_result(wt), "result": "finished",
+                                       "message": "the fix changes criteria of spec 205; amend it first"})
+    step = du.advance(env.repo, SLUG, ds.read_unit(wt), policy(env))
+    assert step.lines[0].endswith("without a pull request: the fix changes criteria of spec 205; amend it first")
+
+
 def test_adopt_finds_live_units_from_their_files_and_pause_flags_them(env):
     env.behave(mode="wait", honor_stop=True)
     res = begin(env)

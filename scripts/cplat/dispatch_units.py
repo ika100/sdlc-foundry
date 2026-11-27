@@ -519,6 +519,7 @@ def _classify(repo: Path, unit: dict) -> Obs:
         res = None
     ended = res if res and res.get("ended_at") else None
     text = str((ended or {}).get("result") or "")
+    said = _one_line((ended or {}).get("message")) or None     # #1107: the session's own last message, when the run only "finished"
     outcome, stop = (ended or {}).get("outcome"), (ended or {}).get("stop_reason")
     if unit["kind"] == "task":
         if outcome == "done":
@@ -534,7 +535,7 @@ def _classify(repo: Path, unit: dict) -> Obs:
         if pr and pr["state"] == "OPEN":
             return Obs("done", pr=pr["url"])
         if ended:
-            return Obs("escalate", cause="decision", reason=f"the draft run ended without a pull request: {_one_line(text) or 'no message'}")
+            return Obs("escalate", cause="decision", reason=f"the draft run ended without a pull request: {said or _one_line(text) or 'no message'}")
         return Obs("restart")
     if unit["kind"] == "ship":
         st = _ship_state(wt) or {}
@@ -554,7 +555,7 @@ def _classify(repo: Path, unit: dict) -> Obs:
             return Obs("done", pr=pr["url"])
         if pr and pr["state"] == "OPEN":
             return Obs("paused") if ds.stop_path(wt).exists() else Obs("land", pr=pr["url"])
-        return Obs("escalate", cause="decision", reason=f"the fix run ended without a pull request: {_one_line(text) or 'no message'}")
+        return Obs("escalate", cause="decision", reason=f"the fix run ended without a pull request: {said or _one_line(text) or 'no message'}")
     return Obs("restart")
 
 
@@ -597,6 +598,19 @@ def _start_land(repo: Path, unit: dict, pr: str | None) -> list[str]:
     return [f"landing {unit['unit']}: {pr}"]
 
 
+def red_reason(lines: list[str]) -> str | None:
+    """#1107: the first red check's name and the first line of its failure summary (a gate such as `ci-success` only after the others)."""
+    heads = [i for i, ln in enumerate(lines) if ln.startswith("== check: ")]
+    if not heads:
+        return None
+    pick = next((i for i in heads if not lines[i].split("== check: ", 1)[1].startswith("ci-success")), heads[0])
+    name = lines[pick].split("== check: ", 1)[1].split(" | ", 1)[0].strip()
+    nxt = next((j for j in heads if j > pick), len(lines))
+    first = next((ln.strip() for ln in lines[pick + 1:nxt] if ln.strip()), "")
+    first = first[2:] if first.startswith("- ") else first
+    return _one_line(f"check {name} is red: {first}" if first else f"check {name} is red")
+
+
 def land(repo: Path, slug: str, unit_id: str) -> int:
     """`cplat dispatch land <unit>`: wait for the checks of the unit's pull request and merge it (under the merge lock). The unit file
     gets `landed` (`merged`, `red`, `closed`, `merge-failed`) and the summary. Exit 0 when merged."""
@@ -615,8 +629,9 @@ def land(repo: Path, slug: str, unit_id: str) -> int:
         landed, lines = "merge-failed", [str(e)]
     except PlatformError as e:                  # checks that never came or never ended
         landed, lines = "merge-failed", [str(e)]
-    summary = "\n".join(lines)[-2000:]
-    print(summary, flush=True)
+    full = "\n".join(lines)[-2000:]
+    summary = (red_reason(lines) if landed == "red" else None) or full
+    print(full, flush=True)
     update_unit(wt, lambda u: u.update(landed=landed, landed_summary=summary))
     return 0 if landed == "merged" else 1
 
