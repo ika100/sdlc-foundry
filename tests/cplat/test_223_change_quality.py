@@ -32,6 +32,9 @@ Caused by: #850
 **Fix upstream.** A tool of the cloud broke (#862).
 Caused by: none
 
+**Fix o.** Nobody found the cause (#863).
+Caused by: unknown
+
 ## [5.30.1] - 2026-11-25
 
 ### Fixed
@@ -122,7 +125,7 @@ def test_one_row_per_release_with_the_fixes_it_caused_ac_223_4(world, capsys):  
 def test_same_release_fix_is_caught_before_release_and_the_rest_is_counted_apart_ac_223_4(world, capsys):  # AC-223.4
     lines = report(world, capsys).splitlines()
     assert "caught before release: 1" in lines
-    assert "unattributed: 1" in lines                                         # the entry without a cause line; 5.29.0 is outside
+    assert "unattributed: 2" in lines             # no cause line and `unknown`; the entry of 5.29.0 is outside the window
     assert "none (not from a platform change): 1" in lines
     assert any(ln.strip().startswith("5.31.0:") and "Fix upstream" in ln for ln in lines)   # a `none` entry follows its count
 
@@ -165,6 +168,16 @@ def test_the_json_blast_radius_ac_223_5(world, capsys):  # AC-223.5
     assert row["carried_by"] == ["5.30.1"] and row["stopped_journeys"] == [14] and row["affected_repos"] == ["o/a"]
 
 
+def test_an_unreleased_fragment_id_names_a_stopped_journey_without_a_link_ac_223_5(world, capsys):  # AC-223.5
+    (world / "docs/changelog.d/812-x.fixed.md").write_text("**Fix x.** A fix with no number in its text.\nCaused by: #701\n")
+    with (world / "docs/PERFORMANCE.md").open("a") as f:
+        f.write("| 16 | 2026-11-16 | main | `t16-*` | unattended; **stopped in part 1**: see issue #812 | none |\n")
+    data = json.loads(report(world, capsys, "--json"))
+    row = next(r for r in data["releases"] if r["version"] == "5.30.0")
+    assert len(row["caused"]) == 3 and {"5.30.1", "Unreleased"} == {c["carrier"] for c in row["caused"]}
+    assert row["stopped_journeys"] == [14, 16] and row["carried_by"] == ["5.30.1", "Unreleased"]
+
+
 def test_an_unreadable_fleet_is_unknown_never_zero_ac_223_5(world, fake_gh, capsys):  # AC-223.5
     fake_gh.set(login_fails=True)
     out = report(world, capsys)
@@ -200,7 +213,8 @@ def test_json_is_one_document_with_the_contract_keys_ac_223_6(world, capsys):  #
     caused = data["releases"][0]["caused"]
     assert sorted(c["cause"] for c in caused) == ["#700", "#701"] and {c["carrier"] for c in caused} == {"5.30.1"}
     assert [c["carrier"] for c in data["caught_before_release"]] == ["5.31.0"] and data["caught_before_release"][0]["cause"] == "#850"
-    assert len(data["unattributed"]) == 1 and data["unattributed"][0]["carrier"] == "5.31.0"
+    assert len(data["unattributed"]) == 2 and {u["carrier"] for u in data["unattributed"]} == {"5.31.0"}
+    assert sorted(str(u["cause"]) for u in data["unattributed"]) == ["None", "unknown"]
     assert len(data["none"]) == 1 and "Fix upstream" in data["none"][0]["entry"]
     assert data["change_failure_rate"] == {"failed": 1, "releases": 3, "pct": 33}
     assert data["change_failure_rate_minor"] == {"failed": 1, "releases": 2, "pct": 50}

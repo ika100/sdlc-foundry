@@ -168,6 +168,7 @@ def test_ci_fragment_check_passes_a_valid_cause_without_network_ac_223_1(repo, f
     fixed(repo, "Caused by: #812")
     run = ci_check(repo)
     assert run.returncode == 0 and "OK: 1 added fixed fragment(s) name a cause" in run.stdout, run.stdout + run.stderr
+    assert fake_gh.calls() == []
 
 
 def ci_check(repo):
