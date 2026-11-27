@@ -17,6 +17,7 @@ tasks:
     covers: [AC-104.2, AC-104.3, AC-104.11]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t3
     title: doctor row for a missing PACKAGES_READ_TOKEN when .npmrc or pyproject.toml reads private packages
     files: [scripts/cplat/doctor_packages.py, scripts/cplat/doctor.py]

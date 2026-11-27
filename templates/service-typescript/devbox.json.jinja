@@ -34,7 +34,7 @@
       "deps-findings": "bash scripts/deps.sh findings \"$@\"",
       "deps-bump":    "bash scripts/deps.sh bump \"$@\"",
       "ci":           "devbox run install && devbox run quality && devbox run test && devbox run security && if grep -qs '\"ci-extra\"[[:space:]]*:' devbox.json; then devbox run ci-extra; fi",
-      "image-build":  "docker build -t {{ project_name }}:scan .",
+      "image-build":  "docker build --secret id=PACKAGES_READ_TOKEN,env=NODE_AUTH_TOKEN -t {{ project_name }}:scan .",
       "image-scan":   "trivy image --severity CRITICAL,HIGH --format table {{ project_name }}:scan"
     }
   }
