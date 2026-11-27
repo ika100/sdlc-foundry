@@ -31,6 +31,7 @@ tasks:
     covers: [AC-104.1, AC-104.2, AC-104.4, AC-104.5, AC-104.6, AC-104.7, AC-104.8, AC-104.9, AC-104.10, AC-104.11]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t5
     title: ADR-125 point 5, the library-typescript consumer note and the changelog fragment
     files: [docs/adr/125-library-releases-publish-to-github-on-the-tag.md, templates/library-typescript/CLAUDE.md.jinja, docs/changelog.d/104-private-packages-in-image-builds.added.md]

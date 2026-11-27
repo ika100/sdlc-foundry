@@ -539,6 +539,18 @@ jobs:
           npm install -g pnpm@11.22.0 >/dev/null
           SMOKE_BASE_URL=http://localhost:3000 bash scripts/smoke.sh | tee /tmp/smoke.out
           grep -qx "smoke: 1 passed, 0 failed, 0 skipped" /tmp/smoke.out
+      # Spec 104 / AC-104.11: a token passed as the build secret ends up nowhere in the image (cached rebuild, seconds)
+      - name: Build secret leaves no trace in the image
+        working-directory: /tmp/test-web
+        run: |
+          MARKER="spec104-$(openssl rand -hex 12)"
+          export MARKER
+          docker build --secret id=PACKAGES_READ_TOKEN,env=MARKER -t smoke:web-secret .
+          docker history --no-trunc smoke:web-secret | { ! grep -F "$MARKER"; } || { echo "the token is in the image history"; exit 1; }
+          docker image inspect smoke:web-secret | { ! grep -F "$MARKER"; } || { echo "the token is in the image config"; exit 1; }
+          docker create --name secret-check smoke:web-secret >/dev/null
+          docker export secret-check | { ! grep -aF "$MARKER"; } || { echo "the token is in the image filesystem"; exit 1; }
+          docker rm secret-check >/dev/null
       - name: Variant — observability off
         run: |
           copier copy ./templates/web-nextjs /tmp/test-web2 --defaults --trust --skip-tasks \
@@ -698,6 +710,19 @@ jobs:
           fi
           cat /tmp/neg.err
           grep -Fx "test-fast: checked nothing: 0 tests ran - add at least one test" /tmp/neg.err
+      # Spec 104: the image build installs with --frozen-lockfile, so a package.json the lock does not satisfy must fail.
+      - name: Strict install rejects a stale lock
+        if: ${{ matrix.observability && !matrix.database }}
+        run: |
+          test -f /tmp/test-ts/pnpm-lock.yaml
+          cp -r /tmp/test-ts /tmp/stale-lock
+          cd /tmp/stale-lock
+          rm -rf node_modules
+          sed -i 's/"dependencies": {/"dependencies": {\n    "is-odd": "3.0.1",/' package.json
+          if pnpm install --frozen-lockfile >/tmp/stale.out 2>&1; then
+            echo "pnpm install --frozen-lockfile accepted a stale lock"; exit 1
+          fi
+          grep -q "ERR_PNPM_OUTDATED_LOCKFILE" /tmp/stale.out || { cat /tmp/stale.out; echo "failed for another reason"; exit 1; }
       - name: Log in to Docker Hub (anonymous pulls are rate-limited, #1045)
         if: env.DOCKERHUB_USERNAME != ''   # forks and a repo without the secrets build anonymously
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
@@ -753,6 +778,19 @@ jobs:
           test "$rc" = 2 || { echo "smoke.sh without SMOKE_BASE_URL exited $rc"; exit 1; }
           SMOKE_BASE_URL=http://localhost:8080 bash scripts/smoke.sh | tee /tmp/smoke.out
           grep -qx "smoke: 1 passed, 0 failed, 0 skipped" /tmp/smoke.out
+      # Spec 104 / AC-104.11: a token passed as the build secret ends up nowhere in the image (cached rebuild, seconds)
+      - name: Build secret leaves no trace in the image
+        if: ${{ matrix.observability && !matrix.database }}
+        working-directory: /tmp/test-ts
+        run: |
+          MARKER="spec104-$(openssl rand -hex 12)"
+          export MARKER
+          docker build --secret id=PACKAGES_READ_TOKEN,env=MARKER -t smoke:ts-secret .
+          docker history --no-trunc smoke:ts-secret | { ! grep -F "$MARKER"; } || { echo "the token is in the image history"; exit 1; }
+          docker image inspect smoke:ts-secret | { ! grep -F "$MARKER"; } || { echo "the token is in the image config"; exit 1; }
+          docker create --name secret-check smoke:ts-secret >/dev/null
+          docker export secret-check | { ! grep -aF "$MARKER"; } || { echo "the token is in the image filesystem"; exit 1; }
+          docker rm secret-check >/dev/null
 
   smoke-test-service-dotnet:
     name: smoke-test service-dotnet template (obs=${{ matrix.observability }}, db=${{ matrix.database }})
