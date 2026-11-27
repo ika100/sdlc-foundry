@@ -20,6 +20,12 @@ The entry text exactly as it should appear in the changelog, in the existing sty
 summary ending in `(#NNN).`, then what was wrong and what happens now; `**Action:**` or "Update the plugins (`/plugin marketplace
 update`)" when users must do something. No heading: the section comes from the file name.
 
+A `fixed` fragment ends in one **cause line**, directly under the entry text (no blank line), that names the change that
+introduced the defect: `Caused by: #<PR>` (or `#<PR>, #<PR>`), `Caused by: v<X.Y.Z>`, `Caused by: none` (not from a platform
+change) or `Caused by: unknown`. `cplat platform pr-check` fails a fragment a branch adds without one, checks on GitHub that a
+named PR is merged and a named version is a tag (a `WARNING:` line when GitHub cannot answer), and the release keeps the line
+unchanged in `docs/CHANGELOG.md`. `added` and `changed` fragments need none, and fragments already merged are never checked.
+
 Write relative links from this directory (`../adr/078-….md`, `../specs/132-…/spec.md`) so the link check passes here; the release
 removes one `../` when it moves the text into `docs/CHANGELOG.md`.
 
