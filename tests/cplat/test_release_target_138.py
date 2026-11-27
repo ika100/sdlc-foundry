@@ -75,6 +75,20 @@ def test_the_release_tags_the_commit_staging_runs_ac_138_1(comp):  # AC-138.1
     assert data["staging"] == f"sha-{shas['fix']}" and data["main"] == shas["after"]
 
 
+def test_the_json_carries_the_lines_the_text_form_prints_issue_1030(comp, tmp_path, monkeypatch):
+    import comprelease
+    repo, _, _ = comp
+    code, text = run_target(repo)
+    data = json.loads(run_target(repo, "--json")[1])
+    assert code == 0 and data["lines"] == text.splitlines()
+    solo = tmp_path / "solo"
+    solo.mkdir()
+    git(solo, "init", "-q", "-b", "main")
+    monkeypatch.setattr(comprelease, "shape_of", lambda r: ("service-go", True))
+    code, out = run_target(solo, "--json")
+    assert code == 1 and json.loads(out)["lines"][0].startswith("REFUSED:")
+
+
 def test_the_version_comes_from_the_commits_up_to_the_staging_commit_ac_138_1(comp):  # AC-138.1
     repo, shas, state = comp
     state["pin"] = f"sha-{shas['fix']}"

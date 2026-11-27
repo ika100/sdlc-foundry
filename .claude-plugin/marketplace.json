@@ -140,7 +140,7 @@
     {
       "name": "component",
       "source": "./plugins/component",
-      "version": "1.28.0",
+      "version": "1.28.1",
       "description": "The component commands: /component:new, add, set, remove, spec, plan, build, verify, check, ship, fix and release. Component repos run the spec-driven pipeline (spec, plan, build, verify, ship); gitops-app repos add, change and remove components. Agents come from the svc and language plugins.",
       "category": "agents",
       "tags": [
@@ -192,7 +192,7 @@
     {
       "name": "issue",
       "source": "./plugins/issue",
-      "version": "1.6.1",
+      "version": "1.7.0",
       "description": "The issue noun: /issue:triage routes GitHub issues to specs and fixes; /issue:report files a platform issue.",
       "category": "agents",
       "tags": [

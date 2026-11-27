@@ -1,7 +1,7 @@
 ---
 spec_id: 177-triage-asks-reporters-plainly-and-closes
 title: Triage asks reporters plainly and closes what needs no work
-status: approved
+status: done
 priority: P2
 shape: platform
 ---
@@ -43,6 +43,8 @@ Closing what needs no work.
 - **A1** The hard rule "never close an issue" becomes "never close an issue without the user's confirmation" (other option: keep issues open; affects AC-177.3, AC-177.4).
 - **A2** A silent `needs-info` issue is proposed for closing after 14 days, configurable per repository (other option: 30 days; affects AC-177.4).
 - **A3** The plain-language rules apply to reporters outside the repository only; comments to `owner`, `member` or `collaborator` may use internal terms (other option: plain language for everyone; affects AC-177.2).
+- Decided by the user (2026-11-24, stop of spec-177.3): Fix the AC-177.3 test rows so feature gets a spec and needs-exploring gets no priority/expected? Answer: "User 2026-11-24: yes. Update the six spec 176/196 tests (test_176_view x3, test_176_act x2, test_196_triage_priority x1) to the spec 177 behaviour as plan task t5b before t6: needs-info rows carry `missing`, the question-row confirm line ends with ', close as not planned', comments get the 'Duplicate of #N' prefix and the days footer. Change only those expectations."
+- Decided by the user (2026-11-24, stop of spec-177.3): Change the AC-196.4 unattended test to use a non-closing class such as needs-info, since spec 177 makes question close? Answer: "User 2026-11-24: yes, same rule as question 1. Fix only the test data and expectations to the spec 177 behaviour: in test_177_triage_close::test_the_other_classes_are_never_closed use valid rows (a feature row with its spec, a needs-exploring row without a priority); in test_196_triage_priority::test_an_unattended_act_without_a_priority_change_still_works use a non-question row so it still tests the priority path. Standing rule for this spec: a test that fails only because its data or expectation predates spec 177 may be updated to the spec 177 behaviour without asking; a test whose behaviour the spec does not change stays as it is."
 
 ## Open questions
 
@@ -51,3 +53,7 @@ Closing what needs no work.
 - 2026-11-10 created (split from spec 176, AC-176.11 to AC-176.14)
 - 2026-11-10 approved
 - 2026-11-23 brought up to date with spec 176 (done: `batch`, `confirm`), spec 196 and #649 (every undecided issue is queued); criteria unchanged in substance
+- 2026-11-23 building
+- 2026-11-24 answer to the stop of spec-177.3 approved by the user: "User 2026-11-24: yes. Update the six spec 176/196 tests (test_176_view x3, test_176_act x2, test_196_triage_priority x1) to the spec 177 behaviour as plan task t5b before t6: needs-info rows carry `missing`, the question-row confirm line ends with ', close as not planned', comments get the 'Duplicate of #N' prefix and the days footer. Change only those expectations."
+- 2026-11-24 answer to the stop of spec-177.3 approved by the user: "User 2026-11-24: yes, same rule as question 1. Fix only the test data and expectations to the spec 177 behaviour: in test_177_triage_close::test_the_other_classes_are_never_closed use valid rows (a feature row with its spec, a needs-exploring row without a priority); in test_196_triage_priority::test_an_unattended_act_without_a_priority_change_still_works use a non-question row so it still tests the priority path. Standing rule for this spec: a test that fails only because its data or expectation predates spec 177 may be updated to the spec 177 behaviour without asking; a test whose behaviour the spec does not change stays as it is."
+- 2026-11-24 done
