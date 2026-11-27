@@ -4,6 +4,7 @@
 The build loop is never really spawned here: a test that calls `build` holds the loop lock itself, so the verb adopts the loop."""
 import contextlib
 import re
+from pathlib import Path
 
 import pytest
 
@@ -248,3 +249,36 @@ def test_resume_of_an_item_lifts_its_needs_decision_label(world):  # AC-193.5  (
     r = world.run("resume", "issue-1")
     assert r.rc == 0 and "label removed: #1" in r.lines, r
     assert "needs-decision" not in world.labels_of(1)
+
+
+ESCALATION = "<!-- cplat-dispatch-escalation -->\nthe run needs a decision"
+
+
+def _spec_unit(world, tracks):
+    import dispatch_state as ds
+    sid = world.spec(7, tracks=tracks)
+    wt = Path(world.worktree("spec-007"))
+    wt.parent.mkdir(parents=True, exist_ok=True)
+    git(world.repo, "worktree", "add", "-q", "-b", "feature/spec-007", str(wt))
+    ds.write_unit(wt, {"unit": "spec-007.1", "item": "spec-007", "key": "spec-007", "kind": "ship", "worktree": str(wt),
+                       "status": "escalated", "tracks": list(tracks)})
+    return sid
+
+
+def test_resume_of_a_spec_lifts_the_label_its_escalation_put_on_the_tracked_issue(world):  # bug #1073
+    world.policy()
+    world.issue(5, title="tracked", labels=["triaged", "needs-decision"], comments=[ESCALATION])
+    _spec_unit(world, [5])
+    r = world.run("resume", "spec-7")
+    assert r.rc == 0 and "label removed: #5" in r.lines and any(ln.startswith("resumed: spec") for ln in r.lines), r
+    assert "needs-decision" not in world.labels_of(5)
+
+
+def test_resume_of_a_spec_does_not_say_resumed_while_a_label_a_person_set_holds_it(world):  # bug #1073
+    world.policy()
+    world.issue(5, title="tracked", labels=["triaged", "needs-decision"])
+    _spec_unit(world, [5])
+    r = world.run("resume", "spec-7")
+    assert r.rc != 0 and any(ln.startswith("still held: spec") and "#5" in ln for ln in r.lines), r
+    assert not any(ln.startswith("resumed:") for ln in r.lines)
+    assert "needs-decision" in world.labels_of(5)
