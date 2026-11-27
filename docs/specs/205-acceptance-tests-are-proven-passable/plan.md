@@ -10,24 +10,28 @@ tasks:
     covers: [AC-205.8, AC-205.5]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: build tests --red adds --spec for an amended spec
     files: [scripts/cplat/buildtests.py]
     covers: [AC-205.8, AC-205.6]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t3
     title: Build and tester prompts - a regression escalates with cause code, unjudged passes stay as they are
     files: [plugins/component/commands/build.md, docs/rules/plugins/component/commands/build.yml, plugins/svc/agents/tester.md, docs/rules/plugins/svc/agents/tester.yml]
     covers: [AC-205.8, AC-205.6, AC-205.7]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t4
     title: ADR, plugin versions and changelog fragment
     files: [docs/adr/, docs/adr/README.md, plugins/component/.claude-plugin/plugin.json, plugins/svc/.claude-plugin/plugin.json, .claude-plugin/marketplace.json, docs/changelog.d/1094-amended-spec-red-check.changed.md]
     covers: [AC-205.1, AC-205.2, AC-205.3, AC-205.4]
     parallel_safe: true
     depends_on: []
+    done: true
 ---
 
 # Plan — 205 Acceptance tests are proven passable before they freeze (AC-205.8 delta)
