@@ -1,7 +1,7 @@
 ---
 spec_id: 223-change-quality-fix-causes-and-attempts
 title: 'Change quality: fix causes and attempts to done'
-status: draft
+status: approved
 priority: P1
 shape: platform
 tracks: [1099]
@@ -66,3 +66,4 @@ Attempts until done.
 
 - 2026-11-27 created
 - 2026-11-27 priority P1 proposed: P1: normal bug or feature
+- 2026-11-27 approved
