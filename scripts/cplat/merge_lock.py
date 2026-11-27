@@ -226,6 +226,40 @@ def await_change(watch: ship.CheckWatch, old: str, timeout: float, interval: flo
         ship.sleep(interval)
 
 
+class PromptsOver(PlatformError):
+    """The base and the branch each fit the prompt byte baseline, the two together do not (#1076)."""
+
+    def __init__(self, url: str, base: str, total: int, baseline: int):
+        super().__init__(f"{url} merged with {base} would make the prompts {total} bytes, {total - baseline} more than the "
+                         f"baseline {baseline}; the update is not made",
+                         hint=f"shorten the prompts on the branch by {total - baseline} bytes or more (or rebaseline them), push, "
+                              "then run the land again")
+
+
+def _merged_prompt_bytes(repo: Path, base: str, head: str) -> tuple[int, int] | None:
+    """(prompt bytes, baseline) of the tree the update would make, from `git merge-tree` without touching the checkout;
+    None when it cannot be told (no remote, a conflict, an old git): the update then goes on as before."""
+    import promptrules
+    try:
+        if run(["git", "fetch", "-q", "origin", base, head], cwd=repo, check=False).returncode != 0:
+            return None
+        res = run(["git", "merge-tree", "--write-tree", f"origin/{base}", head], cwd=repo, check=False)
+        if res.returncode != 0:
+            return None
+        tree = (res.stdout or "").split()[0]
+        files = run(["git", "ls-tree", "-r", "-l", tree, "--", "plugins"], cwd=repo, check=False).stdout or ""
+        total = 0
+        for line in files.splitlines():
+            meta, _, path = line.partition("\t")
+            if promptrules.PROMPT.match(path):
+                total += int(meta.split()[3])
+        reg = run(["git", "show", f"{tree}:{promptrules.REGISTER}"], cwd=repo, check=False)
+        m = re.search(r"^baseline:\n(?:[ \t]+.*\n)*?[ \t]+prompt_bytes:\s*(\d+)", reg.stdout or "", re.M) if reg.returncode == 0 else None
+    except Exception:  # noqa: BLE001
+        return None
+    return (total, int(m.group(1))) if m and total else None
+
+
 def catch_up(repo: Path, url: str, watch: ship.CheckWatch, timeout: float, interval: float, allow: bool = True) -> CatchUp:
     """Inside the lock, before the merge: a branch behind its base is updated (a merge commit on the branch, never a force
     push) and the checks of its new head are waited for; the first red one ends it. A conflict raises `Conflict`.
@@ -235,6 +269,9 @@ def catch_up(repo: Path, url: str, watch: ship.CheckWatch, timeout: float, inter
         return CatchUp()
     if not allow:
         raise Behind(base, behind)
+    merged = _merged_prompt_bytes(repo, base, head)
+    if merged and merged[0] > merged[1]:
+        raise PromptsOver(url, base, *merged)
     watch.expect_from_current()
     res = run(["gh", "pr", "update-branch", url], cwd=repo, check=False)
     if res.returncode != 0:
