@@ -153,37 +153,87 @@ def _first_line(node) -> int:
     return min([node.lineno, *(d.lineno for d in getattr(node, "decorator_list", []))])
 
 
-def test_criteria(path: Path, test: str, number: str, active: set[str]) -> set[str]:
-    """The criteria a test traces to: its own lines and name, else its class, else the whole file."""
+def _chain(tree: ast.Module | None, parts: list[str]) -> list:
+    """The class/function nodes of a node id's parts, or [] when one is not found."""
+    chain, body = [], tree.body if tree is not None else []
+    for p in parts:
+        node = _find(body, p)
+        if node is None:
+            return []
+        chain.append(node)
+        body = node.body
+    return chain
+
+
+def own_criteria(path: Path, test: str, number: str, active: set[str]) -> set[str] | None:
+    """The criteria of spec `number` a test names on its own lines and name, else on its class; None when neither names a
+    criterion of any spec. A test that names another spec's criterion (`AC-189.1`) traces to none of this spec's."""
     import spec
     text, tree = _parse(path)
     lines = text.splitlines()
     parts = [_SUFFIX.sub("", p) for p in test.split("::") if p]
     if parts and tree is not None:
-        chain, body = [], tree.body
-        for p in parts:
-            node = _find(body, p)
-            if node is None:
-                chain = []
-                break
-            chain.append(node)
-            body = node.body
+        chain = _chain(tree, parts)
         if chain:
             fn = chain[-1]
             own = "\n".join(lines[_first_line(fn) - 1:fn.end_lineno]) + "\n" + fn.name
-            if ids := _ids(own, number, active):                                          # 1
-                return ids
+            if _names_any(own):                                                           # 1
+                return _ids(own, number, active)
             for cls in reversed(chain[:-1]):                                              # 2
                 head = "\n".join(lines[_first_line(cls) - 1:cls.lineno])
                 own = f"{head}\n{ast.get_docstring(cls) or ''}\n{cls.name}"
-                if ids := _ids(own, number, active):
-                    return ids
+                if _names_any(own):
+                    return _ids(own, number, active)
     elif parts:
         name = parts[-1]
         for m in spec._TEST_DEFS[0].finditer(text):
-            if m.group(1) == name and (ids := _ids(m.group(0) + "\n" + name, number, active)):
-                return ids
-    return _ids(text, number, active)                                                     # 3
+            if m.group(1) == name and _names_any(own := m.group(0) + "\n" + name):
+                return _ids(own, number, active)
+    return None
+
+
+def test_criteria(path: Path, test: str, number: str, active: set[str]) -> set[str]:
+    """The criteria a test traces to: its own lines and name, else its class, else the whole file."""
+    own = own_criteria(path, test, number, active)
+    return own if own is not None else _ids(_parse(path)[0], number, active)                  # 3
+
+
+def _names_any(text: str) -> bool:
+    return bool(_ID.search(text) or _SLUG.search(text))
+
+
+def base_commit(root: Path) -> str | None:
+    """The fork point of the build branch: its merge base with the remote default branch (None when it cannot be told)."""
+    ref = core.run(["git", "symbolic-ref", "-q", "refs/remotes/origin/HEAD"], cwd=root, check=False)
+    branch = (ref.stdout or "").strip() if ref.returncode == 0 and (ref.stdout or "").strip() else "refs/remotes/origin/main"
+    mb = core.run(["git", "merge-base", "HEAD", branch], cwd=root, check=False)
+    return (mb.stdout or "").strip() or None if mb.returncode == 0 else None
+
+
+def _source(text: str, parts: list[str]) -> str | None:
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        return None
+    chain = _chain(tree, parts)
+    if not chain:
+        return None
+    fn = chain[-1]
+    return "\n".join(text.splitlines()[_first_line(fn) - 1:fn.end_lineno])
+
+
+def unchanged_since(root: Path, path: Path, test: str, base: str) -> bool:
+    """The test exists at `base` with the same source: the build neither added nor changed it."""
+    parts = [_SUFFIX.sub("", p) for p in test.split("::") if p]
+    try:
+        rel = path.resolve().relative_to(root.resolve()).as_posix()
+    except ValueError:
+        return False
+    old = core.run(["git", "show", f"{base}:{rel}"], cwd=root, check=False)
+    if old.returncode != 0 or not parts:
+        return False
+    before, now = _source(old.stdout, parts), _source(_parse(path)[0], parts)
+    return before is not None and before == now
 
 
 def _test_file(root: Path, file: str, files: list[str]) -> Path:
@@ -202,9 +252,15 @@ def apply(rows: list[tuple[str, str, str]], sc: Scope, root: Path,
     out: list[tuple[str, str, str]] = []
     judged_rows: list[str] = []
     ok = bool(rows)
+    base: list[str | None] = []
     for node, cls, why in rows:
         file, _, test = node.partition("::")
-        ids = test_criteria(_test_file(root, file, files or []), test, sc.number, sc.active)
+        path = _test_file(root, file, files or [])
+        ids = own_criteria(path, test, sc.number, sc.active)
+        if ids is None:          # names no criterion: the file's criteria, unless the build left the test as it was
+            if not base:
+                base.append(base_commit(root))
+            ids = set() if base[0] and unchanged_since(root, path, test, base[0]) else test_criteria(path, test, sc.number, sc.active)
         if ids & sc.changed:
             out.append((node, cls, why))
             if cls != quiet_red.SKIPPED:

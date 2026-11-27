@@ -16,6 +16,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 |---|---|---|---|---|
 | [104-generated-repos-build-and-observe](specs/104-generated-repos-build-and-observe/spec.md) — Generated repos build and observe reliably | P1 | approved | 12 | #143, #965 |
 | [107-open-source-tools-are-adopted-on](specs/107-open-source-tools-are-adopted-on/spec.md) — Open-source tools are adopted on measured value | P1 | approved | 11 | #164 |
+| [224-a-merge-queue-tests-ready-e2e-changes](specs/224-a-merge-queue-tests-ready-e2e-changes/spec.md) — A merge queue tests ready e2e changes together | P1 | approved | 8 |  |
 | [001-create-a-repo-of-any-shape-with-one](specs/001-create-a-repo-of-any-shape-with-one/spec.md) — Create a repo of any shape with one command | P0 | done | 9 |  |
 | [002-generated-repos-enable-their-plugins](specs/002-generated-repos-enable-their-plugins/spec.md) — Generated repos enable their plugins automatically | P0 | done | 2 |  |
 | [003-pull-template-updates-into-an-existing](specs/003-pull-template-updates-into-an-existing/spec.md) — Pull template updates into an existing repo safely | P0 | done | 5 |  |
