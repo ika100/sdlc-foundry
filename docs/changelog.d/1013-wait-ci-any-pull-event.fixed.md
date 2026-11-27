@@ -1,1 +1,0 @@
-- `cplat system wait` again keeps waiting while a new component's first CI run on main builds its image. The #892 check read only the pod's last event, and when that event was the generic `Error: ImagePullBackOff` (after the `not found` pull error), the wait ended RED while the image was still being built. It now finds the `not found` error in any of the pod's events (#1013).

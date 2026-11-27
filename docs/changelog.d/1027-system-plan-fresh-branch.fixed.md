@@ -1,1 +1,0 @@
-- `/system:plan` starts its spec branch fresh from `main` (`git switch -C docs/spec-<spec_id> main`) and then checks that the spec is approved. Before, it switched to the local `docs/spec-<spec_id>` left behind by `/system:spec approve`'s squash merge, the merge of `main` into it failed, and the coordinator reset the branch and tried a force push by itself (#1027).

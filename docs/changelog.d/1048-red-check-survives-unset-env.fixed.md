@@ -1,1 +1,0 @@
-`cplat quiet test-fast --red` judges the tests of a suite whose autouse fixture unsets the `CPLAT_*` variables (as this repo's own suite does), instead of recording no test, so a platform spec's red tests pass `cplat component build reviewed` again.

@@ -337,7 +337,7 @@ def test_hold_of_a_repo_that_is_unknown_or_not_escalated_is_one_line_and_changes
 # ---------------- AC-186.2 / AC-186.3: the system ship prompt and the component ship prompt ----------------
 
 def test_the_system_ship_prompt_answers_or_holds_an_escalated_repo_and_registers_it_ac_186_2():  # AC-186.2
-    path = "plugins/system/commands/ship.md"
+    path = "plugins/system/references/ship-loop.md"
     text = prompt(path)
     assert "repo resume" in text and "repo hold" in text
     found = sourced(path, "#684")
@@ -345,7 +345,7 @@ def test_the_system_ship_prompt_answers_or_holds_an_escalated_repo_and_registers
 
 
 def test_the_system_ship_prompt_holds_what_it_does_not_answer_ac_186_3():  # AC-186.3
-    text = collapsed(prompt("plugins/system/commands/ship.md"))
+    text = collapsed(prompt("plugins/system/references/ship-loop.md"))
     assert "action: answer" in text and "action: escalate" in text
     assert "repo hold" in text
 
@@ -360,6 +360,6 @@ def test_the_component_ship_prompt_passes_questions_and_applies_the_answer_and_r
 
 def test_the_rule_register_still_checks_with_the_system_ship_entries_ac_186_2():  # AC-186.2
     import rulescheck
-    assert sourced("plugins/system/commands/ship.md", "#684") and sourced("plugins/component/commands/ship.md", "#684")
+    assert sourced("plugins/system/references/ship-loop.md", "#684") and sourced("plugins/component/commands/ship.md", "#684")
     result = rulescheck.check(ROOT)
     assert result.ok, [f"{f.file}:{f.line} {f.kind}" for f in result.failures][:5]
