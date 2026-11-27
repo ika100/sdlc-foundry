@@ -37,6 +37,7 @@ import claim
 import core
 import dispatch_budget
 import dispatch_notify
+import dispatch_platform
 import dispatch_policy
 import dispatch_state as ds
 import land_merge
@@ -364,7 +365,7 @@ def start(repo: Path, slug: str, cand, mode: str, slot: int, policy, *, filler: 
         fresh = _claim(repo, numbers, branch)
     except PlatformError as e:
         return Start(held="claimed", detail=str(e).splitlines()[0])
-    lines: list[str] = []
+    lines: list[str] = dispatch_platform.advance(repo)
     try:
         if kind in FILLER:
             path, created = _detached_worktree(repo, slug, cand), False
@@ -667,6 +668,8 @@ def escalate(repo: Path, slug: str, unit: dict, reason: str, cause: str | None, 
     run record `escalated`, add the event and free the slot; the worktree stays. Without an open issue the item is held in the state."""
     repo = Path(repo)
     reason = reason.strip() or "the run escalated"
+    if stale := dispatch_platform.note(repo):
+        reason = f"{reason}\n{stale}"
     open_issues = _open_issues(repo, _issues_of(unit))
     if open_issues:
         claim.release(repo, open_issues, f"escalated: {_one_line(reason, 200)} (cplat dispatch)")
