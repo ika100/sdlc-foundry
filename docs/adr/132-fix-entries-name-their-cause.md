@@ -1,4 +1,4 @@
-# ADR-131: Fix entries name their cause
+# ADR-132: Fix entries name their cause
 
 **Status:** Proposed (2026-11-27)
 
