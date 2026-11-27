@@ -35,8 +35,10 @@ from pathlib import Path
 
 import claim
 import core
+import dispatch_backlog
 import dispatch_budget
 import dispatch_notify
+import dispatch_platform
 import dispatch_policy
 import dispatch_state as ds
 import land_merge
@@ -351,6 +353,19 @@ def _claim(repo: Path, numbers: list[int], branch: str) -> list[int]:
     return fresh
 
 
+def merged_on_main(repo: Path, cand) -> str | None:
+    """#1078: for a ship candidate, the note when `origin/main` (fetched now) already has its spec as `done`: another session shipped it
+    after the snapshot was read. None when it is not done or main cannot be read (the start goes on)."""
+    if cand.kind != "ship" or not cand.spec_id:
+        return None
+    subprocess.run(["git", "fetch", "-q", "origin", "main"], cwd=repo, capture_output=True, check=False)
+    p = subprocess.run(["git", "show", f"origin/main:docs/specs/{cand.spec_id}/spec.md"], cwd=repo, capture_output=True, text=True, check=False)
+    rec = dispatch_backlog._spec_record(cand.spec_id, p.stdout, None) if p.returncode == 0 else None
+    if rec and rec["status"] == "done":
+        return f"{cand.item} is already done on main"
+    return None
+
+
 def start(repo: Path, slug: str, cand, mode: str, slot: int, policy, *, filler: bool = False) -> Start:
     """Design steps 1 to 4 for a ready candidate (`dispatch_backlog.Candidate`). A refused claim returns `held == "claimed"`. A `task` or
     `draft` candidate (the filler queue) takes no claim and no branch; `filler` marks the start line of a filler start of any kind."""
@@ -359,12 +374,15 @@ def start(repo: Path, slug: str, cand, mode: str, slot: int, policy, *, filler: 
     filler = filler or kind in FILLER
     branch = None if kind in FILLER else _branch_of(kind, cand.number, cand.spec_id)
     mode = "single" if kind == "fix" or kind in FILLER else mode
+    if note := merged_on_main(repo, cand):
+        ds.resume_item(slug, cand.key)                      # a hold of an earlier unit clears itself
+        return Start(lines=[f"not started: {note}"])
     numbers = [] if kind in FILLER else [cand.number] if kind == "fix" else [int(n) for n in cand.tracks]
     try:
         fresh = _claim(repo, numbers, branch)
     except PlatformError as e:
         return Start(held="claimed", detail=str(e).splitlines()[0])
-    lines: list[str] = []
+    lines: list[str] = dispatch_platform.advance(repo)
     try:
         if kind in FILLER:
             path, created = _detached_worktree(repo, slug, cand), False
@@ -667,6 +685,8 @@ def escalate(repo: Path, slug: str, unit: dict, reason: str, cause: str | None, 
     run record `escalated`, add the event and free the slot; the worktree stays. Without an open issue the item is held in the state."""
     repo = Path(repo)
     reason = reason.strip() or "the run escalated"
+    if stale := dispatch_platform.note(repo):
+        reason = f"{reason}\n{stale}"
     open_issues = _open_issues(repo, _issues_of(unit))
     if open_issues:
         claim.release(repo, open_issues, f"escalated: {_one_line(reason, 200)} (cplat dispatch)")

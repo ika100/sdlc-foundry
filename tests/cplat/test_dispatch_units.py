@@ -67,6 +67,27 @@ def test_a_claim_held_by_another_branch_is_refused_and_leaves_nothing(env):
     assert env.gh_writes() == before and env.calls() == [] and not ds.worktrees_dir(SLUG).exists()
 
 
+def _spec_cand():
+    return dispatch_backlog.Candidate(key="spec-221", item="spec-221", kind="ship", title="s", labels=[], created="", text="",
+                                      spec_id="221-x", tracks=[], status="approved")
+
+
+def test_a_spec_done_on_main_is_not_started_and_its_hold_clears(env, monkeypatch):
+    """#1078: another session shipped the spec after the snapshot was read."""
+    ds.hold(SLUG, "spec-221", "needs-decision", "spec-221.1")
+    monkeypatch.setattr(du.subprocess, "run", lambda cmd, **kw: type("P", (), {"returncode": 0, "stdout": "---\nstatus: done\ntitle: s\n---\nbody\n"})())
+    res = du.start(env.repo, SLUG, _spec_cand(), "single", 1, policy(env))
+    assert res.unit is None and res.held is None and res.lines == ["not started: spec-221 is already done on main"]
+    assert "spec-221" not in ds.load(SLUG)["steering"]["holds"]
+    assert env.calls() == [] and not ds.worktrees_dir(SLUG).exists()
+
+
+def test_a_spec_not_done_on_main_is_still_checked_only(env, monkeypatch):
+    monkeypatch.setattr(du.subprocess, "run", lambda cmd, **kw: type("P", (), {"returncode": 0, "stdout": "---\nstatus: approved\ntitle: s\n---\nbody\n"})())
+    assert du.merged_on_main(env.repo, _spec_cand()) is None
+    assert du.merged_on_main(env.repo, cand(1)) is None
+
+
 def test_an_escalated_unit_is_labelled_released_and_recorded(env):
     res = begin(env, mode="now", then="escalate", reason="escalated: tests keep failing")
     env.wait_ended("issue-1.1")

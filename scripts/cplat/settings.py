@@ -15,6 +15,9 @@ project file; the personal file may not have the key.
 
 `kube_contexts` (spec 201) is a map of cluster name to kube context name, project over user per key; it holds context names only,
 never credentials. `kube_contexts(repo)` returns {} when unset.
+
+`needs_info_close_days` (spec 177) is a whole number of days, at least 1 (default 14), read from the project file only: a
+needs-info issue silent that long is proposed for closing.
 """
 from __future__ import annotations
 
@@ -210,3 +213,20 @@ def failure_summary(repo: Path) -> tuple[bool, str]:
     if word is True or word in ("on", "true"):
         return True, ""
     raise PlatformError(f"{path}: failure_summary must be on or off, got '{value}'")
+
+
+NEEDS_INFO_CLOSE_DAYS = 14
+
+
+def needs_info_close_days(repo: Path) -> int:
+    """`needs_info_close_days` (spec 177) from the committed project file only: days of silence before a needs-info issue is proposed for closing."""
+    path = repo / PROJECT_FILE
+    if not path.is_file():
+        return NEEDS_INFO_CLOSE_DAYS
+    data = _yaml(path)
+    if not isinstance(data, dict) or "needs_info_close_days" not in data:
+        return NEEDS_INFO_CLOSE_DAYS
+    value = data["needs_info_close_days"]
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise PlatformError(f"{path}: needs_info_close_days must be a whole number of days, at least 1, got '{value}'")
+    return value

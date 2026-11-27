@@ -1,5 +1,8 @@
-# The dispatcher's policy for this repo (docs/dispatch.md): triaged issues and approved specs, two at a time; specs are approved by a person.
-slots: 2
+# The dispatcher's policy for this repo (docs/dispatch.md): triaged issues and approved specs; specs are approved by a person.
+# Budget by the subscription's limits (spec 210): needs the usage sensor (`cplat dispatch sensor install`).
+slots: 4
 budget:
-  tokens_per_day: 500000000
+  mode: plan
+  plan:
+    filler_only: [priority:P2]   # P1 issues labelled enhancement are real work, not filler
 sources: [issues, specs]

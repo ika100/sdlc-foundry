@@ -11,6 +11,7 @@ import json
 import os
 import shlex
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -48,8 +49,33 @@ def _record() -> dict | None:
     return doc if isinstance(doc, dict) else None
 
 
+def _stable_python() -> str:
+    """The first `python3` on PATH outside a temporary environment (uv's cache, this process's own venv)."""
+    own = {str(Path(p).resolve()) for p in (sys.prefix, sys.exec_prefix)}
+    for entry in os.environ.get("PATH", "").split(os.pathsep):
+        cand = Path(entry) / "python3" if entry else None
+        if cand is None or not (cand.is_file() and os.access(cand, os.X_OK)):
+            continue
+        if "uv" in cand.parts and {"builds-v0", "environments-v2", "archive-v0"} & set(cand.parts):
+            continue
+        if str(Path(entry).resolve().parent) in own:
+            continue
+        return str(cand)
+    return "/usr/bin/python3"
+
+
 def _command(target: Path) -> str:
-    return f"{shlex.quote(shutil.which('python3') or sys.executable)} {shlex.quote(str(target))}"
+    return f"{shlex.quote(_stable_python())} {shlex.quote(str(target))}"
+
+
+def _check(command: str) -> None:
+    hint = f"run `echo '{{}}' | {command}` to see why"
+    try:
+        r = subprocess.run(command, shell=True, input="{}", capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.SubprocessError) as err:
+        raise PlatformError(f"the status line command does not run: {err}", hint) from err
+    if r.returncode != 0:
+        raise PlatformError(f"the status line command exits {r.returncode}: {r.stderr.strip()[:200]}", hint)
 
 
 def install() -> str:
@@ -68,6 +94,7 @@ def install() -> str:
         base = {k: v for k, v in (previous or {}).items() if k not in ("type", "command")}
         doc["statusLine"] = {**base, "type": "command", "command": command}
     shutil.copyfile(Path(__file__).with_name("usage_sensor.py"), target)
+    _check(command)
     us.write_json_atomic(d / "sensor.json", {"installed_at": ds.stamp(), "settings": str(path), "previous": previous, "command": command})
     _write_settings(path, doc)
     kept = previous.get("command") if isinstance(previous, dict) else None
