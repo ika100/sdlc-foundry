@@ -13,6 +13,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from waiting import with_prelude
 
 SLUG = "ika100/sdlc-foundry"
 
@@ -130,7 +131,7 @@ class FakeGh:
         self.state: dict = {"slug": SLUG, "prs": {}, "tags": [], "login": "o", "fleet": {}}
         self.save()
         script = self.dir / "gh"
-        script.write_text(SCRIPT.format(python=sys.executable))
+        script.write_text(with_prelude(SCRIPT.format(python=sys.executable)))
         script.chmod(script.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
         monkeypatch.setenv("FAKE_GH_STATE", str(self.state_path))
         monkeypatch.setenv("PATH", f"{self.dir}{os.pathsep}{os.environ['PATH']}")

@@ -17,6 +17,7 @@ tasks:
     covers: [AC-223.1]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t3
     title: "change-quality sources: releases, Fixed sections, fragments, PR to release, journeys, fleet stamp history"
     files: [scripts/cplat/changequality_sources.py]
@@ -30,6 +31,7 @@ tasks:
     covers: [AC-223.4, AC-223.5, AC-223.6]
     parallel_safe: true
     depends_on: [t1, t3]
+    done: true
   - id: t5
     title: "runs report: chains with attempts to done, chain cost and the delivered-item summary"
     files: [scripts/cplat/runs_chains.py, scripts/cplat/runs_report.py]
