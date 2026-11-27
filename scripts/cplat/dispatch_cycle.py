@@ -353,6 +353,7 @@ def run_cycle(repo: Path | str, policy, *, max_age: int = 0, announce: bool | No
     out.unavailable = dict(snap.unavailable)
     out.lines += du.cleanup(repo, slug, snap.read_at)
     units = ds.all_units(slug)
+    _clear_merged_holds(slug, snap)
     state = ds.load(slug)
     gate = dispatch_gate.gate(slug, policy, state, usage)
     ordered, held, filler = _judge(repo, slug, policy, snap, state, units, gate)
@@ -378,6 +379,17 @@ def run_cycle(repo: Path | str, policy, *, max_age: int = 0, announce: bool | No
     except Exception as err:  # noqa: BLE001  a failing notification never stops the dispatcher
         print(f"notify failed: {_first(err)}", file=sys.stderr)
     return out
+
+
+def _clear_merged_holds(slug: str, snap) -> None:
+    """#1078: a spec hold (needs-decision, stuck) of a spec that is no longer draft, approved or building on main is moot: it merged
+    elsewhere. Only a snapshot that read the specs counts."""
+    if "specs" in snap.unavailable or "git" in snap.unavailable:
+        return
+    live = {r["key"] for r in snap.specs} | {r["key"] for r in snap.drafts}
+    for key in list((ds.load(slug).get("steering") or {}).get("holds") or {}):
+        if key.startswith("spec-") and key not in live:
+            ds.resume_item(slug, key)
 
 
 def _record(slug: str, snap, units: list[dict], policy, out: CycleResult) -> None:
