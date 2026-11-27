@@ -46,13 +46,22 @@ class Outcome:
     renamed: list[tuple[str, str]] = field(default_factory=list)
 
 
+MARKETPLACE = ".claude-plugin/marketplace.json"
+PLUGIN_JSON = re.compile(r"^plugins/[^/]+/\.claude-plugin/plugin\.json$")
+VERSION_LINE = re.compile(r'^(\s*"version":\s*)"([^"]*)"', re.M)
+NAME_LINE = re.compile(r'^\s*"name":\s*"([^"]*)"', re.M)
+
+
 def handles(path: str) -> bool:
-    return path == ADR_INDEX or (path.startswith(RULES_DIR) and path.endswith(".yml"))
+    return (path in (ADR_INDEX, MARKETPLACE) or PLUGIN_JSON.match(path) is not None
+            or (path.startswith(RULES_DIR) and path.endswith(".yml")))
 
 
 def resolve(repo: Path, path: str, ctx: Context, run) -> Outcome:
     if path == ADR_INDEX:
         return _adr_index(repo, path, ctx, run)
+    if path == MARKETPLACE or PLUGIN_JSON.match(path):
+        return _versions(repo, path, run)
     return _rules(repo, path, ctx, run)
 
 
@@ -277,4 +286,56 @@ def _rules(repo: Path, path: str, ctx: Context, run) -> Outcome:
                 out.lines.append(f"renumbered {old} to {new} in {rel} ({k} references)")
         if not found:
             out.lines.append(f"renumbered {old} to {new} in {path} (0 references)")
+    return out
+
+
+# ---------------- plugin versions ----------------
+
+def _semver(v: str) -> tuple[int, int, int] | None:
+    m = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", v)
+    return (int(m.group(1)), int(m.group(2)), int(m.group(3))) if m else None
+
+
+def _pick_version(base: str | None, ours: str | None, theirs: str | None) -> str | None:
+    """The higher version; when both sides changed it and the branch is not higher, one patch above main's."""
+    if ours == theirs or theirs == base:
+        return ours
+    if ours == base:
+        return theirs
+    o, t = _semver(ours or ""), _semver(theirs or "")
+    if o is None or t is None:
+        raise Refused(f"version {ours!r} against {theirs!r} is not semver")
+    return ours if o > t else f"{t[0]}.{t[1]}.{t[2] + 1}"
+
+
+def _masked_versions(text: str) -> tuple[str, dict[str, str]]:
+    """(text with each version replaced by a placeholder keyed by the plugin name above it, version by key)."""
+    versions: dict[str, str] = {}
+
+    def sub(m: re.Match) -> str:
+        names = NAME_LINE.findall(text[:m.start()])
+        key = names[-1] if names else ""
+        versions[key] = m.group(2)
+        return f'{m.group(1)}"@version:{key}@"'
+    return VERSION_LINE.sub(sub, text), versions
+
+
+def _versions(repo: Path, path: str, run) -> Outcome:
+    b_text, o_text, t_text = _stages(repo, path, run)
+    (b_m, b_v), (o_m, o_v), (t_m, t_v) = (_masked_versions(t) for t in (b_text, o_text, t_text))
+    merged = _merge_text(repo, run, b_m, o_m, t_m)
+    if merged is None:
+        raise Refused(f"{path} outside its version fields")
+    out = Outcome()
+    for key in {*o_v, *t_v}:
+        pick = _pick_version(b_v.get(key), o_v.get(key), t_v.get(key))
+        if pick is None:
+            continue
+        merged = merged.replace(f'"@version:{key}@"', f'"{pick}"')
+        if pick not in (o_v.get(key), t_v.get(key)):
+            out.lines.append(f"bumped {key or path} to {pick} above {t_v.get(key)}")
+    if "@version:" in merged:
+        raise Refused(f"{path}: a version entry changed shape")
+    (repo / path).write_text(merged)
+    _note(out, path)
     return out
