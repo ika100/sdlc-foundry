@@ -1,0 +1,1 @@
+`cplat dispatch sensor install` no longer writes uv's temporary Python into the status line command: it picks the first `python3` on PATH outside uv's cache and checks that the written command runs before it reports success (#1095).
