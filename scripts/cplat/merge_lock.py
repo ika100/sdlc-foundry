@@ -25,6 +25,8 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import yaml
+
 import core
 import dispatch_state
 import release_hold
@@ -254,10 +256,11 @@ def _merged_prompt_bytes(repo: Path, base: str, head: str) -> tuple[int, int] | 
             if promptrules.PROMPT.match(path):
                 total += int(meta.split()[3])
         reg = run(["git", "show", f"{tree}:{promptrules.REGISTER}"], cwd=repo, check=False)
-        m = re.search(r"^baseline:\n(?:[ \t]+.*\n)*?[ \t]+prompt_bytes:\s*(\d+)", reg.stdout or "", re.M) if reg.returncode == 0 else None
+        data = yaml.safe_load(reg.stdout or "") if reg.returncode == 0 else None
+        limit = ((data or {}).get("baseline") or {}).get("prompt_bytes") if isinstance(data, dict) else None
     except Exception:  # noqa: BLE001
         return None
-    return (total, int(m.group(1))) if m and total else None
+    return (total, int(limit)) if isinstance(limit, int) and total else None
 
 
 def catch_up(repo: Path, url: str, watch: ship.CheckWatch, timeout: float, interval: float, allow: bool = True) -> CatchUp:
