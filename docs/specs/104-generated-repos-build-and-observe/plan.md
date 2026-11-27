@@ -38,6 +38,7 @@ tasks:
     covers: [AC-104.11, AC-104.12]
     parallel_safe: true
     depends_on: []
+    done: true
 ---
 
 # Plan — 104 Generated repos build and observe reliably (amendment, issue 965)

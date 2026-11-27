@@ -80,7 +80,7 @@ Another repo installs a released version like this:
    //npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}
    ```
 
-2. A token that can read packages, even for a public package: locally `export NODE_AUTH_TOKEN=$(gh auth token)` after `gh auth refresh -s read:packages`; in the consumer's CI the secret `PACKAGES_READ_TOKEN` (a token with `read:packages`), passed as `NODE_AUTH_TOKEN` to the install step (or `GITHUB_TOKEN` when this package grants the consuming repo access in its package settings).
+2. A token that can read packages, even for a public package: locally `export NODE_AUTH_TOKEN=$(gh auth token)` after `gh auth refresh -s read:packages`; in the consumer's CI the secret `PACKAGES_READ_TOKEN` (a token with `read:packages`), passed as `NODE_AUTH_TOKEN` to the install step (or `GITHUB_TOKEN` when this package grants the consuming repo access in its package settings). A `web-nextjs` or `service-typescript` consumer's CI and image build pass the secret already; only `gh secret set PACKAGES_READ_TOKEN -R <consumer>` is needed.
 3. `devbox run -- pnpm add @{{ github_org | lower }}/{{ project_name }}@X.Y.Z` in the consuming repo.
 
 ## Project notes

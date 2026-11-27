@@ -40,7 +40,8 @@ GitHub Free gives every owner the GitHub Packages registries for npm, Maven and 
    (`<name> @ git+https://github.com/<owner>/<repo>@vX.Y.Z`) with a token that can read the repo. The npm, Maven and NuGet
    registries need a token with `read:packages` even for public packages; a consuming repo's CI gets it as the secret
    `PACKAGES_READ_TOKEN` (or `GITHUB_TOKEN` when the package grants the consuming repo access). The library repo's
-   `CLAUDE.md` says how; consuming templates do not generate the wiring yet.
+   `CLAUDE.md` says how. The `web-nextjs` and `service-typescript` templates pass `PACKAGES_READ_TOKEN` to CI's
+   install steps and as a BuildKit secret to the image build, and `/platform:doctor` reports it missing (spec 104).
 
 ## Consequences
 
