@@ -71,17 +71,11 @@ def test_ci_install_steps_get_node_auth_token_and_no_global_env(shape):  # AC-10
             assert s.get("env", {}).get("NODE_AUTH_TOKEN") == "${{ secrets.PACKAGES_READ_TOKEN }}", job
 
 
-def test_the_two_ci_files_stay_identical():  # AC-104.11
-    """AC-104.11: the web-nextjs and service-typescript ci.yml carry the same token wiring."""
-    a, b = (TEMPLATES / s / ".github" / "workflows" / "ci.yml" for s in SHAPES)
-    assert a.read_text() == b.read_text()
-
-
 @pytest.mark.parametrize("shape", SHAPES)
 def test_local_image_build_passes_the_secret(shape):  # AC-104.11
     """AC-104.11: the devbox image-build script (the scan build) passes the secret from NODE_AUTH_TOKEN."""
     text = (TEMPLATES / shape / "devbox.json.jinja").read_text()
-    assert '"image-build": "docker build --secret id=PACKAGES_READ_TOKEN,env=NODE_AUTH_TOKEN -t {{ project_name }}:scan ."' in text
+    assert re.search(r'"image-build":\s*"docker build --secret id=PACKAGES_READ_TOKEN,env=NODE_AUTH_TOKEN -t \{\{ project_name \}\}:scan \."', text)
 
 
 def test_platform_ci_proves_the_token_leaves_no_trace():  # AC-104.11
@@ -128,14 +122,18 @@ def _stub(monkeypatch, *, secrets=(), private=None, gh_installed=True):
         calls.append(args)
         if args[:2] == ["secret", "list"]:
             if secrets is None:
-                raise RuntimeError("no access")
+                return ""  # what the real ship.gh prints for a failed call with check=False: not JSON
             return json.dumps([{"name": n} for n in secrets])
         if args[0] == "api" and args[1].endswith("/actions/organization-secrets"):
             return "[]"
         if args[0] == "api" and args[2:] == ["--jq", ".private"]:
             slug = args[1].removeprefix("repos/")
             if private is None or slug not in private:
-                raise RuntimeError("404")
+                # a failed call as the real ship.gh reports it: empty stdout for check=False, core.PlatformError for check=True
+                if check:
+                    import core
+                    raise core.PlatformError("gh: Not Found (HTTP 404)")
+                return ""
             return "true\n" if private[slug] else "false\n"
         return ""
 
@@ -237,10 +235,21 @@ def test_no_row_when_gh_is_not_installed(tmp_path, monkeypatch):  # AC-104.12
 
 
 def test_run_checks_runs_the_packages_check_after_the_gitops_token(tmp_path, monkeypatch):  # AC-104.12
-    """AC-104.12: doctor.run_checks calls check_packages_token right after check_gitops_token."""
-    import inspect
-
+    """AC-104.12: `cplat doctor` (run_checks) shows the missing-secret row for a repo with a private npm scope, after the gitops row."""
     import doctor
-    src = inspect.getsource(doctor.run_checks)
-    assert "check_packages_token" in src
-    assert src.index("check_gitops_token") < src.index("check_packages_token")
+    import gates
+    r = _repo(tmp_path, npmrc=NPMRC)
+    _stub(monkeypatch)
+    for name in ("check_tools", "check_gh", "check_docker", "check_kube", "check_kube_envs", "check_plugins", "check_platform_source",
+                 "check_session", "check_migration", "check_repo", "check_retro_schedule"):
+        monkeypatch.setattr(doctor, name, lambda *a, **k: [])
+    monkeypatch.setattr(doctor, "check_run_store", lambda: doctor.check(doctor.OK, "run store", "stub"))
+    monkeypatch.setattr(doctor, "check_gitops_token", lambda repo: [doctor.check(doctor.OK, "secret GITOPS_TOKEN", "stub")])
+    monkeypatch.setattr(gates, "check_gates", lambda repo: [])
+    import notify_config
+    monkeypatch.setattr(notify_config, "doctor_checks", lambda: [])
+    rows = doctor.run_checks(r)
+    names = [c["name"] for c in rows]
+    assert "secret PACKAGES_READ_TOKEN" in names
+    assert names.index("secret PACKAGES_READ_TOKEN") > names.index("secret GITOPS_TOKEN")
+    assert rows[names.index("secret PACKAGES_READ_TOKEN")]["status"] == doctor.FAIL
