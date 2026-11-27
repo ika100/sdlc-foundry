@@ -16,6 +16,7 @@ from collections import Counter
 import core
 import escalation_rules
 import feedback
+import runs_chains
 import runs_usage_report
 
 UNKNOWN = "unknown"
@@ -262,6 +263,9 @@ def aggregate(records: list[dict], followups: list[dict], *, malformed: int, buf
     out["unattended_ships"] = aggregate_unattended(kept)
     out["person"] = aggregate_person(followups, kept)
     out["lands"] = aggregate_lands(kept)
+    window_start = datetime.datetime.combine(now.date() - datetime.timedelta(days=since_days), datetime.time(),
+                                             tzinfo=datetime.timezone.utc)
+    out["chains"] = runs_chains.aggregate_chains(kept, window_start=window_start)
     validation = aggregate_validation(kept)
     if validation["rules"]:   # spec 103: only when a run recorded a validation section
         out["validation"] = validation
@@ -458,6 +462,8 @@ def render_text(agg: dict) -> str:
         lines.append(f"Validation misses per rule: {_pairs(validation['misses'])}")
     if "person" in agg:
         lines += _person_lines(agg["person"])
+    if "chains" in agg:
+        lines += runs_chains.chain_lines(agg["chains"])
     lines.append(f"Buffered locally, not included: {agg['buffered']} record(s) (cplat platform runs flush)")
     return "\n".join(lines)
 
