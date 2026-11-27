@@ -115,7 +115,8 @@ def running(command: str, cwd: Path | None = None) -> Iterator[None]:
             folder = base / WAITS_DIR
             folder.mkdir(parents=True, exist_ok=True)
             mark = folder / f"{os.getpid()}.json"
-            session = next((v for n in ("CLAUDE_CODE_SESSION_ID", "CPLAT_SESSION_ID") if (v := (os.environ.get(n) or "").strip())), None)
+            driver = (os.environ.get("CPLAT_SYSTEM_DRIVER_RUN") or "").strip()      # spec 216: the system ship driver's waits
+            session = f"driver:{driver}" if driver else next((v for n in ("CLAUDE_CODE_SESSION_ID", "CPLAT_SESSION_ID") if (v := (os.environ.get(n) or "").strip())), None)
             mark.write_text(json.dumps({"pid": os.getpid(), "command": command, "session": session,
                                         "started_at": dt.datetime.now().isoformat(timespec="seconds")}))
     except (OSError, core.PlatformError):

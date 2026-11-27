@@ -89,6 +89,20 @@
       "plugins": [
         "component"
       ]
+    },
+    "ux-plan": {
+      "task_version": 1,
+      "sample_component": "ika100-demo/bench-files-web",
+      "spec_file": "spec-902.md",
+      "spec_id": "902-a-status-page-shows-whether-the-site-is-ready",
+      "steps": [
+        {
+          "name": "plan",
+          "prompt": "/component:plan 902"
+        }
+      ],
+      "max_runs": 3,
+      "max_minutes": 45
     }
   }
 }

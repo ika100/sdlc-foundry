@@ -196,11 +196,11 @@ def test_step_2_6_sends_failing_tests_to_a_coder_and_repeats_after_the_tester_fi
     assert points_to(BUILD_REL, "references/build-load-run.md")
     ref = (ROOT / "plugins" / "component" / "references" / "build-load-run.md").read_text()
     assert "/component:build" in ref and "2 rounds" in ref
-    assert ref.index("**tester**") < ref.index("test-diff $RED")
+    assert ref.index("**tester**") < ref.index("test-diff")
 
 
 def test_the_load_run_reference_tells_the_tester_to_fix_the_harness_only_ac_172_6():  # AC-172.6
     text = (ROOT / "plugins" / "component" / "references" / "build-load-run.md").read_text()
     assert "Harness mode" in text and "fixtures" in text and "helpers" in text and "fakes" in text and "process clean-up" in text
-    assert "assertion" in text and "test-diff $RED" in text and "build-test-approval.md" in text
+    assert "assertion" in text and "cplat spec test-diff`" in text and "build-test-approval.md" in text
     assert "runs end" in text and "flaky under load" in text

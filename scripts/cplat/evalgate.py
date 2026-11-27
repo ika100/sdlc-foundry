@@ -7,6 +7,8 @@ changed since REF (default: the newest `v*` tag), every named workflow (default 
 record (`cplat platform runs benchmark <w> --plugins plugins`) whose plugins had exactly this `plugins/` tree, outcome
 `done`, and at most 1.5 times the tokens of the median `done` run of the version REF names. `cplat platform release`
 runs the same check before it opens the release PR. Exit 0 pass, 1 fail (one line each, with the command to run).
+A changed prompt under `plugins/web/` or a change to the UX step's decision (`scripts/cplat/spec_ux.py`) also asks for the
+opt-in `ux-plan` benchmark (spec 222); a change to `spec_ux.py` alone asks for it only.
 """
 from __future__ import annotations
 
@@ -23,6 +25,8 @@ from core import PlatformError
 
 PROMPT = re.compile(r"^plugins/[^/]+/(agents|commands|references|skills)/.+\.md$")
 WORKFLOWS = ("quick-task", "build")
+UX_WORKFLOW = "ux-plan"
+UX_STEP = re.compile(r"^(plugins/web/(agents|commands|references|skills)/.+\.md|scripts/cplat/spec_ux\.py)$")
 TOKEN_LIMIT = 1.5
 WINDOW_DAYS = 45
 TOKEN_FIELDS = ("input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens")
@@ -38,6 +42,19 @@ def latest_tag(repo: Path) -> str:
 
 def prompt_changes(repo: Path, base: str) -> list[str]:
     return [f for f in _git(repo, "diff", "--name-only", f"{base}...HEAD").splitlines() if PROMPT.match(f)]
+
+
+def ux_changes(repo: Path, base: str) -> list[str]:
+    """The changed files that ask for the `ux-plan` benchmark: the web prompts and the UX step's decision (spec 222)."""
+    return [f for f in _git(repo, "diff", "--name-only", f"{base}...HEAD").splitlines() if UX_STEP.match(f)]
+
+
+def selected(changed: list[str], ux: list[str], workflows: tuple[str, ...] | None) -> tuple[str, ...]:
+    """The workflows the gate asks for: the named ones, else the defaults when a prompt changed, plus `ux-plan` for a UX change."""
+    if workflows:
+        return workflows
+    base = WORKFLOWS if changed else ()
+    return base + ((UX_WORKFLOW,) if ux else ())
 
 
 def plugins_tree(repo: Path, rev: str) -> str:
@@ -106,28 +123,28 @@ def _records(days: int) -> list[dict]:
     return runs_report.parse([t for _, t in files])[0]
 
 
-def check(repo: Path, base: str | None = None, workflows: tuple[str, ...] = WORKFLOWS,
+def check(repo: Path, base: str | None = None, workflows: tuple[str, ...] | None = None,
           records: Callable[[int], list[dict]] = _records) -> tuple[list[str], list[str]]:
-    """(the changed prompt files, the failures)."""
+    """(the changed prompt and UX-step files, the failures). `workflows` None: the defaults, plus `ux-plan` for a UX change."""
     base = base or latest_tag(repo)
     if not base:
         return [], []
-    changed = prompt_changes(repo, base)
-    if not changed:
+    changed, ux = prompt_changes(repo, base), ux_changes(repo, base)
+    if not changed and not ux:
         return [], []
     fails = verdict(records(WINDOW_DAYS), head_tree=plugins_tree(repo, "HEAD"), tree_of=lambda c: plugins_tree(repo, c),
-                    baseline_version=base.lstrip("v"), workflows=workflows)
-    return changed, fails
+                    baseline_version=base.lstrip("v"), workflows=selected(changed, ux, workflows))
+    return changed + [f for f in ux if f not in changed], fails
 
 
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(prog="cplat platform eval-gate", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--base", help="compare with this ref (default: the newest v* tag)")
-    ap.add_argument("--workflow", action="append", choices=["quick-task", "build", "ship", "fix-rounds"])
+    ap.add_argument("--workflow", action="append", choices=["quick-task", "build", "ship", "fix-rounds", UX_WORKFLOW])
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--repo", default=".")
     ns = ap.parse_args(argv)
-    changed, fails = check(Path(ns.repo).resolve(), ns.base, tuple(ns.workflow or WORKFLOWS))
+    changed, fails = check(Path(ns.repo).resolve(), ns.base, tuple(ns.workflow) if ns.workflow else None)
     if ns.json:
         print(json.dumps({"prompts_changed": changed, "ok": not fails, "failures": fails}, indent=2))
     elif not changed:

@@ -1,0 +1,1 @@
+# Accepted risks for `devbox run audit` (trivy). One CVE per line; every entry needs a reason and a revisit date.

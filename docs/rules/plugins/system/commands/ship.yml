@@ -23,24 +23,10 @@ rules:
     text: "Never answer a repo spec's questions, because `repo start` writes the spec from the plan and none arise."
     class: practice
     source: spec 141
-  - id: R14
-    text: "one repo's decision need not wait for another's build, and only the user approves answers (suggested ones in the spec)."
-    class: experience
-    source: "#684"
   - id: R8
     text: "Never wait with a shell loop on a file, git HEAD or an image, because `cplat system ship next --wait` blocks until a repo finishes."
     class: experience
     source: "#496"
-  - id: R9
-    text: "one call per action, never a shell loop, because each action changes what the next call returns."
-    class: practice
-  - id: R10
-    text: "You start no subagent for a component repo and never work in its clone, because its own session owns it."
-    class: practice
-    source: spec 155
-  - id: R11
-    text: "Never write a polling loop on `cplat component ship status`, `kubectl` or `gh`, because the wait ends at the first state change."
-    class: practice
   - id: R12
     text: "never file an issue without the user's OK, because the platform repository is public; the platform posts only `platform` escalations and milestone comments itself (ADR-033, ADR-122)."
     class: hard
@@ -49,10 +35,18 @@ rules:
     text: "An escalation decision that needs work always becomes a plan task before the ship goes on, so that it is done."
     class: practice
     source: spec 185
-  - id: R16
-    text: "On exit 0 (`WAIT:`) or exit 2 (`TIMEOUT:`) run the same wait again; escalate only after three `TIMEOUT:` in a row (a `WAIT:` resets the count): `cplat system ship escalate '<the TIMEOUT line>' --cause environment`, stop, because a stuck repo means runner or cluster."
+  - id: R17
+    text: "wait again; escalate only after three `TIMEOUT:` in a row (a `WAIT:` resets the count): `cplat system ship escalate '<the TIMEOUT line>' --cause environment`, because a stuck driver means runner or cluster."
     class: practice
-    source: spec 194
+    source: spec 216
+  - id: R18
+    text: "Never run the verbs of the driver (`cplat system ship next --json`, `repo start`, `repo resume`, `repo hold`, `land`, `phase complete`, `complete`, `finish`), because it applies those rules and a second actor would race it on the state."
+    class: practice
+    source: spec 216
+  - id: R19
+    text: "`driver: off`, or to answer the questions of an `ESCALATED:` (`cplat system ship start <spec>`, then `CPLAT_SYSTEM_DRIVER=0 cplat system ship drive`): read `${CLAUDE_PLUGIN_ROOT}/references/ship-loop.md` and follow it, because the driver never asks."
+    class: practice
+    source: spec 216
   - id: R13
     text: "The shape must be `gitops-app`."
     class: retired

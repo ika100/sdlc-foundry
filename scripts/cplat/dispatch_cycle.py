@@ -85,11 +85,12 @@ def effective_slots(state: dict, policy) -> int:
 
 
 def free_numbers(running: list[dict], total: int) -> list[int]:
-    """The slot numbers a start can take: the lowest numbers no running unit holds, as many as `total` minus the running units."""
+    """The slot numbers a start can take: the lowest numbers no running unit holds, as many as `total` minus the units that occupy
+    a slot (a landing unit does not, up to `total` of them; #1033)."""
     used = {int(u.get("slot") or 0) for u in running}
     out: list[int] = []
     n = 0
-    while len(out) < max(0, total - len(running)):
+    while len(out) < max(0, total - du.occupied(running, total)):
         n += 1
         if n not in used:
             out.append(n)
@@ -387,7 +388,7 @@ def _record(slug: str, snap, units: list[dict], policy, out: CycleResult) -> Non
     def go(st: dict) -> None:
         total = effective_slots(st, policy)
         st["last_cycle"] = {"at": ds.stamp(), "read_at": snap.read_at, "queue": out.queue, "held": out.held,
-                            "slots": {"total": total, "running": len(running), "free": max(0, total - len(running))}}
+                            "slots": {"total": total, "running": len(running), "free": max(0, total - du.occupied(running, total))}}
         if out.held:
             record = st["days"].setdefault(day, {"held": {}}).setdefault("held", {})
             for h in out.held:

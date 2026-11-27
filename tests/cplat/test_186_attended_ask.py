@@ -84,7 +84,7 @@ def test_a_hold_reply_keeps_a3_for_the_repo_ac_186_12(w):  # AC-186.12
 # ---------------- AC-186.12: the system ship prompt acts on `do` ----------------
 
 def test_the_system_ship_prompt_asks_on_do_ask_and_resumes_or_holds_ac_186_12():  # AC-186.12
-    text = collapsed(prompt("plugins/system/commands/ship.md"))
+    text = collapsed(prompt("plugins/system/references/ship-loop.md"))
     bullet = text[text.index("`action: answer`"):text.index("`action: escalate`")]
     assert "`ask`" in bullet and "AskUserQuestion" in bullet
     assert "repo resume" in bullet and "repo hold" in bullet and "`resume`" in bullet and "`hold`" in bullet

@@ -15,7 +15,9 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | Spec | Priority | Status | Criteria | Tracks |
 |---|---|---|---|---|
 | [107-open-source-tools-are-adopted-on](specs/107-open-source-tools-are-adopted-on/spec.md) — Open-source tools are adopted on measured value | P1 | approved | 11 | #164 |
-| [211-unit-sessions-start-with-their](specs/211-unit-sessions-start-with-their/spec.md) — Unit sessions start with their instructions, less bookkeeping | P1 | approved | 10 | #869 |
+| [220-a-docs-only-land-does-not-wait-for-a](specs/220-a-docs-only-land-does-not-wait-for-a/spec.md) — A docs-only land does not wait for a code PR's catch-up e2e | P1 | approved | 10 | #280 |
+| [221-a-net-library-shape](specs/221-a-net-library-shape/spec.md) — A .NET library shape | P1 | approved | 11 | #720 |
+| [177-triage-asks-reporters-plainly-and-closes](specs/177-triage-asks-reporters-plainly-and-closes/spec.md) — Triage asks reporters plainly and closes what needs no work | P2 | approved | 4 |  |
 | [001-create-a-repo-of-any-shape-with-one](specs/001-create-a-repo-of-any-shape-with-one/spec.md) — Create a repo of any shape with one command | P0 | done | 9 |  |
 | [002-generated-repos-enable-their-plugins](specs/002-generated-repos-enable-their-plugins/spec.md) — Generated repos enable their plugins automatically | P0 | done | 2 |  |
 | [003-pull-template-updates-into-an-existing](specs/003-pull-template-updates-into-an-existing/spec.md) — Pull template updates into an existing repo safely | P0 | done | 5 |  |
@@ -170,7 +172,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [183-shared-numbers-and-indexes-come-from](specs/183-shared-numbers-and-indexes-come-from/spec.md) — Shared numbers and indexes come from cplat | P1 | done | 8 | #659, #660, #477, #577 |
 | [184-parallel-ships-do-not-stop-each-other](specs/184-parallel-ships-do-not-stop-each-other/spec.md) — Parallel ships do not stop each other | P1 | done | 10 | #663, #666, #670, #671 |
 | [185-a-hung-test-fails-fast-and-names-itself](specs/185-a-hung-test-fails-fast-and-names-itself/spec.md) — A hung test fails fast and names itself | P1 | done | 8 |  |
-| [186-the-journey-waits-less](specs/186-the-journey-waits-less/spec.md) — The journey waits less | P1 | done | 11 | #681, #684 |
+| [186-the-journey-waits-less](specs/186-the-journey-waits-less/spec.md) — The journey waits less | P1 | done | 12 | #681, #684 |
 | [187-settings-agents-edited-by-hand-have-a](specs/187-settings-agents-edited-by-hand-have-a/spec.md) — Settings agents edited by hand have a command | P1 | done | 8 |  |
 | [188-explore-a-feature-before-its-spec-is](specs/188-explore-a-feature-before-its-spec-is/spec.md) — Explore a feature before its spec is written | P1 | done | 12 | #662 |
 | [189-the-web-image-has-no-known-critical-cve](specs/189-the-web-image-has-no-known-critical-cve/spec.md) — The web image has no known critical CVE and the platform scans template images | P1 | done | 7 | #682 |
@@ -194,11 +196,16 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [207-preflight-checks-trust-and-subagent](specs/207-preflight-checks-trust-and-subagent/spec.md) — Preflight checks trust and subagent tools before a ship | P1 | done | 8 |  |
 | [208-test-runs-leave-the-developer-s-disk-as](specs/208-test-runs-leave-the-developer-s-disk-as/spec.md) — Test runs leave the developer's disk as they found it | P1 | done | 7 | #810, #811 |
 | [210-the-dispatcher-paces-work-by-the](specs/210-the-dispatcher-paces-work-by-the/spec.md) — The dispatcher budgets by plan limits or by cost | P1 | done | 10 |  |
+| [211-unit-sessions-start-with-their](specs/211-unit-sessions-start-with-their/spec.md) — Unit sessions start with their instructions, less bookkeeping | P1 | done | 10 | #869 |
 | [212-local-tests-run-what-a-change-can-affect](specs/212-local-tests-run-what-a-change-can-affect/spec.md) — Local tests run what a change can affect | P1 | done | 9 |  |
 | [213-library-releases-publish-their-package](specs/213-library-releases-publish-their-package/spec.md) — Library releases publish their package | P1 | done | 8 |  |
 | [214-a-typescript-service-shape](specs/214-a-typescript-service-shape/spec.md) — A TypeScript service shape | P1 | done | 11 | #716 |
 | [215-a-typescript-library-shape](specs/215-a-typescript-library-shape/spec.md) — A TypeScript library shape | P1 | done | 11 | #717 |
+| [216-the-system-ship-drives-its-repos-without](specs/216-the-system-ship-drives-its-repos-without/spec.md) — The system ship drives its repos without a model | P1 | done | 12 |  |
+| [217-a-java-library-shape](specs/217-a-java-library-shape/spec.md) — A Java library shape | P1 | done | 11 | #718 |
+| [218-a-net-service-shape](specs/218-a-net-service-shape/spec.md) — A .NET service shape | P1 | done | 11 | #719 |
 | [219-website-specs-get-a-ux-design-step](specs/219-website-specs-get-a-ux-design-step/spec.md) — Website specs get a UX design step | P1 | done | 11 | #715 |
+| [222-the-ux-step-is-measured-on-website-plans](specs/222-the-ux-step-is-measured-on-website-plans/spec.md) — The UX step is measured on website plans | P1 | done | 11 | #1059, #1060 |
 | [005-report-a-platform-problem-without](specs/005-report-a-platform-problem-without/spec.md) — Report a platform problem without leaking secrets | P2 | done | 3 |  |
 | [026-guard-rails-before-merge-and-in-the](specs/026-guard-rails-before-merge-and-in-the/spec.md) — Guard rails before merge and in the cluster | P2 | done | 2 |  |
 | [036-plans-are-approved-before-they-are-built](specs/036-plans-are-approved-before-they-are-built/spec.md) — Plans are approved before they are built | P2 | superseded | 4 |  |

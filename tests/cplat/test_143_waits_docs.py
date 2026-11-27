@@ -49,7 +49,7 @@ WAITS = {
     "system/commands/set.md": ["cplat system wait"],
     "resource/commands/add.md": ["cplat system wait"],
     "cluster/commands/add.md": ["cplat cluster wait"],
-    "system/commands/ship.md": ["cplat system ship next --wait", "cplat component ship wait"],  # interface: wait command names the prompt carries
+    "system/references/ship-loop.md": ["cplat system ship next --wait", "cplat component ship wait"],  # interface: wait command names the prompt carries
     "component/commands/release.md": ["cplat component release wait", "cplat pr wait"],  # interface: wait command names the prompt carries
 }
 

@@ -42,6 +42,7 @@
       "Bash(gh api repos/*/actions/jobs/*/logs*)",
       "Bash(gh api repos/*/commits/*/check-runs*)",
       "Bash(docker build *)",
+      "Bash(docker pull *)",
       "Bash(docker run --rm *)",
       "Bash(docker image inspect *)",
       "Bash(docker rmi *)",

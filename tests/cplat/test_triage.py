@@ -39,15 +39,28 @@ def run(*argv):
 
 # ---------------- queue ----------------
 
-def test_queue_is_triage_without_a_decision_oldest_first():
+def test_queue_is_every_issue_without_a_decision_oldest_first():
     issues = [issue(3, ["triage"], created="2026-10-03T00:00:00Z"), issue(1, ["triage", "bug"], created="2026-10-01T00:00:00Z"),
-              issue(2, ["triage", "needs-info"]), issue(4, ["tracked"]), issue(5, [])]
-    assert [i["number"] for i in triage.queue(issues)] == [1, 3]
+              issue(2, ["triage", "needs-info"]), issue(4, ["tracked"]), issue(5, [], created="2026-10-02T00:00:00Z")]
+    assert [i["number"] for i in triage.queue(issues)] == [1, 5, 3]
 
 
-def test_new_adds_issues_without_any_triage_label_but_not_decided_ones():
-    issues = [issue(1, ["triage"]), issue(2, []), issue(3, ["good first issue"]), issue(4, ["wontfix"]), issue(5, ["bug"])]
-    assert [i["number"] for i in triage.queue(issues, new=True)] == [1, 2, 3]
+def test_issues_filed_without_the_triage_label_are_in_the_queue():
+    """`/issue:report` and the platform repo's forms filed `feedback` + `bug`/`enhancement`; a label of the fixed set hid them from every mode."""
+    issues = [issue(1, ["bug"]), issue(2, ["feedback", "enhancement"]), issue(3, ["good first issue"]), issue(4, [])]
+    assert [i["number"] for i in triage.queue(issues)] == [1, 2, 3, 4]
+    assert [i["number"] for i in triage.queue(issues, new=True)] == [1, 2, 3, 4]
+
+
+@pytest.mark.parametrize("label", ["needs-info", "tracked", "question", "duplicate", "wontfix"])
+def test_a_decision_keeps_an_issue_out(label):
+    assert triage.queue([issue(1, ["triage", "bug", label])]) == []
+
+
+@pytest.mark.parametrize("label", ["triaged", "needs-decision", "retro", "notify", "in-progress"])
+def test_a_routed_note_or_started_issue_is_out_unless_labelled_triage(label):
+    assert triage.queue([issue(1, ["bug", label])]) == []
+    assert [i["number"] for i in triage.queue([issue(2, ["triage", "bug", label])])] == [2]
 
 
 def test_waiting_lists_needs_info_only():
