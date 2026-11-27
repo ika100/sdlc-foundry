@@ -17,6 +17,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import fixcause
 import platrelease_changelog as fragments
 import pr_rules
 import promptrules
@@ -67,6 +68,32 @@ def rule_problems(repo: Path) -> list[str]:
     return out
 
 
+def _cause_problems(repo: Path, path: str, notes: list[str] | None) -> list[str]:
+    """The cause rule of one added fragment (spec 223): a `fixed` fragment ends in a valid cause line, and a PR or tag it
+    names exists on GitHub; GitHub that cannot answer is a WARNING note, not a problem."""
+    try:
+        text = (repo / path).read_text()
+    except OSError:
+        return []
+    err = fixcause.form_error(path, text)
+    if err:
+        return [f"changelog fragment: {err}"]
+    cause = fixcause.parse_cause(text) if path.endswith(".fixed.md") else None
+    if cause is None or cause.kind not in ("prs", "version"):
+        return []
+    slug = fixcause.slug_of(repo)
+    if slug is None:
+        what = f"#{cause.prs[0]}" if cause.kind == "prs" else f"v{cause.version}"
+        errors, warnings = [], [f"GitHub unreachable, Caused by {what} was not checked (the repo's name is unknown)"]
+        if cause.kind == "prs" and len(cause.prs) > 1:
+            warnings = [f"GitHub unreachable, Caused by #{n} was not checked (the repo's name is unknown)" for n in cause.prs]
+    else:
+        errors, warnings = fixcause.verify(slug, cause)
+    if notes is not None:
+        notes.extend(f"WARNING: changelog fragment: {path}: {w}" for w in warnings)
+    return [f"changelog fragment: {path}: {e}" for e in errors]
+
+
 def check(repo: Path, *, title: str, body: str, labels: list[str], base: str, fix: bool,
           rules: tuple[str, ...] = RULES, notes: list[str] | None = None) -> tuple[str, list[str]]:
     """(the title to use, the problems of the named rules). Each problem is one line that says what to do.
@@ -93,6 +120,8 @@ def check(repo: Path, *, title: str, body: str, labels: list[str], base: str, fi
             fragments.parse_fragment(Path(f).name, (repo / f).read_text())
         except (fragments.FragmentError, OSError) as e:
             problems.append(f"changelog fragment: {e}")
+            continue
+        problems.extend(_cause_problems(repo, f, notes))
     code = [f for f in files if f.startswith(pr_rules.CODE)]
     if "fragment" in rules and kind in KINDS_WITH_ENTRY and code and not new_fragments and "docs/CHANGELOG.md" not in files:
         problems.append(f"changelog fragment: a `{kind}` PR that changes {len(code)} platform file(s) adds none; write "
