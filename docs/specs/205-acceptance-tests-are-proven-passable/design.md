@@ -65,12 +65,15 @@
 - **A test traces to criteria by its own text first.** Test files mix criteria (`test_205_build_red_check.py` holds
   AC-205.6 and AC-205.7 tests), and an amendment often adds tests to an existing file, so the file-level trace of `cplat
   spec trace` alone would pull built tests back in, which A10 rules out. Only active ids of the spec's own number count.
-  For a Python test function, in this order, the first step that finds an id wins:
+  For a Python test function, in this order, the first step that finds an id of any spec wins (a test that names only
+  another spec's criterion, `# AC-189.1`, traces to none of this spec's):
   1. the ids in its source lines, from the first decorator to `end_lineno` (so the `# AC-…` comment on the `def`
      line, the docstring and the body), and in its name as a slug (`…_ac_205_8` → `AC-205.8`; the pattern is
      `ac_(\d{3,})_(\d+)`, case-insensitive, matched whole between underscores or at the ends of the name);
   2. for a method, the same for its class (the decorators, the `class` line, the class docstring and the class name);
-  3. the ids of the whole file, as `cplat spec trace` finds them.
+  3. the ids of the whole file, as `cplat spec trace` finds them, but only for a test the build added or changed: a test
+     whose source is the same at the branch's merge base with `origin`'s default branch traces to none (without a
+     merge base, step 3 applies to every test).
   A node id's `[…]` parametrize suffix is dropped before the lookup. A file that does not parse uses the `def` line
   (`spec._TEST_DEFS[0]`) and the name slug, then step 3.
 - **Judged tests and the labels.** A test is **judged** when at least one of its criteria is new or changed. It is
