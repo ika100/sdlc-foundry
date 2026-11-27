@@ -32,7 +32,7 @@ def test_a_database_backed_up_to_an_in_cluster_bucket_waits_for_it_before_the_sc
     assert j["apiVersion"] == "batch/v1" and j["kind"] == "Job" and j["metadata"]["name"] == "shop-orders-db-bucket-wait"
     ann = j["metadata"]["annotations"]
     assert ann == {"argocd.argoproj.io/hook": "Sync", "argocd.argoproj.io/sync-wave": "1",
-                   "argocd.argoproj.io/hook-delete-policy": "BeforeHookCreation,HookSucceeded"}
+                   "argocd.argoproj.io/hook-delete-policy": "BeforeHookCreation"}
     sched = y(g, f"{dd()}/scheduledbackup.yaml")
     assert int(sched["metadata"]["annotations"]["argocd.argoproj.io/sync-wave"]) > int(ann["argocd.argoproj.io/sync-wave"])
     assert sched["spec"]["immediate"] is True, "the first base backup still runs at once, only after the bucket answers"
@@ -66,6 +66,7 @@ def test_the_wait_job_runs_like_the_credentials_job_507(tmp_path):
                                     "readOnlyRootFilesystem": True, "capabilities": {"drop": ["ALL"]}}
     assert c["resources"]["requests"] and c["resources"]["limits"]["memory"]
     assert spec["activeDeadlineSeconds"] > r.BUCKET_WAIT_SECONDS
+    assert spec["ttlSecondsAfterFinished"] > 0, "the finished Job goes away in the background; Argo CD never waits for it (#1010)"
     assert "app.kubernetes.io/name" in spec["template"]["metadata"]["labels"]
     assert spec["template"]["metadata"]["labels"]["app.kubernetes.io/name"] != "orders-db", "the pod is not selected as the database"
 
