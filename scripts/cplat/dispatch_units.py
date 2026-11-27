@@ -319,6 +319,26 @@ def _detached_worktree(repo: Path, slug: str, cand) -> Path:
     return path
 
 
+def sync_branch(unit: dict) -> str | None:
+    """#1101: fast-forward the unit's worktree branch to `origin/<branch>` when it is behind and the tree is clean, so a restart or land
+    never works on a commit the remote has moved past. Returns a note when it moved; None when nothing to do (up to date, ahead,
+    diverged, dirty, no remote branch): a diverged branch is left for the run to report."""
+    wt, branch = unit.get("worktree"), unit.get("branch")
+    if not wt or not branch or unit.get("kind") in FILLER:
+        return None
+    git(["fetch", "-q", "origin", branch], cwd=wt, check=False)
+    remote = f"refs/remotes/origin/{branch}"
+    if not _ref_exists(Path(wt), remote) or git(["status", "--porcelain"], cwd=wt, check=False):
+        return None
+    if core.run(["git", "merge-base", "--is-ancestor", "HEAD", remote], cwd=wt, check=False).returncode != 0:
+        return None
+    if git(["rev-parse", "HEAD"], cwd=wt, check=False) == git(["rev-parse", remote], cwd=wt, check=False):
+        return None
+    if core.run(["git", "merge", "--ff-only", "-q", remote], cwd=wt, check=False).returncode != 0:
+        return None
+    return f"fast-forwarded {unit['unit']} to origin/{branch}"
+
+
 def _discard(repo: Path, path: Path, branch: str, created: bool) -> None:
     git(["worktree", "remove", "--force", str(path)], cwd=repo, check=False)
     if created:
@@ -567,6 +587,7 @@ def advance(repo: Path, slug: str, unit: dict, policy) -> Step:
 def _start_land(repo: Path, unit: dict, pr: str | None) -> list[str]:
     n = int(unit.get("land_starts") or 0) + 1
     update_unit(unit["worktree"], lambda u: u.update(status="landing", pr=pr, landed=None, landed_summary=None, land_starts=n))
+    sync_branch(unit)
     try:
         pid = spawn_land(repo, {**unit, "pr": pr})
     except OSError as e:
@@ -719,12 +740,13 @@ def restart(repo: Path, slug: str, unit: dict, policy, *, count: bool = True) ->
         git(["stash", "push", "-u", "-m", STASH_MESSAGE], cwd=wt, check=False)
     ds.clear_stop(wt)
     starts = int(unit.get("starts") or 1) + (1 if count else 0)
+    synced = sync_branch(unit)
     try:
         pid = spawn(unit, policy)
     except OSError as e:
         return escalate(repo, slug, unit, f"the headless process could not be started: {e}", "environment").lines
     update_unit(wt, lambda u: u.update(pid=pid, starts=starts, status="running"))
-    return [f"restarted {unit['unit']} (start {starts})" if count else f"restarted {unit['unit']} (resumed)"]
+    return [*([synced] if synced else []), f"restarted {unit['unit']} (start {starts})" if count else f"restarted {unit['unit']} (resumed)"]
 
 
 # ---------------- pause ----------------

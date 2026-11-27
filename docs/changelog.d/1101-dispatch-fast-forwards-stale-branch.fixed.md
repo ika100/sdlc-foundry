@@ -1,0 +1,1 @@
+**A dispatcher restart or land works on the remote branch, not a stale local one (#1101).** Before a unit is restarted or its land starts, the worktree's branch is fast-forwarded to `origin/<branch>` when it is behind and the tree is clean, so a conflict already resolved and pushed is no longer reported again as a human decision. A diverged or dirty branch is left as it was.

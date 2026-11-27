@@ -215,3 +215,41 @@ def test_start_resumes_a_dispatcher_claim_without_a_second_one(env):
     env.issue(1, labels=["triaged", "in-progress"], comments=[f"{claim.MARK}\nClaimed for branch `fix/issue-1` (cplat dispatch)."])
     res = du.start(env.repo, SLUG, cand(1), "single", 1, policy(env))
     assert res.unit and len(env.comments_of(1)) == 1
+
+
+def _synced_pair(tmp_path):
+    """An origin on branch `feat` and a clone (the unit worktree) on it; returns (origin, clone, unit)."""
+    origin, clone = tmp_path / "origin", tmp_path / "clone"
+    git(tmp_path, "init", "-q", "-b", "feat", str(origin))
+    git(origin, "config", "user.name", "t")
+    git(origin, "config", "user.email", "t@example.com")
+    (origin / "a").write_text("1")
+    git(origin, "add", "a")
+    git(origin, "commit", "-q", "-m", "one")
+    git(tmp_path, "clone", "-q", str(origin), str(clone))
+    git(clone, "config", "user.name", "t")
+    git(clone, "config", "user.email", "t@example.com")
+    return origin, clone, {"unit": "spec-1.1", "kind": "ship", "worktree": str(clone), "branch": "feat"}
+
+
+def test_a_stale_unit_branch_is_fast_forwarded_to_the_remote_one(tmp_path):
+    origin, clone, unit = _synced_pair(tmp_path)
+    (origin / "a").write_text("2")
+    git(origin, "commit", "-q", "-am", "two")
+    assert du.sync_branch(unit) == "fast-forwarded spec-1.1 to origin/feat"
+    assert git(clone, "rev-parse", "HEAD") == git(origin, "rev-parse", "HEAD")
+    assert du.sync_branch(unit) is None                       # up to date: nothing to do
+
+
+def test_a_diverged_or_dirty_unit_branch_is_left_alone(tmp_path):
+    origin, clone, unit = _synced_pair(tmp_path)
+    (origin / "a").write_text("2")
+    git(origin, "commit", "-q", "-am", "remote")
+    (clone / "b").write_text("x")
+    git(clone, "add", "b")
+    git(clone, "commit", "-q", "-m", "local")
+    head = git(clone, "rev-parse", "HEAD")
+    assert du.sync_branch(unit) is None and git(clone, "rev-parse", "HEAD") == head      # diverged
+    git(clone, "reset", "-q", "--hard", "HEAD~1")
+    (clone / "a").write_text("dirty")
+    assert du.sync_branch(unit) is None and (clone / "a").read_text() == "dirty"         # dirty
