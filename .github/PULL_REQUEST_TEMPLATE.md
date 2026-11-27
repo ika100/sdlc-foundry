@@ -9,6 +9,7 @@
 - [ ] `uv run scripts/shapes.py check`, `python3 scripts/pin-actions.py --check` and `pytest tests/cplat` pass locally
 - [ ] Plugin changed? Version bumped in `plugin.json` **and** `.claude-plugin/marketplace.json`
 - [ ] User-visible change? One changelog fragment `docs/changelog.d/<id>-<slug>.<added|changed|fixed>.md` (not an edit of `docs/CHANGELOG.md`)
+- [ ] A `fixed` fragment ends in `Caused by: #<PR> | v<X.Y.Z> | none | unknown`
 - [ ] ADR added or updated if this changes how the platform works
 - [ ] No secrets or personal data in code, tests, fixtures or screenshots
 
