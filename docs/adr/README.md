@@ -129,3 +129,4 @@ Decisions that shape how the platform works, with the context and the alternativ
 | [128](128-unit-briefings-are-cut-from-the-build-instructions.md) | A unit session's instructions are cut at print time by heading key from build.md and unit-mode.md through one mapping in code, guarded by tests and the rules check |
 | [129](129-a-system-ships-mechanical-loop-runs-in-cplat.md) | After phase plan a system ship's publish, repos, land and completion run in a detached cplat driver that starts no model; the session builds the gitops entry, waits and hands over |
 | [130](130-triage-closes-confirmed-issues.md) | Triage closes confirmed question, duplicate and wontfix issues and silent needs-info issues as not planned; comments to outside reporters use plain words. |
+| [131](131-fix-entries-name-their-cause.md) | A platform fix entry names its cause in a closing Caused by: line; change-quality derives the change-failure rate from it |
