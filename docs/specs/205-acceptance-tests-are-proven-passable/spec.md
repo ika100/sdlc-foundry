@@ -1,7 +1,7 @@
 ---
 spec_id: 205-acceptance-tests-are-proven-passable
 title: Acceptance tests are proven passable before they freeze
-status: building
+status: done
 priority: P1
 shape: platform
 ---
@@ -72,3 +72,4 @@ None.
 - 2026-11-27 amended (#1094, decided by the user): an amended spec's red check judges only the tests of new or changed criteria; the other tests must pass, and a failing one escalates as a regression (AC-205.8, A6, A10, A11)
 - 2026-11-27 approved; the old plan is plan.v1.md
 - 2026-11-27 building
+- 2026-11-27 done
