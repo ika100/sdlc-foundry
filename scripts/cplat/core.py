@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import contextlib
+import contextvars
 import json
 import os
 import re
@@ -53,7 +54,9 @@ NETWORK_FLAKY = re.compile(
     r"connection reset|i/o timeout|unexpected EOF|operation timed out|context deadline exceeded|HTTP 5\d\d|\b50[234]\b"
     r"|bad gateway|service unavailable|gateway time-?out|something went wrong|remote end hung up unexpectedly|early EOF", re.I)
 NETWORK_RETRY_MAX_WAIT = 5 * 60   # seconds one call may wait in total for the network to come back
-NETWORK_PATIENCE: float | None = None   # set by `network_patience`: a longer limit for a wait that has its own timeout (#1077)
+# set by `network_patience`: a longer limit for a wait that has its own timeout (#1077); a context variable, so two waits in
+# two threads of one process (or a thread still waiting after its caller moved on) never see or restore each other's limit
+NETWORK_PATIENCE: contextvars.ContextVar[float | None] = contextvars.ContextVar("network_patience", default=None)
 NETWORK_SAY_EVERY = 60            # seconds between two "network error" lines during a long wait
 _GIT_NETWORK = ("fetch", "pull", "ls-remote", "clone")   # push has its own rule (PUSH_TRANSIENT)
 _GH_SAFE = ("view", "list", "status", "checks", "diff", "ready", "edit", "download")
@@ -65,12 +68,11 @@ def network_patience(seconds: float):
     """Inside the block a dropped network is waited out for up to `seconds` per call instead of NETWORK_RETRY_MAX_WAIT: `cplat pr
     wait` uses its own timeout, so a lost connection no longer ends it with the PR unmerged (#1077). The merge lock is let go of
     (RATE_WAIT_HOOKS) for the wait."""
-    global NETWORK_PATIENCE
-    before, NETWORK_PATIENCE = NETWORK_PATIENCE, seconds
+    token = NETWORK_PATIENCE.set(seconds)
     try:
         yield
     finally:
-        NETWORK_PATIENCE = before
+        NETWORK_PATIENCE.reset(token)
 
 
 def _is_push(cmd: list[str]) -> bool:
@@ -237,13 +239,14 @@ def _run(cmd: list[str], cwd: Path | str | None, check: bool, capture: bool, env
             push_backoff = min(push_backoff * 2, 120.0)
             continue
         dropped = network_retry(cmd, said) if proc.returncode != 0 and not transient else None
-        limit = NETWORK_RETRY_MAX_WAIT if NETWORK_PATIENCE is None else max(NETWORK_PATIENCE, NETWORK_RETRY_MAX_WAIT)
+        patience = NETWORK_PATIENCE.get()
+        limit = NETWORK_RETRY_MAX_WAIT if patience is None else max(patience, NETWORK_RETRY_MAX_WAIT)
         if dropped and offline + net_backoff <= limit:
             if net_said is None or offline - net_said >= NETWORK_SAY_EVERY:
                 net_said = offline
                 print(f"`{' '.join(str(c) for c in cmd[:3])}` hit a network error ({dropped}): trying again in {int(net_backoff)} s"
                       f" (waited {int(offline // 60)} of {int(limit // 60)} min)", file=sys.stderr, flush=True)
-            if NETWORK_PATIENCE is not None and not net_paused:
+            if patience is not None and not net_paused:
                 net_paused = True
                 for hook in list(RATE_WAIT_HOOKS):
                     net_wait.enter_context(hook())

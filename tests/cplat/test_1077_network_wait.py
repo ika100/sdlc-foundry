@@ -34,7 +34,7 @@ def test_a_long_network_loss_is_waited_out_with_a_line_a_minute(monkeypatch, sta
     capsys.readouterr()
     with core.network_patience(3600):
         assert core.run(["gh", "pr", "view", "1"]).stdout == "ok\n"
-    assert sum(slept) > 1500 and core.NETWORK_PATIENCE is None
+    assert sum(slept) > 1500 and core.NETWORK_PATIENCE.get() is None
     lines = [x for x in capsys.readouterr().err.splitlines() if "network error" in x]
     assert 1 <= len(lines) < 40 and "of 60 min" in lines[-1]
 
@@ -63,3 +63,28 @@ def test_the_merge_lock_is_free_during_the_network_wait(monkeypatch, state):
         assert core.run(["gh", "pr", "view", "1"]).stdout == "ok\n"
         assert merge_lock._holder("a/b")["who"] == "first"
     assert during == {"got": True, "done": True}
+
+
+def test_two_waits_in_two_threads_never_leave_their_limit_behind():
+    """Two `pr wait`s in one process (two threads, as test_167 lands do) end in any order without leaking a limit."""
+    first_in, second_done = threading.Event(), threading.Event()
+    seen = {}
+
+    def first():
+        with core.network_patience(60):
+            first_in.set()
+            second_done.wait(5)          # the second wait starts and ends while this one is still inside
+            seen["first"] = core.NETWORK_PATIENCE.get()
+
+    def second():
+        first_in.wait(5)
+        with core.network_patience(90):
+            seen["second"] = core.NETWORK_PATIENCE.get()
+        second_done.set()
+
+    threads = [threading.Thread(target=first), threading.Thread(target=second)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(10)
+    assert seen == {"first": 60, "second": 90} and core.NETWORK_PATIENCE.get() is None
