@@ -384,6 +384,9 @@ def last_message(log: Path, start: int) -> str:
     return "\n".join(ln for ln in text.splitlines() if not ln.startswith("===")).strip()
 
 
+BG_WAIT_CEILING = "CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS"   # `claude -p` stops background subagents 10 min after the last turn; 0 waits (#1040), the run timeout bounds it
+
+
 def run_once(cmd: list[str], repo: Path, log: Path, minutes: float, run_id: str | None = None, session_id: str | None = None,
              guard: loopguard.Guard | None = None) -> int:
     session_id = session_id or session_of(cmd)
@@ -394,7 +397,7 @@ def run_once(cmd: list[str], repo: Path, log: Path, minutes: float, run_id: str 
         fh.flush()
         try:
             p = subprocess.Popen(cmd, cwd=repo, stdout=fh, stderr=subprocess.STDOUT,
-                                 env=telemetry.merge_env({**os.environ, "CPLAT_HEADLESS": "1", **session_env, **({"CPLAT_RUN_PARENT": run_id} if run_id else {})}, otel))
+                                 env=telemetry.merge_env({**os.environ, "CPLAT_HEADLESS": "1", BG_WAIT_CEILING: "0", **session_env, **({"CPLAT_RUN_PARENT": run_id} if run_id else {})}, otel))
         except FileNotFoundError:
             raise PlatformError(f"`{cmd[0]}` is not installed or not on PATH", hint="install Claude Code, or set CPLAT_CLAUDE") from None
         try:

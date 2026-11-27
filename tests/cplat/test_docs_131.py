@@ -59,5 +59,5 @@ def test_the_ship_stop_hook_also_runs_when_cplat_unit_is_set():  # AC-131.2
 # ---------------- AC-131.11: the system ship command ----------------
 
 def test_system_ship_tells_what_to_do_with_a_failed_repo_preflight():  # AC-131.11
-    t = read(ROOT / "plugins" / "system" / "commands" / "ship.md")
+    t = read(ROOT / "plugins" / "system" / "references" / "ship-loop.md")
     assert "preflight failed" in t

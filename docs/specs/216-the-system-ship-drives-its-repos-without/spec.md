@@ -1,7 +1,7 @@
 ---
 spec_id: 216-the-system-ship-drives-its-repos-without
 title: The system ship drives its repos without a model
-status: approved
+status: done
 priority: P1
 shape: platform
 ---
@@ -91,3 +91,5 @@ The switch, the simulation and the measure.
 - 2026-11-21 created
 - 2026-11-21 priority P1 proposed: P1: normal bug or feature
 - 2026-11-23 approved
+- 2026-11-23 building
+- 2026-11-24 done

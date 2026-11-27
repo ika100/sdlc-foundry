@@ -15,7 +15,6 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | Spec | Priority | Status | Criteria | Tracks |
 |---|---|---|---|---|
 | [107-open-source-tools-are-adopted-on](specs/107-open-source-tools-are-adopted-on/spec.md) — Open-source tools are adopted on measured value | P1 | approved | 11 | #164 |
-| [216-the-system-ship-drives-its-repos-without](specs/216-the-system-ship-drives-its-repos-without/spec.md) — The system ship drives its repos without a model | P1 | approved | 12 |  |
 | [220-a-docs-only-land-does-not-wait-for-a](specs/220-a-docs-only-land-does-not-wait-for-a/spec.md) — A docs-only land does not wait for a code PR's catch-up e2e | P1 | approved | 10 | #280 |
 | [221-a-net-library-shape](specs/221-a-net-library-shape/spec.md) — A .NET library shape | P1 | approved | 11 | #720 |
 | [177-triage-asks-reporters-plainly-and-closes](specs/177-triage-asks-reporters-plainly-and-closes/spec.md) — Triage asks reporters plainly and closes what needs no work | P2 | approved | 4 |  |
@@ -202,6 +201,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [213-library-releases-publish-their-package](specs/213-library-releases-publish-their-package/spec.md) — Library releases publish their package | P1 | done | 8 |  |
 | [214-a-typescript-service-shape](specs/214-a-typescript-service-shape/spec.md) — A TypeScript service shape | P1 | done | 11 | #716 |
 | [215-a-typescript-library-shape](specs/215-a-typescript-library-shape/spec.md) — A TypeScript library shape | P1 | done | 11 | #717 |
+| [216-the-system-ship-drives-its-repos-without](specs/216-the-system-ship-drives-its-repos-without/spec.md) — The system ship drives its repos without a model | P1 | done | 12 |  |
 | [217-a-java-library-shape](specs/217-a-java-library-shape/spec.md) — A Java library shape | P1 | done | 11 | #718 |
 | [218-a-net-service-shape](specs/218-a-net-service-shape/spec.md) — A .NET service shape | P1 | done | 11 | #719 |
 | [219-website-specs-get-a-ux-design-step](specs/219-website-specs-get-a-ux-design-step/spec.md) — Website specs get a UX design step | P1 | done | 11 | #715 |
