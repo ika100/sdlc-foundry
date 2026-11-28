@@ -109,7 +109,8 @@ def _start(repo: Path, once: bool) -> int:
                 signal.signal(s, h)
     if restart:        # the lock is released; the new process takes it again, all state is on disk (#1108)
         _out("platform checkout moved: the loop restarts with the new code")
-        execv(sys.executable, [sys.executable, str(du.CPLAT), "dispatch", "start", "--repo", str(repo)])
+        argv = [*du.cplat_cmd(), "dispatch", "start", "--repo", str(repo)]
+        execv(argv[0], argv)
     return 0
 
 
@@ -158,7 +159,7 @@ def _loop(repo: Path, slug: str, policy, stop: dict) -> bool:
 
 def spawn_loop(repo: Path, log: Path) -> int:   # tests replace this
     """The loop in a new session: stdin closed, output appended to `log`. Returns its pid."""
-    return du._detach([sys.executable, str(du.CPLAT), "dispatch", "start", "--repo", str(repo)], repo, dict(os.environ), log)
+    return du._detach([*du.cplat_cmd(), "dispatch", "start", "--repo", str(repo)], repo, dict(os.environ), log)
 
 
 def _detach(repo: Path) -> int:
