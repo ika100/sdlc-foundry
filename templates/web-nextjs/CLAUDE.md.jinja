@@ -91,7 +91,7 @@ Updates (`/platform:update`) overwrite the skeleton files below. Put your own wo
 
 CI's `docker` job builds the multi-stage, non-root image on every run and pushes on `main` (`latest`, `sha-<short>`) and on `v*.*.*` tags (semver tags). Registry: `{{ docker_registry }}/{{ project_name }}`, authenticated with `GITHUB_TOKEN`.
 
-A private `@<owner>` package needs the library's `.npmrc` lines and the repository secret `PACKAGES_READ_TOKEN`: CI passes it to the install steps and to the image build as a BuildKit secret (never in a layer or build argument). Locally, `export NODE_AUTH_TOKEN=$(gh auth token)` before `devbox run image-build`; without it the build runs with no token.
+A private `@<owner>` package needs the library's `.npmrc` lines and the repository secret `PACKAGES_READ_TOKEN`: CI passes it to the install steps and to the image build as a BuildKit secret (never in a layer or build argument). Locally, `export NODE_AUTH_TOKEN=$(gh auth token)` before `devbox run image-build`; without it the build runs with no token. <!-- pragma: allowlist secret -->
 
 ## Deployment
 
