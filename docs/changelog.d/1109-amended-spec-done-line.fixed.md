@@ -1,1 +1,3 @@
 **The build of an amendment adds a dated `done` line to the spec's Changelog (#1109).** A spec that is already `done` and amended in place got no new `done` bullet when a fix or ship built the amendment, so the red check of the next amendment (AC-205.8) compared with the old `done` commit and judged the earlier amendment's criteria again. `cplat pr open` now appends the `done` bullet to an amended, done spec in a PR that also changes files outside `docs/`.
+
+Caused by: unknown
