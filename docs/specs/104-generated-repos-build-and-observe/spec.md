@@ -1,7 +1,7 @@
 ---
 spec_id: 104-generated-repos-build-and-observe
 title: Generated repos build and observe reliably
-status: building
+status: done
 priority: P1
 tracks: [143, 965]
 ---
@@ -68,3 +68,4 @@ As a platform maintainer, I want the platform's own tests to generate a repo and
 - 2026-11-27 amended: the user answered both open questions as suggested.
 - 2026-11-27 approved; the old plan is plan.v1.md
 - 2026-11-27 building
+- 2026-11-28 done

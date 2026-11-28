@@ -17,7 +17,6 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [107-open-source-tools-are-adopted-on](specs/107-open-source-tools-are-adopted-on/spec.md) — Open-source tools are adopted on measured value | P1 | approved | 11 | #164 |
 | [220-a-docs-only-land-does-not-wait-for-a](specs/220-a-docs-only-land-does-not-wait-for-a/spec.md) — A docs-only land does not wait for a code PR's catch-up e2e | P1 | approved | 10 | #280 |
 | [221-a-net-library-shape](specs/221-a-net-library-shape/spec.md) — A .NET library shape | P1 | approved | 11 | #720 |
-| [177-triage-asks-reporters-plainly-and-closes](specs/177-triage-asks-reporters-plainly-and-closes/spec.md) — Triage asks reporters plainly and closes what needs no work | P2 | approved | 4 |  |
 | [001-create-a-repo-of-any-shape-with-one](specs/001-create-a-repo-of-any-shape-with-one/spec.md) — Create a repo of any shape with one command | P0 | done | 9 |  |
 | [002-generated-repos-enable-their-plugins](specs/002-generated-repos-enable-their-plugins/spec.md) — Generated repos enable their plugins automatically | P0 | done | 2 |  |
 | [003-pull-template-updates-into-an-existing](specs/003-pull-template-updates-into-an-existing/spec.md) — Pull template updates into an existing repo safely | P0 | done | 5 |  |
@@ -107,7 +106,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [101-run-usage-is-exported-live-to](specs/101-run-usage-is-exported-live-to/spec.md) — Run usage is exported live to OpenTelemetry | P1 | done | 11 |  |
 | [102-runs-stay-within-a-budget-and-stop](specs/102-runs-stay-within-a-budget-and-stop/spec.md) — Runs stay within a budget and stop repeating failures | P1 | done | 12 | #141, #144 |
 | [103-validation-runs-what-a-change-can-affect](specs/103-validation-runs-what-a-change-can-affect/spec.md) — Validation runs what a change can affect | P1 | done | 11 | #142 |
-| [104-generated-repos-build-and-observe](specs/104-generated-repos-build-and-observe/spec.md) — Generated repos build and observe reliably | P1 | done | 10 | #143 |
+| [104-generated-repos-build-and-observe](specs/104-generated-repos-build-and-observe/spec.md) — Generated repos build and observe reliably | P1 | done | 12 | #143, #965 |
 | [105-a-deploy-counts-only-after-its-checks](specs/105-a-deploy-counts-only-after-its-checks/spec.md) — A deploy counts only after its checks pass | P1 | done | 8 | #155 |
 | [106-prod-runs-the-exact-image-staging-tested](specs/106-prod-runs-the-exact-image-staging-tested/spec.md) — Prod runs the exact image staging tested | P1 | done | 12 | #157 |
 | [112-fast-cplat-test-job-shared-renders-and](specs/112-fast-cplat-test-job-shared-renders-and/spec.md) — Fast cplat test job: shared renders and sharding | P1 | done | 15 |  |
