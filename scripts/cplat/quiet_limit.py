@@ -14,6 +14,31 @@ STOP_GRACE_SECONDS = 5
 PROGRESS_ENV = "PYTEST_PROGRESS_FILE"
 PLUGIN_DIR = Path(__file__).resolve().parent / "test_progress"
 NOT_REPORTED = "not reported by this test runner"
+WORKERS_ENV = "CPLAT_TEST_WORKERS"
+OVERLOAD_PER_CPU = 1.0            # load per CPU from which a slow run is the machine's, not the tests'
+
+
+def cpus() -> int:   # seam: tests replace this
+    return os.cpu_count() or 1
+
+
+def load() -> float:   # seam: tests replace this
+    try:
+        return os.getloadavg()[0]
+    except (OSError, AttributeError):
+        return 0.0
+
+
+def workers() -> int:
+    """pytest-xdist workers sized by the machine (#1119): the CPUs the current load leaves free, at least 2, at most all CPUs."""
+    n = cpus()
+    return max(2, min(n, round(n - load())))
+
+
+def overloaded() -> float | None:
+    """The load when it reaches `OVERLOAD_PER_CPU` per CPU, else None."""
+    v = load()
+    return v if v >= OVERLOAD_PER_CPU * cpus() else None
 
 
 def progress_env(log: Path) -> tuple[dict[str, str], Path]:
@@ -25,6 +50,7 @@ def progress_env(log: Path) -> tuple[dict[str, str], Path]:
         "PYTHONPATH": f"{PLUGIN_DIR}{os.pathsep}{old_path}" if old_path else str(PLUGIN_DIR),
         "PYTEST_ADDOPTS": f"{old_opts} -p cplat_test_progress".strip(),
         PROGRESS_ENV: str(progress),
+        WORKERS_ENV: str(workers()),
     }, progress
 
 
@@ -84,6 +110,9 @@ def still_running(progress: Path) -> list[str] | None:
 
 def gave_up_lines(script: str, log: Path, progress: Path) -> list[str]:
     lines = [f"FAILED (gave up after {GIVE_UP_LABEL}): devbox run {script} (log: {log})"]
+    busy = overloaded()
+    if busy is not None:
+        lines.append(f"environment: machine overloaded (load {busy:.0f}); the run was slow, not failing")
     tests = still_running(progress)
     if tests is None:
         return lines + [f"still running: {NOT_REPORTED}"]

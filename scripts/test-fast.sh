@@ -5,6 +5,8 @@
 #   otherwise                         -> <args> alone          (e.g. a test file or node id)
 set -euo pipefail
 
+workers="${CPLAT_TEST_WORKERS:-auto}"   # cplat quiet sizes it by the machine load (#1119)
+
 named=0
 for a in "$@"; do
   case "$a" in -*) continue ;; esac
@@ -14,6 +16,6 @@ for a in "$@"; do
 done
 
 if [ "$#" -eq 0 ] || [ "$named" -eq 0 ]; then
-  exec uv run --with-requirements requirements-test.txt pytest -q -n auto tests/cplat "$@"
+  exec uv run --with-requirements requirements-test.txt pytest -q -n "$workers" tests/cplat "$@"
 fi
-exec uv run --with-requirements requirements-test.txt pytest -q -n auto "$@"
+exec uv run --with-requirements requirements-test.txt pytest -q -n "$workers" "$@"
