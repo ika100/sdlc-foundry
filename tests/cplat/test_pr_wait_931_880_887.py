@@ -85,3 +85,21 @@ def test_the_excerpt_leaves_out_the_runners_cleanup_887():
         c = failsum.ci_check(failsum.CiCheck("e2e", "link", None, text), failsum.Context(root=None), [])
         assert c.tail[-1] == "Process completed with exit code 1." and "restore timed out" in c.tail
         assert not any("includeif" in t or "orphan" in t for t in c.tail) and c.exit == "1"
+
+
+def unstarted(c):
+    return dict(c, startedAt="0001-01-01T00:00:00Z")
+
+
+def test_checks_that_never_started_are_not_a_red_failure_1084(fake, tmp_path):  # noqa: F811
+    """#1084: a blocked Actions run fails every check without running it; the wait says so and offers the local gate."""
+    fake.checks = [[unstarted(job("test", "fail")), unstarted(job("lint", "fail", job_id="9"))]]
+    ok, lines = prmod.wait(tmp_path, URL, False, 600, 10, 300)
+    assert not ok and lines[0].startswith("NOT RUN: 2 of 2") and "devbox run ci" in lines[1]
+
+
+def test_a_check_that_ran_keeps_the_wait_red_1084(fake, tmp_path):  # noqa: F811
+    fake.checks = [[unstarted(job("test", "fail")), dict(job("lint", "fail", job_id="9"), startedAt="2026-11-28T10:00:00Z")]]
+    fake.logs["42"] = ["E501"]
+    ok, lines = prmod.wait(tmp_path, URL, False, 600, 10, 300)
+    assert not ok and lines[0].startswith("RED")

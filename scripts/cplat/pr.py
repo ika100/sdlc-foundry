@@ -25,6 +25,7 @@ import pr_open
 import runs
 import ship
 import waits
+import datetime as dt
 from core import PlatformError, run
 
 
@@ -95,6 +96,16 @@ def _wait(repo: Path, pr: str, merge: bool, timeout: float, interval: float, que
         return _watch(repo, url, merge, timeout, interval, queue_timeout, run_id, (slug, who, whole), mode, hold)
 
 
+def never_started(failed: list[dict]) -> bool:
+    """#1084: every red check carries a `startedAt` that gh prints as 0001-01-01, so none of them ran."""
+    def unstarted(c: dict) -> bool:
+        try:
+            return dt.datetime.fromisoformat(str(c["startedAt"]).replace("Z", "+00:00")).year < 2000
+        except (KeyError, ValueError):
+            return False
+    return bool(failed) and all(unstarted(c) for c in failed)
+
+
 def _red(repo: Path, url: str, watch: ship.CheckWatch, cs: list[dict], failed: list[dict], run_id: str | None) -> tuple[bool, list[str], dict]:
     names = sorted({c["name"] for c in failed})
     if watch.refused:      # spec 102: the budget refused a rerun; a ship run is escalated
@@ -104,6 +115,11 @@ def _red(repo: Path, url: str, watch: ship.CheckWatch, cs: list[dict], failed: l
         if st:
             return False, ship.refused(repo, st, watch.refused, lines), section
         return False, [watch.refused, *lines], section
+    if never_started(failed):    # #1084: a blocked Actions run (billing, spending limit) fails every check without running it
+        return False, [f"NOT RUN: {len(failed)} of {len(cs)} check(s) never started on {url}: {', '.join(names)}",
+                       "GitHub Actions did not run them (a billing or spending-limit block, not a failure of the change); "
+                       "nothing stops a manual merge, so run the CI gates locally as the merge gate: devbox run ci"], \
+            {"result": "not-started", "checks": names}
     return False, ship.red(repo, url, cs, failed), {"result": "red", "checks": names}
 
 
