@@ -1,7 +1,7 @@
 ---
 spec_id: 225-reader-docs-whose-samples-run-and-that
 title: Reader docs whose samples run and that read well
-status: draft
+status: approved
 priority: P1
 shape: platform
 ---
@@ -94,3 +94,4 @@ Look.
 - 2026-11-28 created
 - 2026-11-28 priority P1 proposed: P1: normal bug or feature
 - 2026-11-28 amended: recordings show no maintainer account, organisation or home path (open question answered); an `illustration` marker for fragments; glossary first use defined precisely.
+- 2026-11-28 approved
