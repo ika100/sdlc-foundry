@@ -39,22 +39,79 @@
   other directive can change what is tested.
 - **ADR.** The decision outlives this feature, so it gets an ADR: a red acceptance test freezes only when it fails for
   the missing behaviour, and an edit that changes no assertion passes test-diff without a record. The ADR builds on
-  ADR-101. The plan's t5 creates it with `cplat adr add red-tests-fail-for-the-missing-behaviour-before-they-freeze
-  --decision "A red acceptance test freezes only when it fails for the missing behaviour; edits that change no assertion
-  pass test-diff without a record"` (the architect session had no shell) and fills it from this section and Contract 2.
+  ADR-101 and is [ADR-121](../../adr/121-red-tests-fail-for-the-missing-behaviour-before-they-freeze.md).
+
+## Decisions — AC-205.8 (amendment of 2026-11-27, #1094)
+
+- **The scope is a flag of the red check, which `build tests --red` sets.** For an amended spec, `cplat component build
+  tests <id> --red` prints `cplat quiet test-fast --red --spec <spec id> -- <files>`. `quiet_red` then works out the
+  judged criteria and which tests trace to them. A spec built for the first time gets today's command unchanged, so
+  AC-205.6 keeps holding as written. The usage line of `cplat quiet` stays verbatim, because the AC-172.3 and AC-205.5
+  tests pin it; `--spec` is documented in the module docstring only.
+- **"Amended after an earlier build"** means the Changelog has a `done` bullet (`^- \d{4}-\d{2}-\d{2} done\b`) followed
+  later by an `amended` bullet (`^- \d{4}-\d{2}-\d{2} amended\b`). Anything else (no `done`, or `done` as the last
+  status) is a first build, with every test judged (AC-205.8, last sentence). This test reads only the Changelog, so
+  `build tests` can decide without git.
+- **The last `done` commit** is the newest commit in `git log --format=%H -- docs/specs/<id>/spec.md` (from HEAD) whose
+  `spec.md` has, as the **last** bullet of its Changelog, the current file's last `done` bullet (compared with
+  whitespace collapsed). The criteria at that commit are the ones the earlier build built: the `done` bullet stays last
+  until the next amendment adds a bullet. Squash merges keep one such commit on `main`. No such commit (a shallow
+  clone, rewritten history) is exit 2 with a line that says so, and nothing runs, because judging every test would
+  repeat #1094 and judging none would freeze unchecked tests.
+- **Criteria are compared by their text** (A10). A criterion's text is its bullet line, plus any indented continuation
+  lines, after `spec_replace.hash_text`, with whitespace collapsed. An active criterion of today is **new** when its id
+  is not an active criterion at the done commit, and **changed** when its text differs. The Assumptions, Notes and
+  Non-goals do not count. A criterion withdrawn today is not active, so no test traces to it.
+- **A test traces to criteria by its own text first.** Test files mix criteria (`test_205_build_red_check.py` holds
+  AC-205.6 and AC-205.7 tests), and an amendment often adds tests to an existing file, so the file-level trace of `cplat
+  spec trace` alone would pull built tests back in, which A10 rules out. Only active ids of the spec's own number count.
+  For a Python test function, in this order, the first step that finds an id of any spec wins (a test that names only
+  another spec's criterion, `# AC-189.1`, traces to none of this spec's):
+  1. the ids in its source lines, from the first decorator to `end_lineno` (so the `# AC-…` comment on the `def`
+     line, the docstring and the body), and in its name as a slug (`…_ac_205_8` → `AC-205.8`; the pattern is
+     `ac_(\d{3,})_(\d+)`, case-insensitive, matched whole between underscores or at the ends of the name);
+  2. for a method, the same for its class (the decorators, the `class` line, the class docstring and the class name);
+  3. the ids of the whole file, as `cplat spec trace` finds them, but only for a test the build added or changed: a test
+     whose source is the same at the branch's merge base with `origin`'s default branch traces to none (without a
+     merge base, step 3 applies to every test).
+  A node id's `[…]` parametrize suffix is dropped before the lookup. A file that does not parse uses the `def` line
+  (`spec._TEST_DEFS[0]`) and the name slug, then step 3.
+- **Judged tests and the labels.** A test is **judged** when at least one of its criteria is new or changed. It is
+  classed exactly as in AC-205.5, and a `passes` line goes back to the tester as before (A6). An **unjudged** test that
+  passes is printed `passes (not judged: <ids> unchanged)`, with its criteria sorted and joined by `, `. A smoke skip
+  stays `skipped (not judged)`, because smoke tests skip in `test-fast` by design. Any other class of an unjudged test
+  (`missing behaviour`, `test error`, a skip, an xfail, a collection error of its file) is printed `regression — <exception
+  line>`. A file that does not collect runs none of its tests, and A11 asks every unjudged test to pass.
+- **Exit 0** needs at least one test, every judged test `missing behaviour`, every unjudged test `passes (not judged…)`
+  or `skipped (not judged)`, and at least one judged test when a criterion is new or changed. Anything else is 1. The
+  record file and the freeze gate of Contract 4 do not change: the gate needs exit 0, so a regression keeps the tests
+  from freezing.
+- **The orchestrator escalates a regression.** A `regression` line gets no tester round and no `--wrong-failure`
+  record. The build escalates at once with `--cause code`, before any coder runs, with the reason `regression of built
+  criteria: <node id> (<exception line>); …`. The cause is `code` because the code or the tests of criteria that were
+  already built broke, which no spec answer fixes. When a run prints both `regression` lines and `test error` or
+  `passes` lines, the escalation comes first and names the regressions; the person sees the whole output.
+- **Build 2.5 and a task's test run do not change.** `cplat quiet test-fast --red -- <failing tests>` without `--spec`
+  judges the tests it is given (AC-205.7).
+- **ADR.** How an amended spec is rebuilt outlives this feature: its red check judges only the tests of new or changed
+  criteria, and every other test is a regression gate. Plan task t4 creates it with `cplat adr add
+  an-amended-spec-judges-only-the-tests-of-its-changed-criteria --decision "The red check of an amended spec judges only
+  the tests of criteria new or changed since its last done commit; every other test must pass or the build escalates
+  as a regression"` (the architect session had no shell) and builds on ADR-121.
 
 ## Modules
 
 | Module | Responsibility | New / changed |
 |---|---|---|
-| `scripts/cplat/testdiff_neutral.py` | `judge(old, new, name)`: comments, docstrings and static imports as the only difference (AC-205.1 to AC-205.4) | new |
-| `scripts/cplat/spec.py` | `test_diff` calls `testdiff_neutral.judge` after the formatting check; nothing else changes | changed |
-| `scripts/cplat/test_progress/cplat_red_check.py` | pytest plugin: writes one JSON line per failing phase or collection error, and per passed or skipped test | new |
-| `scripts/cplat/quiet_red.py` | `run(cwd, args, raw, on)`, `runs_pytest(cwd)`, `classify(records, root, shape, files)`, the record file | new |
-| `scripts/cplat/quiet.py` | parses `test-fast --red -- <args>` and hands it to `quiet_red.run`; usage line | changed |
-| `scripts/cplat/buildtests.py` | `cplat component build tests <spec> --red` prints the red-check line or `none: …` | changed |
-| `scripts/cplat/testreview.py` | `build reviewed` refuses without a passing red check on the current tests (pytest repos) | changed |
-| build prompt, `build-tighten.md`, svc `tester.md` | Phase 1 red check and rounds; 2.5 harness fix; the tester's own check | changed |
+| `scripts/cplat/testdiff_neutral.py` | `judge(old, new, name)`: comments, docstrings and static imports as the only difference (AC-205.1 to AC-205.4) | new (built) |
+| `scripts/cplat/spec.py` | `test_diff` calls `testdiff_neutral.judge` after the formatting check; nothing else changes | changed (built) |
+| `scripts/cplat/test_progress/cplat_red_check.py` | pytest plugin: writes one JSON line per failing phase or collection error, and per passed or skipped test | new (built) |
+| `scripts/cplat/quiet_red.py` | `run(cwd, args, raw, on, spec_ref=None)`, `runs_pytest(cwd)`, `classify(records, root, shape, files)`, the record file; AC-205.8: calls `red_scope` when `spec_ref` is set | new (built); changed |
+| `scripts/cplat/red_scope.py` | AC-205.8: `amended(spec)`, `done_commit(root, spec)`, `scope(root, spec)`, `test_criteria(path, test, number, active)`, `apply(rows, scope, root)` | new |
+| `scripts/cplat/quiet.py` | parses `test-fast --red [--spec <spec>] -- <args>` and hands it to `quiet_red.run`; usage line | changed |
+| `scripts/cplat/buildtests.py` | `cplat component build tests <spec> --red` prints the red-check line (with `--spec` for an amended spec) or `none: …` | changed |
+| `scripts/cplat/testreview.py` | `build reviewed` refuses without a passing red check on the current tests (pytest repos) | changed (built) |
+| build prompt, `build-tighten.md`, svc `tester.md` | Phase 1 red check and rounds, the regression escalation; 2.5 harness fix; the tester's own check | changed |
 
 ## Contract
 
@@ -188,10 +245,13 @@ red check: 1 missing behaviour, 1 test error, 1 passes, 1 skipped (log: <path>)
   The files come from the arguments, with node ids reduced to their file. Nothing is written to the run record:
   AC-205.6 records wrong failures through `cplat platform runs agent tester --wrong-failure`.
 
-### 3. `cplat component build tests <spec> --red` (AC-205.6)
+### 3. `cplat component build tests <spec> --red` (AC-205.6, AC-205.8)
 
 - Prints `cplat quiet test-fast --red -- <files>`. The files are the trace's test files that match the shape's
   `TEST_FAST` globs (so `e2e/` stays out), sorted and shell-quoted.
+- AC-205.8: when `red_scope.amended(spec)` holds, the line is `cplat quiet test-fast --red --spec <spec id> -- <files>`
+  (the full spec id, e.g. `205-acceptance-tests-are-proven-passable`). `--json` adds `"amended": true|false`; `args`
+  stays the list of files.
 - Prints `none: test-fast does not run pytest` when `quiet_red.runs_pytest(root)` is false, and
   `none: no acceptance test files test-fast runs` when the list is empty.
 - `--red` together with a task or `--load` is a `PlatformError` ("use one of a task, --load, --red"). `--json` adds
@@ -208,6 +268,7 @@ red check: 1 missing behaviour, 1 test error, 1 passes, 1 skipped (log: <path>)
   - a file of the command is missing from `files`;
   - a recorded hash differs from the file's current content.
 - A repo that is not pytest, or a spec without such files, behaves as today. `already reviewed` stays first.
+- AC-205.8 changes nothing here: a scoped run writes the same record, and a regression makes its exit 1.
 
 ### 5. Build orchestration (AC-205.6, AC-205.7)
 
@@ -225,3 +286,57 @@ red check: 1 missing behaviour, 1 test error, 1 passes, 1 skipped (log: <path>)
   $RED --tighten <file> --task <task> --reason '<test>: <exception line>'`. Any other `changed —` line: revert and
   report `UNRESOLVED`." An unresolved fix goes to the person (`build-test-approval.md`). `missing behaviour` lines go
   to a coder as today. In repos without the check, the orchestrator reads the innermost frame from the failure summary.
+
+### 6. `cplat quiet test-fast --red --spec <spec> -- <files>` (AC-205.8)
+
+```
+cplat quiet [--raw] test-fast --red --spec <spec id, number or slug> -- <test file or node id>...
+```
+
+- Parsing: `--spec <ref>` may follow `--red` only, before `--`. `--spec` without a value, or without `--red`, is refused
+  with the usage line of Contract 2, unchanged, and exit 2.
+- Before anything runs:
+  - a `<ref>` that `spec.find` does not resolve: stderr `red check: <the PlatformError message>`, exit 2;
+  - a spec that is not amended after a build (Decisions — AC-205.8): the run is exactly the one of Contract 2;
+  - no last `done` commit: stderr `red check: no commit of docs/specs/<id>/spec.md ends its Changelog with "<done
+    bullet>"; fetch the full history (git fetch --unshallow)`, exit 2.
+- Output: one scope line first, then the rows sorted by node id, then the summary:
+
+```
+red check: judging the tests of AC-205.8 (new or changed since 3f9c2a7); every other test must pass
+tests/cplat/test_205_red_check.py::test_a_ac_205_5: passes (not judged: AC-205.5 unchanged)
+tests/cplat/test_205_amended.py::test_b_ac_205_8: missing behaviour — AttributeError: module 'red_scope' has no attribute 'scope'
+tests/cplat/test_205_build_red_check.py::test_c_ac_205_6: regression — AssertionError: assert 'none: x' == 'cplat quiet …'
+red check: 1 missing behaviour, 1 passes (not judged), 1 regression (log: <path>)
+```
+
+- The scope line lists the new or changed criteria sorted by number, joined by `, `. With none, it is `red check: no
+  criterion is new or changed since <sha7>; every test must pass`.
+- The summary counts, in this order and only when not zero: `missing behaviour`, `test error`, `passes`, `passes (not
+  judged)`, `regression`, `skipped`.
+- Judged tests keep the labels of Contract 2. Unjudged: `passes (not judged: <ids> unchanged)`, `skipped (not judged)`
+  for a smoke skip, else `regression — <exception line>` (for a collection error, its exception line).
+- Exit codes: 0 as in Decisions — AC-205.8; 1 otherwise; 2 usage, unknown spec or no done commit; 124 gave up. The
+  record file is written as in Contract 2.
+
+`red_scope` (no subprocess beyond `git log` and `git show`, through `core.run`):
+
+```
+amended(spec) -> bool                       # Changelog only: a done bullet, then an amended bullet
+done_commit(root, spec) -> str              # PlatformError when not found
+scope(root, spec) -> Scope | None           # None when not amended
+    Scope(spec_id, number, sha, active: set[str], changed: set[str])
+test_criteria(path: Path, test: str, number: str, active: set[str]) -> set[str]   # the three steps above
+apply(rows, scope, root) -> (rows, rc)     # relabels classify()'s rows and computes the exit code
+```
+
+### 7. Build orchestration for an amended spec (AC-205.8)
+
+- **Phase 1** (build.md, the red-check bullet): a `regression` line gets no tester round and no `--wrong-failure`
+  record. The build escalates at once with `--cause code` and the reason `regression of built criteria: <node id>
+  (<exception line>); …`, before Phase 2. `passes (not judged: …)` lines need nothing. Other lines go back as in
+  section 5.
+- **svc tester** (Acceptance mode, step 3): every judged line must be `missing behaviour`. `passes (not judged …)`
+  lines are built criteria and stay untouched. On a `regression` line in its own check before committing, the tester
+  undoes its own edit to that test's file or helper, or reports the line, so that a test of a built criterion is never
+  weakened to pass.

@@ -68,7 +68,8 @@ def wait(repo: Path, pr: str, merge: bool, timeout: float, interval: float, queu
     rid = runs.attach_point(repo)
     own = None if rid else runs.start("pr-wait", repo=slug or runs.repo_slug(repo))
     try:
-        ok, lines, section = _wait(repo, pr, merge, timeout, interval, queue_timeout, rid or own, mode)
+        with core.network_patience(timeout):    # #1077: a lost network is waited out up to the wait's own timeout
+            ok, lines, section = _wait(repo, pr, merge, timeout, interval, queue_timeout, rid or own, mode)
     except BaseException as e:
         if own:
             runs.finish(own, "failed", fields={"pr_wait": _failure_section(e)})
@@ -90,8 +91,8 @@ def _wait(repo: Path, pr: str, merge: bool, timeout: float, interval: float, que
         raise Closed(f"{url} was closed without merging")
     slug, who = merge_lock.slug_of(repo, url), merge_lock.who_of(url)
     whole = merge and "e2e" in dispatch_policy.serialize(repo)   # spec 167: with e2e the lock covers the whole land phase
-    with merge_lock.held(slug, who, timeout, min(interval, 5)) if whole else contextlib.nullcontext():
-        return _watch(repo, url, merge, timeout, interval, queue_timeout, run_id, (slug, who, whole), mode)
+    with land_merge.lock(repo, url, slug, who, timeout, min(interval, 5), mode) if whole else contextlib.nullcontext() as hold:
+        return _watch(repo, url, merge, timeout, interval, queue_timeout, run_id, (slug, who, whole), mode, hold)
 
 
 def _red(repo: Path, url: str, watch: ship.CheckWatch, cs: list[dict], failed: list[dict], run_id: str | None) -> tuple[bool, list[str], dict]:
@@ -107,7 +108,8 @@ def _red(repo: Path, url: str, watch: ship.CheckWatch, cs: list[dict], failed: l
 
 
 def _watch(repo: Path, url: str, merge: bool, timeout: float, interval: float, queue_timeout: float, run_id: str | None,
-           lock: tuple[str, str, bool], mode: land_merge.Mode = land_merge.CATCH_UP) -> tuple[bool, list[str], dict]:
+           lock: tuple[str, str, bool], mode: land_merge.Mode = land_merge.CATCH_UP,
+           hold: merge_lock.Hold | None = None) -> tuple[bool, list[str], dict]:
     watch = ship.CheckWatch(repo, url, queue_timeout, run_id)
     rounds = land_merge.Rounds()
     try:
@@ -120,8 +122,11 @@ def _watch(repo: Path, url: str, merge: bool, timeout: float, interval: float, q
         lines.append(f"GREEN: all {len(cs)} check(s) passed on {url}")
         if merge:
             slug, who, whole = lock
-            with contextlib.nullcontext() if whole else merge_lock.held(slug, who, timeout, min(interval, 5)):
-                settled = land_merge.settle(repo, url, watch, timeout, interval, rounds, run, mode=mode)
+            with contextlib.nullcontext(hold) if whole else land_merge.lock(repo, url, slug, who, timeout, min(interval, 5), mode) as hold:
+                try:
+                    settled = land_merge.settle(repo, url, watch, timeout, interval, rounds, run, mode=mode, hold=hold)
+                finally:
+                    land_merge.record_land(repo, url, watch, hold, mode)
             lines += settled.lines
             if settled.status == "red":
                 return _red(repo, url, watch, settled.cs, settled.failed, run_id)

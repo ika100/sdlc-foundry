@@ -16,6 +16,7 @@ from collections import Counter
 import core
 import escalation_rules
 import feedback
+import runs_chains
 import runs_usage_report
 
 UNKNOWN = "unknown"
@@ -165,6 +166,40 @@ def select(records: list[dict], *, since_days: int, repo: str | None, now: datet
     return kept
 
 
+def _num(value) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _land_group(waits: list[float]) -> dict:
+    d = sorted(waits)
+    if not d:
+        return {"count": 0, "lock_wait_median_min": None, "lock_wait_p90_min": None}
+    return {"count": len(d), "lock_wait_median_min": round(float(statistics.median(d)), 1),
+            "lock_wait_p90_min": round(float(d[math.ceil(0.9 * len(d)) - 1]), 1)}
+
+
+def aggregate_lands(kept: list[dict]) -> dict:
+    """Lock wait per land scope and the two AC-220.9 counts, from the `lands` items (spec 220)."""
+    waits: dict[str, list[float]] = {"docs": [], "code": []}
+    fast = e2e_kept = docs_slow = code_out = 0
+    for r in kept:
+        for item in _list(r.get("lands")):
+            if not isinstance(item, dict) or not _num(item.get("lock_wait_min")):
+                continue
+            scope = item.get("scope")
+            if scope in waits:
+                waits[scope].append(float(item["lock_wait_min"]))
+            fast += item.get("fast_lane") is True
+            e2e_kept += item.get("e2e_kept") is True
+            catch = item.get("lock_wait_catch_up_min")
+            if scope == "docs" and _num(catch) and catch > 5:
+                docs_slow += 1
+            if scope == "code" and item.get("range_scope") == "out" and item.get("catch_up_e2e") is True:
+                code_out += 1
+    return {"docs": _land_group(waits["docs"]), "code": _land_group(waits["code"]), "fast_lane": fast,
+            "e2e_kept": e2e_kept, "docs_waited_behind_catch_up_over_5_min": docs_slow, "code_catch_up_e2e_out_of_scope": code_out}
+
+
 def aggregate(records: list[dict], followups: list[dict], *, malformed: int, buffered: int, since_days: int,
               repo: str | None, store: str, now: datetime.datetime) -> dict:
     kept = select(records, since_days=since_days, repo=repo, now=now)
@@ -227,6 +262,10 @@ def aggregate(records: list[dict], followups: list[dict], *, malformed: int, buf
     }
     out["unattended_ships"] = aggregate_unattended(kept)
     out["person"] = aggregate_person(followups, kept)
+    out["lands"] = aggregate_lands(kept)
+    window_start = datetime.datetime.combine(now.date() - datetime.timedelta(days=since_days), datetime.time(),
+                                             tzinfo=datetime.timezone.utc)
+    out["chains"] = runs_chains.aggregate_chains(kept, window_start=window_start)
     validation = aggregate_validation(kept)
     if validation["rules"]:   # spec 103: only when a run recorded a validation section
         out["validation"] = validation
@@ -380,6 +419,20 @@ def _unclassified_lines(u: dict) -> list[str]:
     return lines
 
 
+def _lands_lines(lands: dict | None) -> list[str]:
+    lines = ["Lands (lock wait median / p90):"]
+    if not lands or not (lands["docs"]["count"] or lands["code"]["count"]):
+        return lines + ["  none"]
+    for name in ("docs", "code"):
+        g = lands[name]
+        lines.append(f"  {name}: " + (f"{g['lock_wait_median_min']:.1f} min / {g['lock_wait_p90_min']:.1f} min (n={g['count']})"
+                                      if g["count"] else "none"))
+    lines.append(f"  fast lane: {lands['fast_lane']}, kept e2e: {lands['e2e_kept']}; docs lands > 5 min behind a catch-up: "
+                 f"{lands['docs_waited_behind_catch_up_over_5_min']}; code lands with an out-of-scope catch-up e2e: "
+                 f"{lands['code_catch_up_e2e_out_of_scope']}")
+    return lines
+
+
 def render_text(agg: dict) -> str:
     w = agg["window"]
     lines = [f"Runs {w['since']} to {w['until']} ({w['days']} days) in {w['store']}" + (f", repo {w['repo']}" if w["repo"] else "")
@@ -391,6 +444,7 @@ def render_text(agg: dict) -> str:
     lines.append("Red checks: " + (", ".join(f"{c['check']} {c['count']}" for c in pw["red_checks"]) or "none"))
     lines.append("Phases (median / p90):")
     lines += [f"  {n}: {_dur(p['median_s'])} / {_dur(p['p90_s'])} (n={p['count']})" for n, p in agg["phases"].items()] or ["  none"]
+    lines += _lands_lines(agg.get("lands"))
     lines.append(f"Escalations per cause: {_pairs(agg['causes'])}")
     lines.append("Top escalation reasons:")
     lines += [f"  {e['count']}  {e['reason']}" for e in agg["escalations"]] or ["  none"]
@@ -408,6 +462,8 @@ def render_text(agg: dict) -> str:
         lines.append(f"Validation misses per rule: {_pairs(validation['misses'])}")
     if "person" in agg:
         lines += _person_lines(agg["person"])
+    if "chains" in agg:
+        lines += runs_chains.chain_lines(agg["chains"])
     lines.append(f"Buffered locally, not included: {agg['buffered']} record(s) (cplat platform runs flush)")
     return "\n".join(lines)
 

@@ -31,6 +31,7 @@ import dispatch_answer
 import dispatch_budget
 import dispatch_cycle
 import dispatch_items
+import dispatch_platform
 import dispatch_policy
 import dispatch_sensor
 import dispatch_setup
@@ -49,6 +50,7 @@ INBOX_KINDS = ("approve", "answer", "escalation", "triage", "budget", "stuck")
 
 sleep = time.sleep         # seams for tests
 clock = time.monotonic
+execv = os.execv
 
 
 def _out(text: str) -> None:
@@ -101,14 +103,28 @@ def _start(repo: Path, once: bool) -> int:
 
         old = {s: signal.signal(s, handler) for s in (signal.SIGINT, signal.SIGTERM)}
         try:
-            _loop(repo, slug, policy, stop)
+            restart = _loop(repo, slug, policy, stop)
         finally:
             for s, h in old.items():
                 signal.signal(s, h)
+    if restart:        # the lock is released; the new process takes it again, all state is on disk (#1108)
+        _out("platform checkout moved: the loop restarts with the new code")
+        execv(sys.executable, [sys.executable, str(du.CPLAT), "dispatch", "start", "--repo", str(repo)])
     return 0
 
 
-def _loop(repo: Path, slug: str, policy, stop: dict) -> None:
+def _moved(repo: Path, started_at: str | None, live: set[int]) -> bool:
+    """True when the platform checkout is at another commit than when the loop started and no unit runs (#1108)."""
+    if started_at is None or live:
+        return False
+    doc = dispatch_platform.state(repo)
+    return bool(doc) and doc["commit"] != started_at
+
+
+def _loop(repo: Path, slug: str, policy, stop: dict) -> bool:
+    """Run cycles until stopped; True when the loop must re-execute itself because the platform checkout moved."""
+    doc = dispatch_platform.state(repo)
+    started_at = doc["commit"] if doc else None
     last_no_starts: str | None = None
     last_cycle = float("-inf")
     pids: set[int] = set()
@@ -131,10 +147,13 @@ def _loop(repo: Path, slug: str, policy, stop: dict) -> None:
             last_cycle = clock()
             live = _live_pids(repo, slug)
             steering = _steering(slug)
+            if not stop["now"] and _moved(repo, started_at, live):
+                return True
         pids = live
         end = clock() + TICK
         while not stop["now"] and clock() < end:
             sleep(min(0.5, max(0.0, end - clock())))
+    return False
 
 
 def spawn_loop(repo: Path, log: Path) -> int:   # tests replace this
@@ -310,8 +329,12 @@ def _resume(repo: Path, item: str | None) -> int:
     if item:
         found = dispatch_items.resolve(repo, slug, item)
         ds.resume_item(slug, found.key)
+        removed, kept = _lift_label(repo, slug, found.key)
+        if kept:
+            _out(f"still held: {found.label}: " + "; ".join(f"#{n} {why}" for n, why in kept))
+            return 1
         _out(f"resumed: {found.label}")
-        for n in _lift_label(repo, slug, found.key):
+        for n in removed:
             _out(f"label removed: #{n}")
         return 0
     ds.resume(slug)
@@ -320,21 +343,44 @@ def _resume(repo: Path, item: str | None) -> int:
     return 0
 
 
-def _lift_label(repo: Path, slug: str, key: str) -> list[int]:
-    """Remove `needs-decision` from the open issues of the item that carry it (a fix: its issue; a spec: the issues its unit tracks)."""
-    worktree = ds.worktree_path(slug, key)
-    unit = ds.read_unit(worktree) if worktree.is_dir() else None
-    numbers = [int(key.split("-", 1)[1])] if key.startswith("issue-") else (du._issues_of(unit) if unit else [])
-    removed = []
-    for n in numbers:
+def _tracked(slug: str, key: str) -> list[int]:
+    """The issues of an item: a fix its issue; a spec the issues of its units (ended ones too) and the issues its spec tracks."""
+    if key.startswith("issue-"):
+        return [int(key.split("-", 1)[1])]
+    numbers: list[int] = []
+    for unit in ds.all_units(slug):
+        if (unit.get("key") or ds.unit_key(str(unit.get("unit") or ""))) == key:
+            numbers += du._issues_of(unit)
+    snap = dispatch_items._snapshot(slug)
+    if snap is not None:
+        want = key.split("-", 1)[1].lstrip("0")
+        for row in [*snap.specs, *snap.drafts]:
+            if str(row.get("id") or "").split("-", 1)[0].lstrip("0") == want:
+                numbers += [int(n) for n in row.get("tracks") or []]
+    return list(dict.fromkeys(numbers))
+
+
+def _lift_label(repo: Path, slug: str, key: str) -> tuple[list[int], list[tuple[int, str]]]:
+    """Remove `needs-decision` from the open issues of the item that carry it and hold the dispatcher's own escalation comment.
+    Returns the issues lifted and those that stay held, each with the reason."""
+    removed: list[int] = []
+    kept: list[tuple[int, str]] = []
+    for n in _tracked(slug, key):
         try:
-            doc = json.loads(du.gh(["issue", "view", str(n), "--json", "state,labels"], cwd=repo) or "{}")
+            doc = json.loads(du.gh(["issue", "view", str(n), "--json", "state,labels,comments"], cwd=repo) or "{}")
         except ValueError:
+            kept.append((n, "cannot be read"))
             continue
         has = any(label.get("name") == du.NEEDS_DECISION for label in doc.get("labels") or [])
-        if doc.get("state") == "OPEN" and has and du.gh(["issue", "edit", str(n), "--remove-label", du.NEEDS_DECISION], cwd=repo) is not None:
+        if doc.get("state") != "OPEN" or not has:
+            continue
+        if key.startswith("spec-") and not any(du.ESCALATION_MARK in str(c.get("body") or "") for c in doc.get("comments") or []):
+            kept.append((n, f"carries {du.NEEDS_DECISION} that a person set: remove it yourself"))
+        elif du.gh(["issue", "edit", str(n), "--remove-label", du.NEEDS_DECISION], cwd=repo) is None:
+            kept.append((n, f"{du.NEEDS_DECISION} could not be removed (gh failed)"))
+        else:
             removed.append(n)
-    return removed
+    return removed, kept
 
 
 def _slots(repo: Path, n: int) -> int:

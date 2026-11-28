@@ -35,6 +35,7 @@ from pathlib import Path
 
 import claim
 import core
+import dispatch_backlog
 import dispatch_budget
 import dispatch_notify
 import dispatch_platform
@@ -318,6 +319,26 @@ def _detached_worktree(repo: Path, slug: str, cand) -> Path:
     return path
 
 
+def sync_branch(unit: dict) -> str | None:
+    """#1101: fast-forward the unit's worktree branch to `origin/<branch>` when it is behind and the tree is clean, so a restart or land
+    never works on a commit the remote has moved past. Returns a note when it moved; None when nothing to do (up to date, ahead,
+    diverged, dirty, no remote branch): a diverged branch is left for the run to report."""
+    wt, branch = unit.get("worktree"), unit.get("branch")
+    if not wt or not branch or unit.get("kind") in FILLER:
+        return None
+    git(["fetch", "-q", "origin", branch], cwd=wt, check=False)
+    remote = f"refs/remotes/origin/{branch}"
+    if not _ref_exists(Path(wt), remote) or git(["status", "--porcelain"], cwd=wt, check=False):
+        return None
+    if core.run(["git", "merge-base", "--is-ancestor", "HEAD", remote], cwd=wt, check=False).returncode != 0:
+        return None
+    if git(["rev-parse", "HEAD"], cwd=wt, check=False) == git(["rev-parse", remote], cwd=wt, check=False):
+        return None
+    if core.run(["git", "merge", "--ff-only", "-q", remote], cwd=wt, check=False).returncode != 0:
+        return None
+    return f"fast-forwarded {unit['unit']} to origin/{branch}"
+
+
 def _discard(repo: Path, path: Path, branch: str, created: bool) -> None:
     git(["worktree", "remove", "--force", str(path)], cwd=repo, check=False)
     if created:
@@ -352,6 +373,19 @@ def _claim(repo: Path, numbers: list[int], branch: str) -> list[int]:
     return fresh
 
 
+def merged_on_main(repo: Path, cand) -> str | None:
+    """#1078: for a ship candidate, the note when `origin/main` (fetched now) already has its spec as `done`: another session shipped it
+    after the snapshot was read. None when it is not done or main cannot be read (the start goes on)."""
+    if cand.kind != "ship" or not cand.spec_id:
+        return None
+    subprocess.run(["git", "fetch", "-q", "origin", "main"], cwd=repo, capture_output=True, check=False)
+    p = subprocess.run(["git", "show", f"origin/main:docs/specs/{cand.spec_id}/spec.md"], cwd=repo, capture_output=True, text=True, check=False)
+    rec = dispatch_backlog._spec_record(cand.spec_id, p.stdout, None) if p.returncode == 0 else None
+    if rec and rec["status"] == "done":
+        return f"{cand.item} is already done on main"
+    return None
+
+
 def start(repo: Path, slug: str, cand, mode: str, slot: int, policy, *, filler: bool = False) -> Start:
     """Design steps 1 to 4 for a ready candidate (`dispatch_backlog.Candidate`). A refused claim returns `held == "claimed"`. A `task` or
     `draft` candidate (the filler queue) takes no claim and no branch; `filler` marks the start line of a filler start of any kind."""
@@ -360,6 +394,9 @@ def start(repo: Path, slug: str, cand, mode: str, slot: int, policy, *, filler: 
     filler = filler or kind in FILLER
     branch = None if kind in FILLER else _branch_of(kind, cand.number, cand.spec_id)
     mode = "single" if kind == "fix" or kind in FILLER else mode
+    if note := merged_on_main(repo, cand):
+        ds.resume_item(slug, cand.key)                      # a hold of an earlier unit clears itself
+        return Start(lines=[f"not started: {note}"])
     numbers = [] if kind in FILLER else [cand.number] if kind == "fix" else [int(n) for n in cand.tracks]
     try:
         fresh = _claim(repo, numbers, branch)
@@ -482,6 +519,7 @@ def _classify(repo: Path, unit: dict) -> Obs:
         res = None
     ended = res if res and res.get("ended_at") else None
     text = str((ended or {}).get("result") or "")
+    said = _one_line((ended or {}).get("message")) or None     # #1107: the session's own last message, when the run only "finished"
     outcome, stop = (ended or {}).get("outcome"), (ended or {}).get("stop_reason")
     if unit["kind"] == "task":
         if outcome == "done":
@@ -497,7 +535,7 @@ def _classify(repo: Path, unit: dict) -> Obs:
         if pr and pr["state"] == "OPEN":
             return Obs("done", pr=pr["url"])
         if ended:
-            return Obs("escalate", cause="decision", reason=f"the draft run ended without a pull request: {_one_line(text) or 'no message'}")
+            return Obs("escalate", cause="decision", reason=f"the draft run ended without a pull request: {said or _one_line(text) or 'no message'}")
         return Obs("restart")
     if unit["kind"] == "ship":
         st = _ship_state(wt) or {}
@@ -517,7 +555,7 @@ def _classify(repo: Path, unit: dict) -> Obs:
             return Obs("done", pr=pr["url"])
         if pr and pr["state"] == "OPEN":
             return Obs("paused") if ds.stop_path(wt).exists() else Obs("land", pr=pr["url"])
-        return Obs("escalate", cause="decision", reason=f"the fix run ended without a pull request: {_one_line(text) or 'no message'}")
+        return Obs("escalate", cause="decision", reason=f"the fix run ended without a pull request: {said or _one_line(text) or 'no message'}")
     return Obs("restart")
 
 
@@ -550,6 +588,7 @@ def advance(repo: Path, slug: str, unit: dict, policy) -> Step:
 def _start_land(repo: Path, unit: dict, pr: str | None) -> list[str]:
     n = int(unit.get("land_starts") or 0) + 1
     update_unit(unit["worktree"], lambda u: u.update(status="landing", pr=pr, landed=None, landed_summary=None, land_starts=n))
+    sync_branch(unit)
     try:
         pid = spawn_land(repo, {**unit, "pr": pr})
     except OSError as e:
@@ -557,6 +596,19 @@ def _start_land(repo: Path, unit: dict, pr: str | None) -> list[str]:
         return []
     update_unit(unit["worktree"], lambda u: u.update(land_pid=pid))
     return [f"landing {unit['unit']}: {pr}"]
+
+
+def red_reason(lines: list[str]) -> str | None:
+    """#1107: the first red check's name and the first line of its failure summary (a gate such as `ci-success` only after the others)."""
+    heads = [i for i, ln in enumerate(lines) if ln.startswith("== check: ")]
+    if not heads:
+        return None
+    pick = next((i for i in heads if not lines[i].split("== check: ", 1)[1].startswith("ci-success")), heads[0])
+    name = lines[pick].split("== check: ", 1)[1].split(" | ", 1)[0].strip()
+    nxt = next((j for j in heads if j > pick), len(lines))
+    first = next((ln.strip() for ln in lines[pick + 1:nxt] if ln.strip()), "")
+    first = first[2:] if first.startswith("- ") else first
+    return _one_line(f"check {name} is red: {first}" if first else f"check {name} is red")
 
 
 def land(repo: Path, slug: str, unit_id: str) -> int:
@@ -577,8 +629,9 @@ def land(repo: Path, slug: str, unit_id: str) -> int:
         landed, lines = "merge-failed", [str(e)]
     except PlatformError as e:                  # checks that never came or never ended
         landed, lines = "merge-failed", [str(e)]
-    summary = "\n".join(lines)[-2000:]
-    print(summary, flush=True)
+    full = "\n".join(lines)[-2000:]
+    summary = (red_reason(lines) if landed == "red" else None) or full
+    print(full, flush=True)
     update_unit(wt, lambda u: u.update(landed=landed, landed_summary=summary))
     return 0 if landed == "merged" else 1
 
@@ -702,12 +755,13 @@ def restart(repo: Path, slug: str, unit: dict, policy, *, count: bool = True) ->
         git(["stash", "push", "-u", "-m", STASH_MESSAGE], cwd=wt, check=False)
     ds.clear_stop(wt)
     starts = int(unit.get("starts") or 1) + (1 if count else 0)
+    synced = sync_branch(unit)
     try:
         pid = spawn(unit, policy)
     except OSError as e:
         return escalate(repo, slug, unit, f"the headless process could not be started: {e}", "environment").lines
     update_unit(wt, lambda u: u.update(pid=pid, starts=starts, status="running"))
-    return [f"restarted {unit['unit']} (start {starts})" if count else f"restarted {unit['unit']} (resumed)"]
+    return [*([synced] if synced else []), f"restarted {unit['unit']} (start {starts})" if count else f"restarted {unit['unit']} (resumed)"]
 
 
 # ---------------- pause ----------------

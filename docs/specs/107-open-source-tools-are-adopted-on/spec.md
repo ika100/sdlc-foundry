@@ -1,7 +1,7 @@
 ---
 spec_id: 107-open-source-tools-are-adopted-on
 title: Open-source tools are adopted on measured value
-status: approved
+status: done
 priority: P1
 tracks: [164]
 ---
@@ -61,3 +61,6 @@ Candidates, exactly the ones issue #164 names: (1) Codebase-Memory MCP, for code
 - 2026-10-25 amended: folded in the user's answers (5 runs per arm, native alternative on paper, ADRs, two records for testmon/impact, evaluation order).
 - 2026-10-25 approved
 - 2026-10-28 part 1 shipped in 4.7.0; part 2 (the benchmark trials, about 30 runs) has not run — the spec stays approved until it does (tracked in #164)
+- 2026-11-27 closed out by the user: candidate 2 rejected for the native selection of spec 212 ([ADR-133](../../adr/133-pytest-testmon-and-pytest-impact-are-not-adopted.md)); candidate 1 rejected after the 2026-11-20 trial ([ADR-134](../../adr/134-codebase-memory-mcp-is-not-adopted.md)); candidates 3 (Semgrep/Trivy) and 4 (tracing review) deferred, not trialled; the benchmark trials of part 2 did not run
+- 2026-11-27 building
+- 2026-11-27 done

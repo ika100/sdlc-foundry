@@ -8,6 +8,8 @@
                                                   fragments in docs/changelog.d, spec 132) lists every changed versions row since REF
                                                   (`cplat platform versions --diff REF --changelog`), a major move needs a major release, and no
                                                   section repeats a paragraph (#336)
+  release-check.py fragments [--base REF]         every `fixed` fragment the branch adds since REF (default origin/main) ends in a cause line
+                                                  `Caused by: #<PR> | v<X.Y.Z> | none | unknown` (spec 223); no network, released ones are not read
   release-check.py needs-major [--base REF]       one line per change that needs a major release (the rule `rows` uses), nothing when none
   release-check.py from-tag previous|oldest       the tag each upgrade test starts from: `previous` the newest release before HEAD (the rule of
                                                   tests/e2e/upgrade.sh), `oldest` the newest vX.0.* of the candidate's major (`skipped: <reason>`
@@ -36,6 +38,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "scripts" / "cplat"))
 try:
+    import fixcause  # noqa: E402  (spec 223: the cause line of a fixed fragment)
     import platrelease_changelog as fragments  # noqa: E402  (spec 132: docs/changelog.d)
     import versions  # noqa: E402  (scripts/cplat/versions.py)
 except ModuleNotFoundError as e:   # a bare `python3` lacks pyyaml; uv reads the dependencies above (#295)
@@ -175,6 +178,24 @@ def cmd_rows(base: str) -> int:
     return 0
 
 
+def cmd_fragments(base: str) -> int:
+    """Spec 223: each `fixed` fragment added since BASE names a cause in the form fixcause defines."""
+    added = [f for f in git("diff", "--name-only", "--diff-filter=A", f"{base}...HEAD").split()
+             if f.startswith("docs/changelog.d/") and f.endswith(".fixed.md")]
+    errors = []
+    for f in added:
+        err = fixcause.form_error(f, (REPO / f).read_text())
+        if err:
+            errors.append(f"ERROR: {err}")
+    for e in errors:
+        print(e)
+    if errors:
+        print(f"FAILED: {len(errors)} problem(s)")
+        return 1
+    print(f"OK: {len(added)} added fixed fragment(s) name a cause")
+    return 0
+
+
 def has_versions(tag: str) -> bool:
     return subprocess.run(["git", "-C", str(REPO), "cat-file", "-e", f"{tag}:scripts/cplat/versions.py"], capture_output=True).returncode == 0
 
@@ -306,6 +327,7 @@ def main(argv: list[str]) -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
     for name in ("rows", "needs-major", "needs-upgrade-e2e"):
         sub.add_parser(name).add_argument("--base", metavar="REF")
+    sub.add_parser("fragments").add_argument("--base", metavar="REF", default="origin/main")
     sub.add_parser("from-tag").add_argument("which", choices=("previous", "oldest"))
     sub.add_parser("gate").add_argument("sha")
     ns = ap.parse_args(argv)
@@ -314,6 +336,8 @@ def main(argv: list[str]) -> int:
             return cmd_from_tag(ns.which)
         if ns.cmd == "gate":
             return cmd_gate(ns.sha)
+        if ns.cmd == "fragments":
+            return cmd_fragments(ns.base)
         base = ns.base or default_base()
         if ns.cmd == "needs-major":
             return cmd_needs_major(base)

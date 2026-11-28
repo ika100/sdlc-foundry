@@ -2,6 +2,7 @@
 
 Success prints one line and the last output line; failure prints the last 40 lines and the log path. The exit code
 of the script passes through. Only keys of `shell.scripts` in ./devbox.json are accepted, only test-fast takes arguments, after `--` (spec 172).
+`test-fast --red [--spec <spec>] -- <test files>` is the red check (spec 205); `--spec` scopes it to an amended spec (AC-205.8).
 """
 from __future__ import annotations
 
@@ -67,8 +68,9 @@ USAGE = ("usage: cplat quiet [--raw] <devbox-script> | cplat quiet [--raw] test-
          "(a key of shell.scripts in ./devbox.json; only test-fast takes arguments, after --)")
 
 
-def _parse(args: list[str], scripts: dict) -> tuple[str, int | str | None, list[str]] | None:
-    """`<script> [--repeat N | --red] [-- <args>...]` -> (script, repeat count, "red" or None, args); None when refused."""
+def _parse(args: list[str], scripts: dict) -> tuple[str, int | str | tuple[str, str] | None, list[str]] | None:
+    """`<script> [--repeat N | --red [--spec S]] [-- <args>...]` -> (script, repeat count, "red", ("red", S) or None, args);
+    None when refused."""
     if not args or args[0] not in scripts:
         return None
     script, rest = args[0], args[1:]
@@ -78,9 +80,14 @@ def _parse(args: list[str], scripts: dict) -> tuple[str, int | str | None, list[
         return None
     n: int | str | None = None
     if rest[0] == "--red":
+        spec_ref = None
+        if len(rest) > 2 and rest[1] == "--spec":
+            if rest[2] == "--":
+                return None
+            spec_ref, rest = rest[2], rest[2:]
         if script != "test-fast" or len(rest) < 3 or rest[1] != "--":
             return None
-        return script, "red", rest[2:]
+        return script, ("red", spec_ref) if spec_ref else "red", rest[2:]
     if rest[0] == "--repeat":
         if len(rest) < 2 or not rest[1].isdigit() or not 2 <= int(rest[1]) <= 5:
             return None
@@ -138,9 +145,9 @@ def _main(argv: list[str], ran: list[bool] | None = None) -> int:
         return 2
     if raw:
         on, reason = False, "--raw"
-    if repeat == "red":
+    if repeat == "red" or isinstance(repeat, tuple):
         import quiet_red
-        return quiet_red.run(cwd, targs, raw=raw, on=on)
+        return quiet_red.run(cwd, targs, raw=raw, on=on, spec_ref=repeat[1] if isinstance(repeat, tuple) else None)
     if isinstance(repeat, int):
         import quiet_repeat
         return quiet_repeat.run(cwd, repeat, targs, raw=raw, on=on)

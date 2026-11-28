@@ -67,6 +67,27 @@ def test_a_claim_held_by_another_branch_is_refused_and_leaves_nothing(env):
     assert env.gh_writes() == before and env.calls() == [] and not ds.worktrees_dir(SLUG).exists()
 
 
+def _spec_cand():
+    return dispatch_backlog.Candidate(key="spec-221", item="spec-221", kind="ship", title="s", labels=[], created="", text="",
+                                      spec_id="221-x", tracks=[], status="approved")
+
+
+def test_a_spec_done_on_main_is_not_started_and_its_hold_clears(env, monkeypatch):
+    """#1078: another session shipped the spec after the snapshot was read."""
+    ds.hold(SLUG, "spec-221", "needs-decision", "spec-221.1")
+    monkeypatch.setattr(du.subprocess, "run", lambda cmd, **kw: type("P", (), {"returncode": 0, "stdout": "---\nstatus: done\ntitle: s\n---\nbody\n"})())
+    res = du.start(env.repo, SLUG, _spec_cand(), "single", 1, policy(env))
+    assert res.unit is None and res.held is None and res.lines == ["not started: spec-221 is already done on main"]
+    assert "spec-221" not in ds.load(SLUG)["steering"]["holds"]
+    assert env.calls() == [] and not ds.worktrees_dir(SLUG).exists()
+
+
+def test_a_spec_not_done_on_main_is_still_checked_only(env, monkeypatch):
+    monkeypatch.setattr(du.subprocess, "run", lambda cmd, **kw: type("P", (), {"returncode": 0, "stdout": "---\nstatus: approved\ntitle: s\n---\nbody\n"})())
+    assert du.merged_on_main(env.repo, _spec_cand()) is None
+    assert du.merged_on_main(env.repo, cand(1)) is None
+
+
 def test_an_escalated_unit_is_labelled_released_and_recorded(env):
     res = begin(env, mode="now", then="escalate", reason="escalated: tests keep failing")
     env.wait_ended("issue-1.1")
@@ -135,6 +156,24 @@ def test_a_finished_fix_without_a_pull_request_escalates_as_a_decision(env):
     assert ds.read_unit(res.unit["worktree"])["cause"] == "decision"
 
 
+def test_a_red_reason_names_the_first_red_check_and_its_summary_line():       # #1107
+    lines = ["RED: 2 of 5 check(s) failed on #7: ci-success, unit", "== check: ci-success | format: unknown | exit: 1 | log: none",
+             "every needed job passed or was skipped", '"result": "success",',
+             "== check: unit | format: pytest | exit: 1 | log: /tmp/x.log | entries: 1", "- tests/test_a.py::test_b | failed | assert 1 == 2"]
+    assert du.red_reason(lines) == "check unit is red: tests/test_a.py::test_b | failed | assert 1 == 2"
+    assert du.red_reason(["RED: summaries off"]) is None
+
+
+def test_a_finished_fix_without_a_pull_request_reports_the_sessions_own_message(env):
+    res = begin(env, mode="now", then="done", pr=False)
+    env.wait_ended("issue-1.1")
+    wt = res.unit["worktree"]
+    ds.write_json(ds.result_path(wt), {**ds.read_result(wt), "result": "finished",
+                                       "message": "the fix changes criteria of spec 205; amend it first"})
+    step = du.advance(env.repo, SLUG, ds.read_unit(wt), policy(env))
+    assert step.lines[0].endswith("without a pull request: the fix changes criteria of spec 205; amend it first")
+
+
 def test_adopt_finds_live_units_from_their_files_and_pause_flags_them(env):
     env.behave(mode="wait", honor_stop=True)
     res = begin(env)
@@ -194,3 +233,41 @@ def test_start_resumes_a_dispatcher_claim_without_a_second_one(env):
     env.issue(1, labels=["triaged", "in-progress"], comments=[f"{claim.MARK}\nClaimed for branch `fix/issue-1` (cplat dispatch)."])
     res = du.start(env.repo, SLUG, cand(1), "single", 1, policy(env))
     assert res.unit and len(env.comments_of(1)) == 1
+
+
+def _synced_pair(tmp_path):
+    """An origin on branch `feat` and a clone (the unit worktree) on it; returns (origin, clone, unit)."""
+    origin, clone = tmp_path / "origin", tmp_path / "clone"
+    git(tmp_path, "init", "-q", "-b", "feat", str(origin))
+    git(origin, "config", "user.name", "t")
+    git(origin, "config", "user.email", "t@example.com")
+    (origin / "a").write_text("1")
+    git(origin, "add", "a")
+    git(origin, "commit", "-q", "-m", "one")
+    git(tmp_path, "clone", "-q", str(origin), str(clone))
+    git(clone, "config", "user.name", "t")
+    git(clone, "config", "user.email", "t@example.com")
+    return origin, clone, {"unit": "spec-1.1", "kind": "ship", "worktree": str(clone), "branch": "feat"}
+
+
+def test_a_stale_unit_branch_is_fast_forwarded_to_the_remote_one(tmp_path):
+    origin, clone, unit = _synced_pair(tmp_path)
+    (origin / "a").write_text("2")
+    git(origin, "commit", "-q", "-am", "two")
+    assert du.sync_branch(unit) == "fast-forwarded spec-1.1 to origin/feat"
+    assert git(clone, "rev-parse", "HEAD") == git(origin, "rev-parse", "HEAD")
+    assert du.sync_branch(unit) is None                       # up to date: nothing to do
+
+
+def test_a_diverged_or_dirty_unit_branch_is_left_alone(tmp_path):
+    origin, clone, unit = _synced_pair(tmp_path)
+    (origin / "a").write_text("2")
+    git(origin, "commit", "-q", "-am", "remote")
+    (clone / "b").write_text("x")
+    git(clone, "add", "b")
+    git(clone, "commit", "-q", "-m", "local")
+    head = git(clone, "rev-parse", "HEAD")
+    assert du.sync_branch(unit) is None and git(clone, "rev-parse", "HEAD") == head      # diverged
+    git(clone, "reset", "-q", "--hard", "HEAD~1")
+    (clone / "a").write_text("dirty")
+    assert du.sync_branch(unit) is None and (clone / "a").read_text() == "dirty"         # dirty
