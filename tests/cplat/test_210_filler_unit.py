@@ -27,6 +27,12 @@ def test_split_holds_filler_only_outside_the_window_ac_210_9():  # AC-210.9
     assert regular == [plain] and filler == [nice] and held == []
 
 
+def test_a_pinned_filler_only_candidate_is_regular_outside_the_window_issue_1110():
+    nice = _verdict(["enhancement"])
+    regular, filler, held = dispatch_filler.split(_policy(), [nice], False, ["issue-1"])
+    assert regular == [nice] and filler == [] and held == []
+
+
 def test_retro_proposals_are_parsed_and_a_missing_section_gives_none_ac_210_9():  # AC-210.9
     got = dispatch_filler.retro_proposals(BODY)
     assert [(p.rank, p.title, p.priority, p.request) for p in got] == [(1, "Alpha thing", "P1", "add alpha"), (2, "Beta", "P2", "add beta")]
