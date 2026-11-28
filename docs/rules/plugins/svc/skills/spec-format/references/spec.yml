@@ -17,6 +17,7 @@ rules:
     source: ADR-026
   - id: R5
     text: "the old one is never left active but becomes"
-    class: practice
+    class: retired
+    retired: 2026-11-28
+    reason: cplat spec check refuses an unstruck target itself, with 0 failures of it in 2026-W47 (retro #1046)
     enforced_by: cplat spec check
-    source: "#477"

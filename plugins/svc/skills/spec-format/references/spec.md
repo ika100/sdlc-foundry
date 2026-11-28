@@ -80,5 +80,5 @@ A spec decides by default and asks only what may not be decided by default, so t
 ## Amending
 
 - Add new criteria with the next free number. Change the text of an existing one only to clarify the same behaviour, because tests that cite the id keep proving it; a changed behaviour withdraws the old id and adds a new one.
-- A criterion that changes behaviour an active criterion of another spec in this repo defines ends with `(replaces AC-<NNN>.<n>)`; in the same change the old one is never left active but becomes `- ~~**AC-<NNN>.<n>**~~ superseded by AC-<MMM>.<m> on <date>: <its old text>`, with one Changelog line in the old spec (status unchanged), because the old behaviour stops being counted. The old text keeps that spec's `spec_hash`; `cplat spec check` refuses an unstruck target.
+- A criterion that changes behaviour an active criterion of another spec in this repo defines ends with `(replaces AC-<NNN>.<n>)`; `cplat spec check` refuses an unstruck target.
 - Add a Changelog line for every amendment. The orchestrator moves an approved spec back to `draft`: it needs a new approval and, if criteria changed, a new plan (`spec_hash` drift).
