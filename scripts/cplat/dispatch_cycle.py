@@ -120,8 +120,9 @@ def _judge(repo: Path, slug: str, policy, snap, state: dict, units: list[dict], 
     cands = dispatch_backlog.candidates(snap, policy)
     verdicts = dispatch_ready.judge(cands, snap, state, units, policy, slug=slug, shape=specmod.repo_shape(repo))
     ready = [v for v in verdicts if v.ready]
-    ordered = dispatch_ready.order(ready, policy.values["priority"], (state.get("steering") or {}).get("pinned") or [])
-    regular, filler, filler_held = dispatch_filler.split(policy, ordered, gate.filler)
+    pins = (state.get("steering") or {}).get("pinned") or []
+    ordered = dispatch_ready.order(ready, policy.values["priority"], pins)
+    regular, filler, filler_held = dispatch_filler.split(policy, ordered, gate.filler, pins)
     return regular, [v for v in verdicts if not v.ready] + filler_held, filler
 
 
