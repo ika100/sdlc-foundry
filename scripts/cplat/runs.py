@@ -1224,7 +1224,7 @@ def _recording_command(ns: argparse.Namespace) -> None:
             return
         if os.environ.get("CPLAT_UNIT") and current and not current.get("attached"):
             cur = active(current.get("run_id")) or {}
-            if cur.get("kind") == "build" and ns.spec and cur.get("spec") == ns.spec:
+            if cur.get("kind") == "build" and (not ns.spec or cur.get("spec") == ns.spec):   # #1117: no spec = the open build
                 _register_claim("build", cur["run_id"], cur.get("started_at") or _iso(utcnow()))
                 print(f"run {cur['run_id']} (continued)")
                 line = _limits_line(cur["run_id"])

@@ -215,6 +215,14 @@ def open_pr(repo: Path, o: Opts) -> Result:
     _how_built(repo, o, body_path, res)
     _summary(repo, o, body_path, base_ref, res)
 
+    try:   # #1109: the build of an amendment gets its `done` bullet in this commit
+        import amend_done
+        branch_all = [f for f in _out(["git", "diff", "--name-only", f"{base_ref}...HEAD"], repo).splitlines() if f]
+        for sid in amend_done.add(repo, branch_all + _uncommitted(repo)):
+            res.notes.append(f"note: spec {sid}: added the `done` line of the amendment's build")
+    except Exception as e:  # noqa: BLE001
+        res.notes.append(f"note: done line of an amended spec skipped: {type(e).__name__}: {e}"[:200])
+
     if _out(["git", "status", "--porcelain"], repo):
         add = run(["git", "add", "-A"], cwd=repo, check=False)
         com = run(["git", *core.git_identity(repo), "commit", "-q", "-s", "-m", o.message or o.title], cwd=repo, check=False) \

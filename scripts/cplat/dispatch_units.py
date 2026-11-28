@@ -51,6 +51,22 @@ import triage_task
 from core import PlatformError
 
 CPLAT = Path(__file__).resolve().with_name("cplat.py")
+UV_SCRIPT = CPLAT.parents[1] / "uv-script.sh"
+_EPHEMERAL = {"builds-v0", "environments-v2", "archive-v0"}
+
+
+def ephemeral(path: str | Path) -> bool:
+    """True for a path inside uv's temporary environments, which uv deletes when its `uv run` parent exits (#1122)."""
+    parts = Path(path).parts
+    return "uv" in parts and bool(_EPHEMERAL & set(parts))
+
+
+def cplat_cmd() -> list[str]:
+    """The argv prefix that runs cplat.py in a process that outlives this one: this interpreter, or `uv-script.sh` (which
+    makes its own environment) when the interpreter is uv's temporary one (#1122)."""
+    if ephemeral(sys.executable) and UV_SCRIPT.is_file():
+        return ["bash", str(UV_SCRIPT), str(CPLAT)]
+    return [sys.executable, str(CPLAT)]
 MAX_STARTS = 2                      # a unit whose process ended unfinished is started once more; a second end is stuck
 ENDED = ("done", "escalated", "stuck")
 LAND_TIMEOUT = 7200
@@ -136,6 +152,8 @@ def alive(pid: int | None) -> bool:
 
 
 def _detach(cmd: list[str], cwd: Path | str, env: dict[str, str], log: Path) -> int:
+    if any(ephemeral(a) for a in cmd):
+        raise OSError(f"refusing to detach a command on uv's temporary Python, which uv deletes on exit: {cmd[0]}")
     log.parent.mkdir(parents=True, exist_ok=True)
     with open(log, "ab") as out:
         p = subprocess.Popen(cmd, cwd=cwd, env=env, stdin=subprocess.DEVNULL, stdout=out, stderr=subprocess.STDOUT, start_new_session=True)
@@ -146,7 +164,7 @@ def headless_cmd(unit: dict, policy) -> list[str]:
     """`cplat headless --repo <worktree> [--budget K=V …] [--parallel 3|1 (ship)] "<prompt>"`; `$CPLAT_DISPATCH_HEADLESS` replaces
     `cplat headless` (the seam of the fake headless)."""
     exe = os.environ.get("CPLAT_DISPATCH_HEADLESS")
-    cmd = [exe] if exe else [sys.executable, str(CPLAT), "headless"]
+    cmd = [exe] if exe else [*cplat_cmd(), "headless"]
     guard = policy.values["guard"]
     cmd += ["--repo", str(unit["worktree"]), *dispatch_policy.budget_args(policy),
             "--loop-guard", f"{guard['loop_calls']}/{guard['loop_minutes']}"]
@@ -161,7 +179,7 @@ def headless_cmd(unit: dict, policy) -> list[str]:
 
 def task_cmd(unit: dict, repo: Path | str) -> list[str]:
     """`cplat dispatch task <unit> --repo <repo>`: the process of a filler task (no headless session)."""
-    return [sys.executable, str(CPLAT), "dispatch", "task", unit["unit"], "--repo", str(repo)]
+    return [*cplat_cmd(), "dispatch", "task", unit["unit"], "--repo", str(repo)]
 
 
 def _can_write(slug: str, repo: Path) -> Callable[[str], bool]:
@@ -206,7 +224,7 @@ def spawn_land(repo: Path, unit: dict) -> int:   # tests replace this
     env = {**os.environ}
     if unit.get("run_id"):
         env["CPLAT_RUN_PARENT"] = unit["run_id"]
-    cmd = [sys.executable, str(CPLAT), "dispatch", "land", unit["unit"], "--repo", str(repo)]
+    cmd = [*cplat_cmd(), "dispatch", "land", unit["unit"], "--repo", str(repo)]
     return _detach(cmd, repo, env, Path(unit["log"]))
 
 

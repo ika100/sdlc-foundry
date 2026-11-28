@@ -39,13 +39,14 @@ class Proposal:
     request: str
 
 
-def split(policy, ready: list[dispatch_ready.Verdict], filler_open: bool):
-    """(regular, filler_only, held): in the window the filler-only verdicts stay ready, outside it they are held `filler only`."""
+def split(policy, ready: list[dispatch_ready.Verdict], filler_open: bool, pins: list[str] | None = None):
+    """(regular, filler_only, held): in the window the filler-only verdicts stay ready, outside it they are held `filler only`.
+    A pinned item (`cplat dispatch prioritize`) is regular: the pin is the owner's order to start it first."""
     regular: list = []
     filler: list = []
     held: list = []
     for v in ready:
-        if not dispatch_policy.filler_match(policy, v.labels):
+        if v.cand.key in (pins or []) or not dispatch_policy.filler_match(policy, v.labels):
             regular.append(v)
         elif filler_open:
             filler.append(v)

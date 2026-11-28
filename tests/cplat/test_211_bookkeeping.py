@@ -173,6 +173,15 @@ def test_a_begin_for_another_spec_or_without_a_unit_starts_a_new_run_as_before_a
     assert begin_build(ci_repo) != rid
 
 
+def test_a_unit_begin_without_a_spec_continues_the_open_build_run_1117(ci_repo, capsys, monkeypatch, store):
+    monkeypatch.setenv("CPLAT_UNIT", "task:t1")
+    rid = begin_build(ci_repo)
+    capsys.readouterr()
+    assert runs.main(["begin", "build", "--dir", str(ci_repo)]) == 0
+    assert f"run {rid} (continued)" in capsys.readouterr().out.splitlines()
+    assert stored(store) == []
+
+
 def test_a_begin_for_another_spec_in_a_unit_session_starts_a_new_run_ac_211_9(ci_repo, monkeypatch):  # AC-211.9
     monkeypatch.setenv("CPLAT_UNIT", "task:t1")
     rid = begin_build(ci_repo)
