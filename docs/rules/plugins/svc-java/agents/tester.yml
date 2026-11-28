@@ -23,8 +23,9 @@ rules:
     hard: acceptance-tests-fixed
   - id: R9
     text: "never the whole page"
-    class: experience
-    source: "#478"
+    class: retired
+    retired: 2026-11-28
+    reason: "#478 is closed and its cause occurred in 0 of 2787 runs, 2026-W44 to 2026-W47 (retro #1046)"
   - id: R10
     text: "The test reaches the service only through the base URL"
     class: practice

@@ -28,8 +28,9 @@ rules:
     source: spec 048, spec 165
   - id: R10
     text: "never the whole page, because a page-wide assertion"
-    class: experience
-    source: "#478"
+    class: retired
+    retired: 2026-11-28
+    reason: "#478 is closed and its cause occurred in 0 of 2787 runs, 2026-W44 to 2026-W47 (retro #1046)"
   - id: R11
     text: "never changes or deletes data it did not create, and stays repeatable, because the environment is shared."
     class: practice
