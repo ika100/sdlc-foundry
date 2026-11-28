@@ -76,7 +76,8 @@ def _shape_of(r: dict) -> str:
     for e in runs_report._list(r.get("agents")):
         if isinstance(e, dict) and isinstance(e.get("shape"), str) and e["shape"] and e["shape"] != "none":
             return e["shape"]
-    return UNKNOWN
+    own = r.get("shape")                       # #1117: the shape the run itself recorded at its start
+    return own if isinstance(own, str) and own and own != "none" else UNKNOWN
 
 
 def _outcome(r: dict) -> str:
